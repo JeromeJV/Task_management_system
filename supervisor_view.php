@@ -9,15 +9,15 @@ include'config/Supervisor_API.php';
 </head>
 <body>
 
-    <h1>Student Personal Information Records</h1>
+    <h1>Delivery record</h1>
 
     <?php if ($count > 0): ?>
         <table border="1">
             <thead>
                 <tr>
-                    <th>Student Number</th>
-                    <th>Section</th>
-                    <th>Program</th>
+                    <th>Route</th>
+                    <th>Peaces</th>
+                    <th>Stock</th>
                     <th>Actions</th>
                 </tr>
             </thead>
