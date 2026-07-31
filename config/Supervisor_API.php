@@ -47,11 +47,8 @@ if (isset($_POST['submit'])) {
      }
 }
 
-?>
 
-<?php
 //Edit
-include('config/connection.php');
 
 $passid = $_POST['idno'] ?? null;
 $view_data = null;
@@ -76,10 +73,7 @@ if (isset($_POST['del'])) {
         'stock'    => $row['stock']
     ];
 }
-?>
 
-<?php
-include('config/connection.php');
 //Update
 $status_message = "";
 $message = "";
@@ -118,16 +112,13 @@ if (isset($_POST['submit'])) {
         if ($query) {
             $status_message = "<br>Update Successful<br><br><a href='supervisor.php'><input type='button' name='back' value='View Records'></a>";
         } elseif (isset($_POST['can'])) {
-        header("Location: supervisor.php");
+        header("Location: supervisor_view.php");
         exit();
         }
     }
 
 }
-?>
 
-<?php
-include 'config/connection.php';
 //View
 $sql    = "SELECT * FROM delivery ORDER BY route ASC";
 $result = mysqli_query($conn, $sql);
