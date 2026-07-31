@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <?php if ($success): ?>
         <div style="color: green;">
-            Password successfully updated! You can now <a href="login.php">log in</a>.
+            Password successfully updated! You can now <a href="index.php">log in</a>.
         </div>
     <?php else: ?>
         <form method="POST">

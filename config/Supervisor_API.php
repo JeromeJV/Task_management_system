@@ -1,24 +1,52 @@
+<!-- CRUD PART -->
 <?php
 //Insert
 include('config/connection.php');
 
 $message = "";
+$route_err = '';
+$peaces_err = '';
+$stock_err = '';
 
 if (isset($_POST['submit'])) {
     $route = $_POST['route'];
     $peaces    = $_POST['peaces'];
     $stock  = $_POST['stock'];
 
-    $sql   = "INSERT INTO delivery (id, route, peaces, stock) VALUES ('', '$route', '$peaces', '$stock')";
-    $query = mysqli_query($conn, $sql);
+     $isValid = true;
 
-    if ($query) {
-        $message = "New Record is Saved <br><br><a href='supervisor_view.php'><input type='button' value='View Records'></a>";
+    if (!preg_match("/^[a-zA-Z0-9 ]*$/", $route)) {
+        $route_err = "Please use only letters and spaces for your Address.";
+        $isValid = false;
     }
-} elseif (isset($_POST['records'])) {
-    header("Location: supervisor_view.php");
-    exit();
+
+    if (!preg_match("/^[0-9 ]*$/", $peaces)) {
+        $peaces_err = "Please use only number for your Peaces.";
+        $isValid = false;
+    }
+
+    if (!preg_match("/^[0-9 ]*$/", $stock)) {
+        $stock_err = "Please use only number for your Stock.";
+        $isValid = false;
+    }
+
+     if ($isValid) {
+        $safe_route     = mysqli_real_escape_string($conn, $route);
+        $safe_peaces    = mysqli_real_escape_string($conn, $peaces);
+        $safe_stock     = mysqli_real_escape_string($conn, $stock);
+
+        $sql   = "INSERT INTO delivery (id, route, peaces, stock) VALUES ('', '$safe_route', '$safe_peaces', '$safe_stock')";
+        $query = mysqli_query($conn, $sql);
+
+        if ($query) {
+            $message = "New Task send</a>";
+        } elseif (isset($_POST['records'])) {
+        header("Location: supervisor.php");
+        exit();
+        }
+     }
 }
+
 ?>
 
 <?php
@@ -54,21 +82,47 @@ if (isset($_POST['del'])) {
 include('config/connection.php');
 //Update
 $status_message = "";
+$message = "";
+$route_err = '';
+$peaces_err = '';
+$stock_err = '';
 
 if (isset($_POST['submit'])) {
     $route = $_POST['route'];
     $peaces    = $_POST['peaces'];
     $stock    = $_POST['stock'];
 
-    $sql   = "UPDATE delivery SET  peaces = '$peaces', stock = '$stock' WHERE route = '$route' ";
-    $query = mysqli_query($conn, $sql);
-
-    if ($query) {
-        $status_message = "<br>Update Successful<br><br><a href='supervisor_view.php'><input type='button' name='back' value='View Records'></a>";
+    if (!preg_match("/^[a-zA-Z0-9 ]*$/", $route)) {
+        $route_err = "Please use only letters and spaces for your Address.";
+        $isValid = false;
     }
-} elseif (isset($_POST['can'])) {
-    header("Location: supervisor_view.php");
-    exit();
+
+    if (!preg_match("/^[0-9 ]*$/", $peaces)) {
+        $peaces_err = "Please use only number for your Peaces.";
+        $isValid = false;
+    }
+
+    if (!preg_match("/^[0-9 ]*$/", $stock)) {
+        $stock_err = "Please use only number for your Stock.";
+        $isValid = false;
+    }
+    if ($isValid) {
+        $safes_route     = mysqli_real_escape_string($conn, $route);
+        $safes_peaces    = mysqli_real_escape_string($conn, $peaces);
+        $safes_stock     = mysqli_real_escape_string($conn, $stock);
+
+    
+        $sql   = "UPDATE delivery SET  peaces = '$safes_peaces', stock = '$safes_stock' WHERE route = '$safes_route' ";
+        $query = mysqli_query($conn, $sql);
+
+        if ($query) {
+            $status_message = "<br>Update Successful<br><br><a href='supervisor.php'><input type='button' name='back' value='View Records'></a>";
+        } elseif (isset($_POST['can'])) {
+        header("Location: supervisor.php");
+        exit();
+        }
+    }
+
 }
 ?>
 
@@ -86,3 +140,4 @@ if ($count > 0) {
     }
 }
 ?>
+<!-- CRUD PART -->
