@@ -1,4 +1,7 @@
 <?php
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 include'config/connection.php';
 include'config/Supervisor_API.php';
 ?>
@@ -17,7 +20,7 @@ include'config/Supervisor_API.php';
     <!-- Show Update Form if Edit was clicked -->
     <?php if ($view_data): ?>
         <form action="supervisor_update.php" method="post">
-            <input type="hidden" name="newid" value="<?php echo $view_data['id']; ?>">
+            <input type="hidden" name="newid" value="<?php echo $view_data['delivery_id']; ?>">
             
             <table border="1">
                 <tr>
@@ -25,8 +28,8 @@ include'config/Supervisor_API.php';
                     <td><input type="text" name="route" value="<?php echo $view_data['route']; ?>"></td>
                 </tr>
                 <tr>
-                    <td>peaces:</td>
-                    <td><input type="text" name="peaces" value="<?php echo $view_data['peaces']; ?>"></td>
+                    <td>pieces:</td>
+                    <td><input type="text" name="pieces " value="<?php echo $view_data['pieces']; ?>"></td>
                 </tr>
                 <tr>
                     <td>stock:</td>

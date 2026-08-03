@@ -1,4 +1,7 @@
 <?php
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 session_start();
 
 include('config/connection.php');
@@ -49,8 +52,8 @@ $count = $count ?? count($records);
         <br><br>
 
         <label>Pieces:</label>
-        <input type="text" name="peaces" placeholder="Enter pieces of Product" class="form-control <?= (!empty($peaces_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['peaces'] ?? '') ?>" required>
-        <?php if (!empty($peaces_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($peaces_err) ?></div><?php endif; ?>
+        <input type="text" name="pieces" placeholder="Enter pieces of Product" class="form-control <?= (!empty($pieces_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['pieces'] ?? '') ?>" required>
+        <?php if (!empty($pieces_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($pieces_err) ?></div><?php endif; ?>
 
         <br><br>
 
@@ -81,11 +84,11 @@ $count = $count ?? count($records);
             <tbody>
                 <?php foreach ($records as $row): ?>
                     <tr>
-                        <form action="Supervisor_action.php" method="post">
-                            <input type="hidden" name="idno" value="<?= htmlspecialchars($row['id']); ?>">
-                            <td><?= htmlspecialchars($row['route']); ?></td>
-                            <td><?= htmlspecialchars($row['peaces']); ?></td>
-                            <td><?= htmlspecialchars($row['stock']); ?></td>
+                        <form action="supervisor_action.php" method="post">
+                            <input type="hidden" name="idno" value="<?= htmlspecialchars($row['delivery_id']) ?>">
+                            <td><?= htmlspecialchars($row['route']) ?></td>
+                            <td><?= htmlspecialchars($row['pieces']) ?></td>
+                            <td><?= htmlspecialchars($row['stock']) ?></td>
                             <td>
                                 <input type="submit" name="del" value="Delete" onclick="return confirm('Sigurado ka bang buburahin ito?');">
                                 <input type="submit" name="upd" value="Update">
