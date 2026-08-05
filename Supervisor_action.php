@@ -25,8 +25,8 @@ include'config/Supervisor_API.php';
                     <td><input type="text" name="route" value="<?php echo $view_data['route']; ?>"></td>
                 </tr>
                 <tr>
-                    <td>peaces:</td>
-                    <td><input type="text" name="peaces" value="<?php echo $view_data['peaces']; ?>"></td>
+                    <td>pieces:</td>
+                    <td><input type="text" name="pieces" value="<?php echo $view_data['pieces']; ?>"></td>
                 </tr>
                 <tr>
                     <td>stock:</td>

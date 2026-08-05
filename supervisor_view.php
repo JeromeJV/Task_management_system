@@ -27,7 +27,7 @@ include'config/Supervisor_API.php';
                         <form action="Supervisor_action.php" method="post">
                             <input type="hidden" name="idno" value="<?php echo $row['id']; ?>">
                             <td><?php echo $row['route']; ?></td>
-                            <td><?php echo $row['peaces']; ?></td>
+                            <td><?php echo $row['pieces']; ?></td>
                             <td><?php echo $row['stock']; ?></td>
                             <td>
                                 <input type="submit" name="del" value="Delete">
