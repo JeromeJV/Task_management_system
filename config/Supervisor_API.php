@@ -1,8 +1,9 @@
 <?php
-//Insert  abc
 include('config/connection.php');
 
 $message = "";
+
+$delivery_id_err = '';
 $route_err = '';
 $pieces_err = '';
 $stock_err = '';
@@ -30,11 +31,11 @@ if (isset($_POST['submit'])) {
     }
 
      if ($isValid) {
-        $safe_route     = mysqli_real_escape_string($conn, $route);
-        $safe_pieces    = mysqli_real_escape_string($conn, $pieces);
-        $safe_stock     = mysqli_real_escape_string($conn, $stock);
+        $safe_route       = mysqli_real_escape_string($conn, $route);
+        $safe_pieces      = mysqli_real_escape_string($conn, $pieces);
+        $safe_stock       = mysqli_real_escape_string($conn, $stock);
 
-        $sql   = "INSERT INTO delivery (id, route, pieces, stock) VALUES ('', '$safe_route', '$safe_pieces', '$safe_stock')";
+        $sql   = "INSERT INTO delivery (delivery_id, route, pieces, stock) VALUES ('', '$safe_route', '$safe_pieces', '$safe_stock')";
         $query = mysqli_query($conn, $sql);
 
         if ($query) {
@@ -55,18 +56,18 @@ $delete_message = "";
 
 if (isset($_POST['del'])) {
     // Backend Logic for Delete
-    $sql    = "DELETE FROM delivery WHERE id = '$passid'";
+    $sql    = "DELETE FROM delivery WHERE delivery_id = '$passid'";
     $result = mysqli_query($conn, $sql);
     $delete_message = "Record Deleted Successfully. <br><a href='supervisor_view.php'>View Records</a>";
 
 } elseif (isset($_POST['upd'])) {
     //Dto nag fe-fetch para sa single Record to Update
-    $sql    = "SELECT * FROM delivery WHERE id = '$passid'";
+    $sql    = "SELECT * FROM delivery WHERE delivery_id = '$passid'";
     $result = mysqli_query($conn, $sql);
     $row    = mysqli_fetch_assoc($result);
 
     $view_data = [
-        'id'      => $passid,
+        'delivery_id'      => $passid,
         'route' => $row['route'],
         'pieces'    => $row['pieces'],
         'stock'    => $row['stock']
@@ -81,7 +82,7 @@ if (isset($_POST['submit'])) {
     $pieces    = $_POST['pieces'];
     $stock    = $_POST['stock'];
 
-    $sql   = "UPDATE delivery SET  pieces = '$pieces', stock = '$stock' WHERE route = '$route' ";
+    $sql   = "UPDATE delivery SET  pieces = '$pieces', stock = '$stock' WHERE route = '$route'";
     $query = mysqli_query($conn, $sql);
 
     if ($query) {

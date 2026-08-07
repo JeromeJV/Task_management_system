@@ -40,6 +40,7 @@ $count = $count ?? count($records);
     <?php if (!empty($message)) echo "<p>$message</p>"; ?>
 
     <form action="<?php echo htmlentities($_SERVER['PHP_SELF']); ?>" method="post">
+    
         <label>Route:</label>
         <input type="text" name="route" placeholder="Enter route" class="form-control <?= (!empty($route_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['route'] ?? '') ?>" required>
         <?php if (!empty($route_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($route_err) ?></div><?php endif; ?>
@@ -78,7 +79,6 @@ $count = $count ?? count($records);
                 <?php foreach ($records as $row): ?>
                     <tr>
                         <form action="Supervisor_action.php" method="post">
-                            <input type="hidden" name="idno" value="<?= htmlspecialchars($row['id']); ?>">
                             <td><?= htmlspecialchars($row['route']); ?></td>
                             <td><?= htmlspecialchars($row['pieces']); ?></td>
                             <td><?= htmlspecialchars($row['stock']); ?></td>
