@@ -69,6 +69,7 @@ $count = $count ?? count($records);
         <table border="1" cellpadding="5" cellspacing="0">
             <thead>
                 <tr>
+                    <th>Delivery ID</th>
                     <th>Route</th>
                     <th>Pieces</th>
                     <th>Stock</th>
@@ -79,6 +80,7 @@ $count = $count ?? count($records);
                 <?php foreach ($records as $row): ?>
                     <tr>
                         <form action="Supervisor_action.php" method="post">
+                            <td><?php echo $row['delivery_id']; ?></td>
                             <td><?= htmlspecialchars($row['route']); ?></td>
                             <td><?= htmlspecialchars($row['pieces']); ?></td>
                             <td><?= htmlspecialchars($row['stock']); ?></td>
