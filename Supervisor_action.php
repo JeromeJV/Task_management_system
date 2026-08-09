@@ -17,7 +17,7 @@ include'config/Supervisor_API.php';
     <!-- Show Update Form if Edit was clicked -->
     <?php if ($view_data): ?>
         <form action="supervisor_update.php" method="post">
-            <input type="hidden" name="newid" value="<?php echo $view_data['id']; ?>">
+            <input type="hidden" name="newid" value="<?php echo $view_data['delivery_id']; ?>">
             
             <table border="1">
                 <tr>

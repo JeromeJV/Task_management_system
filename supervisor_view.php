@@ -25,7 +25,7 @@ include'config/Supervisor_API.php';
                 <?php foreach ($records as $row): ?>
                     <tr>
                         <form action="Supervisor_action.php" method="post">
-                            <input type="hidden" name="idno" value="<?php echo $row['id']; ?>">
+                            <input type="hidden" name="idno" value="<?php echo $row['delivery_id']; ?>">
                             <td><?php echo $row['route']; ?></td>
                             <td><?php echo $row['pieces']; ?></td>
                             <td><?php echo $row['stock']; ?></td>
