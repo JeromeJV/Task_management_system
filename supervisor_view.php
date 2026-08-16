@@ -15,9 +15,10 @@ include'config/Supervisor_API.php';
         <table border="1">
             <thead>
                 <tr>
-                    <th>Route</th>
+                    <th>Destination</th>
                     <th>Pieces</th>
                     <th>Stock</th>
+                    <th>Delivery Date</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -29,6 +30,7 @@ include'config/Supervisor_API.php';
                             <td><?php echo $row['route']; ?></td>
                             <td><?php echo $row['pieces']; ?></td>
                             <td><?php echo $row['stock']; ?></td>
+                            <td><?php echo $row['delivery_date']; ?></td>
                             <td>
                                 <input type="submit" name="del" value="Delete">
                                 <input type="submit" name="upd" value="Update">

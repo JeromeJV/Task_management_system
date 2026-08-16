@@ -1,16 +1,20 @@
 <?php
-//Insert
+// -----------------------------------------------------
+//                          Insert
+// -----------------------------------------------------
 include('config/connection.php');
 
 $message = "";
 $route_err = '';
 $pieces_err = '';
 $stock_err = '';
+$delivery_date_err = '';
 
 if (isset($_POST['submit'])) {
     $route = $_POST['route'];
     $pieces    = $_POST['pieces'];
     $stock  = $_POST['stock'];
+    $delivery_date = $_POST['delivery_date'];
 
      $isValid = true;
 
@@ -24,7 +28,7 @@ if (isset($_POST['submit'])) {
         $isValid = false;
     }
 
-    if (!preg_match("/^[0-9 ]*$/", $stock)) {
+    if (!preg_match("/^[0-9 ]*$/", $stock)) {  
         $stock_err = "Please use only number for your Stock.";
         $isValid = false;
     }
@@ -33,8 +37,9 @@ if (isset($_POST['submit'])) {
         $safe_route     = mysqli_real_escape_string($conn, $route);
         $safe_pieces    = mysqli_real_escape_string($conn, $pieces);
         $safe_stock     = mysqli_real_escape_string($conn, $stock);
+        $safe_delivery_date = mysqli_real_escape_string($conn, $delivery_date);
 
-        $sql   = "INSERT INTO delivery (delivery_id, route, pieces, stock) VALUES ('', '$safe_route', '$safe_pieces', '$safe_stock')";
+        $sql   = "INSERT INTO delivery (delivery_id, route, pieces, stock, delivery_date) VALUES ('', '$safe_route', '$safe_pieces', '$safe_stock', '$safe_delivery_date')";
         $query = mysqli_query($conn, $sql);
 
         if ($query) {
@@ -46,7 +51,9 @@ if (isset($_POST['submit'])) {
      }
 }
 
-//Edit
+// -----------------------------------------------------
+//                        Edit
+// -----------------------------------------------------
 
 
 $passid = $_POST['idno'] ?? null;
@@ -57,7 +64,7 @@ if (isset($_POST['del'])) {
     // Backend Logic for Delete
     $sql    = "DELETE FROM delivery WHERE delivery_id = '$passid'";
     $result = mysqli_query($conn, $sql);
-    $delete_message = "Record Deleted Successfully. <br><a href='supervisor_view.php'>View Records</a>";
+    $delete_message = "Record Deleted Successfully. <br><a href='supervisor.php'>View Records</a>";
 
 } elseif (isset($_POST['upd'])) {
     //Dto nag fe-fetch para sa single Record to Update
@@ -69,30 +76,38 @@ if (isset($_POST['del'])) {
         'delivery_id'      => $passid,
         'route' => $row['route'],
         'pieces'    => $row['pieces'],
-        'stock'    => $row['stock']
+        'stock'    => $row['stock'],
+        'delivery_date' => $row['delivery_date']
     ];
 }
 
-//Update
+// -----------------------------------------------------
+//                      Update
+// -----------------------------------------------------
+
 $status_message = "";
 
 if (isset($_POST['submit'])) {
     $route = $_POST['route'];
     $pieces    = $_POST['pieces'];
     $stock    = $_POST['stock'];
+    $delivery_date = $_POST['delivery_date'];
 
-    $sql   = "UPDATE delivery SET  pieces = '$pieces', stock = '$stock' WHERE route = '$route' ";
+    $sql   = "UPDATE delivery SET  pieces = '$pieces', stock = '$stock', delivery_date = '$delivery_date' WHERE route = '$route' ";
     $query = mysqli_query($conn, $sql);
 
     if ($query) {
-        $status_message = "<br>Update Successful<br><br><a href='supervisor_view.php'><input type='button' name='back' value='View Records'></a>";
+        $status_message = "<br>Update Successful<br><br><a href='supervisor.php'><input type='button' name='back' value='View Records'></a>";
     }
 } elseif (isset($_POST['can'])) {
-    header("Location: supervisor_view.php");
+    header("Location: supervisor.php");
     exit();
 }
 
-//View
+// -----------------------------------------------------
+//                        View
+// -----------------------------------------------------
+
 $sql    = "SELECT * FROM delivery ORDER BY route ASC";
 $result = mysqli_query($conn, $sql);
 $count  = mysqli_num_rows($result);

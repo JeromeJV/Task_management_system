@@ -1,0 +1,70 @@
+    <?php
+session_start();
+
+include('config/connection.php');
+include('config/autoLog.php');
+include('config/Supervisor_API.php');
+
+// Authorization sa pag lologin kung tamang role pa ung nag login
+if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'super') {
+    header("Location: index.php");
+    exit();
+}
+
+// Sinusure lg ung mga variable na existing sila
+$message = $message ?? '';
+$route_err = $route_err ?? '';
+$pieces_err = $pieces_err ?? '';
+$stock_err = $stock_err ?? '';
+$delivery_date_err = $delivery_date_err ?? '';
+$records = $records ?? [];
+$count = $count ?? count($records);
+?>
+    
+<!DOCTYPE html>
+<html lang="en">
+<head>    
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body> 
+        <h1>Record System</h1>
+
+    <!-- Display Backend Response Message -->
+    <?php if (!empty($message)): ?>
+        <p><?= htmlspecialchars($message); ?></p>
+    <?php endif; ?>
+
+    <form action="<?= htmlspecialchars($_SERVER['PHP_SELF']); ?>" method="post">
+        <label>Destination:</label>
+        <input type="text" name="route" placeholder="Enter destination" class="form-control <?= (!empty($route_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['route'] ?? '') ?>" required>
+        <?php if (!empty($route_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($route_err) ?></div><?php endif; ?>
+
+        <br><br>
+
+        <label>Pieces:</label>
+        <input type="text" name="pieces" placeholder="Enter pieces of Product" class="form-control <?= (!empty($pieces_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['pieces'] ?? '') ?>" required>
+        <?php if (!empty($pieces_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($pieces_err) ?></div><?php endif; ?>
+
+        <br><br>
+
+        <label>Stock:</label>
+        <input type="text" name="stock" placeholder="Enter Stock number" class="form-control <?= (!empty($stock_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['stock'] ?? '') ?>" required>
+        <?php if (!empty($stock_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($stock_err) ?></div><?php endif; ?>
+
+        <br><br>
+
+        <label>Delivery Date:</label>
+        <input type="date" name="delivery_date" class="form-control <?= (!empty($delivery_date_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['delivery_date'] ?? '') ?>" required>
+        <?php if (!empty($delivery_date_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($delivery_date_err) ?></div><?php endif; ?>
+
+        <br><br>
+
+        <input type="submit" name="submit" value="Submit">
+        <input type="reset" value="Reset">
+    </form>
+
+    <button><a href="supervisor.php">Back</a></button>
+</body>
+</html>

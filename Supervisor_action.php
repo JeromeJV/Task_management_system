@@ -21,7 +21,7 @@ include'config/Supervisor_API.php';
             
             <table border="1">
                 <tr>
-                    <td>route:</td>
+                    <td>Destination:</td>
                     <td><input type="text" name="route" value="<?php echo $view_data['route']; ?>"></td>
                 </tr>
                 <tr>
@@ -31,6 +31,14 @@ include'config/Supervisor_API.php';
                 <tr>
                     <td>stock:</td>
                     <td><input type="text" name="stock" value="<?php echo $view_data['stock']; ?>"></td>
+                </tr>
+                <tr>
+                    <td>stock:</td>
+                    <td><input type="text" name="stock" value="<?php echo $view_data['stock']; ?>"></td>
+                </tr>
+                <tr>
+                    <td>Delivery Date:</td>
+                    <td><input type="date" name="delivery_date" value="<?php echo $view_data['delivery_date']; ?>"></td>
                 </tr>
             </table>
             <br>

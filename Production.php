@@ -9,7 +9,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width= , initial-scale=1.0">
-    <title>Admin form</title>
+    <title>Production form</title>
 </head>
 <body>
     <div class="user-page">

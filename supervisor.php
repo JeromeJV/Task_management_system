@@ -4,6 +4,7 @@ session_start();
 include('config/connection.php');
 include('config/autoLog.php');
 include('config/Supervisor_API.php');
+include('config/Production_API.php');
 
 // Authorization sa pag lologin kung tamang role pa ung nag login
 if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'super') {
@@ -11,13 +12,22 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'super') {
     exit();
 }
 
-// Sinusure lg ung mga variable na existing sila
-$message = $message ?? '';
-$route_err = $route_err ?? '';
-$pieces_err = $pieces_err ?? '';
-$stock_err = $stock_err ?? '';
-$records = $records ?? [];
-$count = $count ?? count($records);
+    // Sinusure lg ung mga variable na existing sila
+    $message = $message ?? '';
+    //----------- Logistic variables ---------------------
+    $route_err = $route_err ?? '';
+    $pieces_err = $pieces_err ?? '';
+    $stock_err = $stock_err ?? '';
+    $delivery_date_err = $delivery_date_err ?? '';
+    $records = $records ?? [];
+    $count = $count ?? count($records);
+    // ---------- Production variables ---------------------
+    $product_name_err = $product_name_err ?? '';
+    $target_pcs_err = $target_pcs_err ?? '';
+    $due_date_err = $due_date_err ?? '';
+    $Stock_number_err = $Stock_number_err ?? '';
+    $quantity_err = $quantity_err ?? '';    
+    $count = $count ?? count($records);
 ?>
 
 <!DOCTYPE html>
@@ -30,41 +40,12 @@ $count = $count ?? count($records);
 <body>
     <div class="user-page">
         <h2>Welcome to supervisor page!</h2>
-        <p>Supervisor : <span><?= htmlspecialchars($_SESSION['email'] ?? ''); ?></span></p>
+        <p>Supervisor : <span><?= htmlspecialchars($_SESSION['name'] ?? ''); ?></span></p>
         <a href="logout.php"><button class="">Logout</button></a>
     </div>
 
-    <h1>Record System</h1>
-
-    <!-- Display Backend Response Message -->
-    <?php if (!empty($message)): ?>
-        <p><?= htmlspecialchars($message); ?></p>
-    <?php endif; ?>
-
-    <form action="<?= htmlspecialchars($_SERVER['PHP_SELF']); ?>" method="post">
-        <label>Route:</label>
-        <input type="text" name="route" placeholder="Enter route" class="form-control <?= (!empty($route_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['route'] ?? '') ?>" required>
-        <?php if (!empty($route_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($route_err) ?></div><?php endif; ?>
-
-        <br><br>
-
-        <label>Pieces:</label>
-        <input type="text" name="pieces" placeholder="Enter pieces of Product" class="form-control <?= (!empty($pieces_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['pieces'] ?? '') ?>" required>
-        <?php if (!empty($pieces_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($pieces_err) ?></div><?php endif; ?>
-
-        <br><br>
-
-        <label>Stock:</label>
-        <input type="text" name="stock" placeholder="Enter Stock number" class="form-control <?= (!empty($stock_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['stock'] ?? '') ?>" required>
-        <?php if (!empty($stock_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($stock_err) ?></div><?php endif; ?>
-
-        <br><br>
-
-        <input type="submit" name="submit" value="Submit">
-        <input type="reset" value="Reset">
-    </form>
-        
     <hr>
+    <button><a href="supervisor_task.php">Add task</a></button>
 
     <h1>Delivery Record</h1>
 
@@ -73,9 +54,10 @@ $count = $count ?? count($records);
             <thead>
                 <tr>
                     <th>Delivery ID</th>
-                    <th>Route</th>
+                    <th>Destination</th>
                     <th>Pieces</th>
                     <th>Stock</th>
+                    <th>Delivery Date</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -88,6 +70,7 @@ $count = $count ?? count($records);
                             <td><?= htmlspecialchars($row['route']); ?></td>
                             <td><?= htmlspecialchars($row['pieces']); ?></td>
                             <td><?= htmlspecialchars($row['stock']); ?></td>
+                            <td><?= htmlspecialchars($row['delivery_date']); ?></td>
                             <td>
                                 <input type="submit" name="del" value="Delete" onclick="return confirm('Sigurado ka bang buburahin ito?');">
                                 <input type="submit" name="upd" value="Update">
@@ -100,6 +83,7 @@ $count = $count ?? count($records);
     <?php else: ?>
         <p>No records.</p>
     <?php endif; ?>
+    <hr>
 
 </body>
 </html>
