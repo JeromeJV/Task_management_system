@@ -11,22 +11,6 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'super') {
     exit();
 }
 
-    // Sinusure lg ung mga variable na existing sila
-    $message = $message ?? '';
-    //----------- Logistic variables ---------------------
-    $route_err = $route_err ?? '';
-    $pieces_err = $pieces_err ?? '';
-    $stock_err = $stock_err ?? '';
-    $delivery_date_err = $delivery_date_err ?? '';
-    $records = $records ?? [];
-    $count = $count ?? count($records);
-    // ---------- Production variables ---------------------
-    $product_name_err = $product_name_err ?? '';
-    $target_pcs_err = $target_pcs_err ?? '';
-    $due_date_err = $due_date_err ?? '';
-    $Stock_number_err = $Stock_number_err ?? '';
-    $quantity_err = $quantity_err ?? '';    
-    $count = $count ?? count($records);
 ?>
 
 <!DOCTYPE html>
@@ -44,6 +28,8 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'super') {
     </div>
 
     <hr>
-    <button><a href="delivery_main.php">Logistic</a></button>
+    <button><a href="delivery_task.php">Add Delivery Record</a></button>
+    <button><a href="supervisor.php">Back</a></button>
+
 </body>
 </html>

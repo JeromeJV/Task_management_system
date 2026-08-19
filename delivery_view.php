@@ -9,6 +9,15 @@ include'config/Supervisor_API.php';
 </head>
 <body>
 
+    <div class="user-page">
+        <h2>Welcome to supervisor page!</h2>
+        <p>Supervisor : <span><?= htmlspecialchars($_SESSION['name'] ?? ''); ?></span></p>
+        <a href="logout.php"><button class="">Logout</button></a>
+    </div>
+
+    <hr>
+    <button><a href="supervisor_task.php">Add task</a></button>
+
     <h1>Delivery record</h1>
 
     <?php if ($count > 0): ?>

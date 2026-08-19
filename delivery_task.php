@@ -1,4 +1,4 @@
-    <?php
+<?php
 session_start();
 
 include('config/connection.php');
@@ -65,6 +65,6 @@ $count = $count ?? count($records);
         <input type="reset" value="Reset">
     </form>
 
-    <button><a href="supervisor.php">Back</a></button>
+    <button><a href="delivery_main.php">Back</a></button>
 </body>
 </html>

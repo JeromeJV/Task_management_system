@@ -43,9 +43,9 @@ if (isset($_POST['submit'])) {
         $query = mysqli_query($conn, $sql);
 
         if ($query) {
-            $message = "New Task send</a>";
+            $message = "New Task sent";
         } elseif (isset($_POST['records'])) {
-        header("Location: supervisor.php");
+        header("Location: delivery_main.php");
         exit();
         }
      }
@@ -64,7 +64,7 @@ if (isset($_POST['del'])) {
     // Backend Logic for Delete
     $sql    = "DELETE FROM delivery WHERE delivery_id = '$passid'";
     $result = mysqli_query($conn, $sql);
-    $delete_message = "Record Deleted Successfully. <br><a href='supervisor.php'>View Records</a>";
+    $delete_message = "Record Deleted Successfully. <br><a href='delivery_main.php'>View Records</a>";
 
 } elseif (isset($_POST['upd'])) {
     //Dto nag fe-fetch para sa single Record to Update
@@ -97,7 +97,7 @@ if (isset($_POST['submit'])) {
     $query = mysqli_query($conn, $sql);
 
     if ($query) {
-        $status_message = "<br>Update Successful<br><br><a href='supervisor.php'><input type='button' name='back' value='View Records'></a>";
+        $status_message = "<br>Update Successful<br><br><a href='delivery_main.php'><input type='button' name='back' value='View Records'></a>";
     }
 } elseif (isset($_POST['can'])) {
     header("Location: supervisor.php");
