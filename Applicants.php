@@ -4,13 +4,14 @@
     session_start();
 ?>
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Application Form</title>
-    <link rel="stylesheet" href="../css/Applicants.css" />
+    <link rel="stylesheet" href="../CSS/Applicants.css" />
 </head>
 <body>
 
@@ -32,6 +33,12 @@
             <div class="step" data-step="3">
                 <div class="connector"><div class="fill"></div></div>
                 <div class="circle">3</div>
+                <div class="label">Educational Background</div>
+            </div>
+
+            <div class="step" data-step="4">
+                <div class="connector"><div class="fill"></div></div>
+                <div class="circle">4</div>
                 <div class="label">Availability</div>
             </div>
 
@@ -130,7 +137,7 @@
 
         <!-- STEP 2 : JOB HISTORY                         -->
         <div class="card" data-section="2">
-            <p class="section-title">Job History</p>
+            <p class="section-title">Recent Work</p>
 
             <!-- POSITION APPLYING FOR -->
             <!-- DB Column: position_applying -->
@@ -156,11 +163,6 @@
                         <input type="text" id="workPosition" name="work_position" data-required />
                     </div>
                     <div class="field">
-                        <label for="workYears">Year of stay</label>
-                        <input type="text" id="workYears" name="work_years" 
-                               inputmode="numeric" maxlength="2" data-required />
-                    </div>
-                    <div class="field">
                         <label for="workStartDate">Start date</label>
                         <input type="date" id="workStartDate" name="work_start_date" data-required />
                     </div>
@@ -170,26 +172,35 @@
                     </div>
                 </div>
             </fieldset>
+        </div>
+
+        <!-- STEP 3 : EDUCATIONAL BACKGROUND              -->
+        <div class="card" data-section="3">
+            <p class="section-title">Educational Background</p>
 
             <!-- EDUCATION -->
             <!-- DB Column: education_level -->
             <fieldset class="education">
-                <legend>Education</legend>
+                <legend>Educational Background</legend>
+                    <label for="schoolName">School name</label>
+                        <input type="text" id="schoolName" name="school_name" data-required />
                 <div class="field single-field">
                     <label for="educationLevel">Highest Education Attained</label>
                     <select id="educationLevel" name="education_level" data-required>
                         <option value="" disabled selected>Select education level</option>
                         <option value="Elementary">Elementary</option>
-                        <option value="Secondary">Secondary</option>
-                        <option value="Undergraduate">Undergraduate</option>
+                        <option value="Junior High School">Junior High School</option>
+                        <option value="Senior High School">Senior High School</option>
+                        <option value="College/University">College/University</option>
+                        <option value="Vocational/Technical">Vocational/Technical</option>
                         <option value="College-Graduate">College Graduate</option>
                     </select>
                 </div>
             </fieldset>
         </div>
-
-        <!-- STEP 3 : AVAILABILITY                        -->
-        <div class="card" data-section="3">
+        
+        <!-- STEP 4: AVAILABILITY                        -->
+        <div class="card" data-section="4">
             <p class="section-title">Availability</p>
             
             <!-- AVAILABILITY DATE -->
@@ -219,6 +230,6 @@
 
     </form>
 
-    <script src="../js/Applicants.js"></script>
+    <script src="../JS/Applicants.js"></script>
 </body>
 </html>

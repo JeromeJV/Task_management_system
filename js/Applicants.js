@@ -1,11 +1,8 @@
 // ---------- DATABASE CONFIGURATION ----------
-// Database connection config
 const DB_CONFIG = {
-    // For when you connect to a real database
     host: 'localhost',
     database: 'applicants_db',
     table: 'applications',
-    // API endpoint (replace with your actual backend URL)
     apiEndpoint: '/api/applications',
 };
 
@@ -44,7 +41,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 opt.textContent = region.name;
                 regionSelect.appendChild(opt);
             });
-            updateProgress(); // re-check after loading
+            updateFormState();
         })
         .catch(err => {
             console.warn('Could not load regions:', err);
@@ -59,7 +56,7 @@ regionSelect.addEventListener('change', function () {
     resetSelect(barangaySelect, 'Select Barangay');
 
     if (!this.value) {
-        updateProgress();
+        updateFormState();
         return;
     }
 
@@ -87,12 +84,12 @@ regionSelect.addEventListener('change', function () {
                     provinceSelect.appendChild(opt);
                 });
             }
-            updateProgress();
+            updateFormState();
         })
         .catch(err => {
             console.warn('Could not load provinces:', err);
             showApiError(true);
-            updateProgress();
+            updateFormState();
         });
 });
 
@@ -102,7 +99,7 @@ provinceSelect.addEventListener('change', function () {
     resetSelect(barangaySelect, 'Select Barangay');
 
     if (!this.value) {
-        updateProgress();
+        updateFormState();
         return;
     }
 
@@ -126,12 +123,12 @@ function loadCities(parentCode, parentType) {
                 opt.textContent = city.name;
                 citySelect.appendChild(opt);
             });
-            updateProgress();
+            updateFormState();
         })
         .catch(err => {
             console.warn('Could not load cities:', err);
             showApiError(true);
-            updateProgress();
+            updateFormState();
         });
 }
 
@@ -140,7 +137,7 @@ citySelect.addEventListener('change', function () {
     resetSelect(barangaySelect, 'Select Barangay');
 
     if (!this.value) {
-        updateProgress();
+        updateFormState();
         return;
     }
 
@@ -159,19 +156,92 @@ citySelect.addEventListener('change', function () {
                 opt.textContent = brgy.name;
                 barangaySelect.appendChild(opt);
             });
-            updateProgress();
+            updateFormState();
         })
         .catch(err => {
             console.warn('Could not load barangays:', err);
             showApiError(true);
-            updateProgress();
+            updateFormState();
         });
 });
+
+// -------------------------------------------------------------------------------- STEP LOCKING SYSTEM
+
+function lockStep(stepNumber) {
+    const card = document.querySelector(`.card[data-section="${stepNumber}"]`);
+    if (!card) return;
+    
+    if (!card.classList.contains('locked')) {
+        card.classList.add('locked');
+        card.style.opacity = '0.5';
+        card.style.pointerEvents = 'none';
+        card.style.userSelect = 'none';
+        
+        // Add lock message
+        let lockMessage = card.querySelector('.lock-message');
+        if (!lockMessage) {
+            lockMessage = document.createElement('div');
+            lockMessage.className = 'lock-message';
+            lockMessage.innerHTML = `
+                <p>Complete previous section to unlock</p>
+            `;
+            card.appendChild(lockMessage);
+        }
+    }
+}
+
+function unlockStep(stepNumber) {
+    const card = document.querySelector(`.card[data-section="${stepNumber}"]`);
+    if (!card) return;
+    
+    if (card.classList.contains('locked')) {
+        card.classList.remove('locked');
+        card.style.opacity = '1';
+        card.style.pointerEvents = 'auto';
+        card.style.userSelect = 'auto';
+        
+        // Remove lock message
+        const lockMessage = card.querySelector('.lock-message');
+        if (lockMessage) lockMessage.remove();
+    }
+}
+
+function updateStepLocks() {
+    // Check if step 1 is complete
+    const step1Complete = isSectionComplete(1);
+    
+    // Lock/unlock steps based on previous step completion
+    if (step1Complete) {
+        unlockStep(2);
+    } else {
+        lockStep(2);
+        lockStep(3);
+        lockStep(4);
+    }
+    
+    // Check if step 2 is complete
+    const step2Complete = isSectionComplete(2);
+    if (step2Complete && step1Complete) {
+        unlockStep(3);
+    } else {
+        lockStep(3);
+    }
+    
+    // Check if step 3 is complete
+    const step3Complete = isSectionComplete(3);
+    if (step3Complete && step2Complete && step1Complete) {
+        unlockStep(4);
+    } else {
+        lockStep(4);
+    }
+}
 
 // -------------------------------------------------------------------------------- VALIDATION FUNCTIONS
 
 function showError(field, message) {
     const container = field.closest('.field');
+    if (!container) return;
+    
     const existingError = container.querySelector('.field-error');
     if (existingError) existingError.remove();
     
@@ -184,12 +254,15 @@ function showError(field, message) {
 
 function clearError(field) {
     const container = field.closest('.field');
+    if (!container) return;
+    
     const error = container.querySelector('.field-error');
     if (error) error.remove();
     field.classList.remove('error');
 }
 
 function isEmpty(field) {
+    if (!field) return true;
     if (field.type === 'file') {
         return !field.files || field.files.length === 0;
     }
@@ -203,7 +276,8 @@ function isEmpty(field) {
 
 function validateRequired(field) {
     if (field.hasAttribute('data-required') && isEmpty(field)) {
-        const label = field.closest('.field').querySelector('label').textContent;
+        const labelElement = field.closest('.field')?.querySelector('label');
+        const label = labelElement ? labelElement.textContent : 'This field';
         return `${label} is required`;
     }
     return null;
@@ -218,6 +292,22 @@ function validateName(field) {
     }
     if (!/^[a-zA-Z\s\-'.,]+$/.test(value)) {
         return 'Name contains invalid characters';
+    }
+    return null;
+}
+
+function validateSchoolName(field) {
+    const value = field.value.trim();
+    if (!value) return null;
+    
+    if (value.length < 3) {
+        return 'School name must be at least 3 characters';
+    }
+    if (value.length > 100) {
+        return 'School name must be less than 100 characters';
+    }
+    if (!/^[a-zA-Z0-9\s\-'.,&()]+$/.test(value)) {
+        return 'School name contains invalid characters';
     }
     return null;
 }
@@ -268,18 +358,27 @@ function validateDate(field) {
         return 'Enter a valid date';
     }
     
-    const label = field.closest('.field').querySelector('label').textContent;
+    const labelElement = field.closest('.field')?.querySelector('label');
+    const label = labelElement ? labelElement.textContent : '';
     
     if (label.includes('available')) {
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        if (date <= yesterday) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const selectedDate = new Date(value);
+        selectedDate.setHours(0, 0, 0, 0);
+        
+        if (selectedDate < today) {
             return 'Date must be today or in the future';
         }
     }
     
     if (label.includes('Start date') || label.includes('End date')) {
-        if (date > new Date()) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const selectedDate = new Date(value);
+        selectedDate.setHours(0, 0, 0, 0);
+        
+        if (selectedDate > today) {
             return 'Date cannot be in the future';
         }
     }
@@ -301,16 +400,14 @@ function validateForm() {
         }
     });
     
-    const dates = document.querySelectorAll('input[type="date"]');
-    if (dates.length >= 2) {
-        const startDate = dates[dates.length - 2];
-        const endDate = dates[dates.length - 1];
-        
-        if (startDate.value && endDate.value) {
-            if (new Date(endDate.value) < new Date(startDate.value)) {
-                showError(endDate, 'End date must be after start date');
-                isValid = false;
-            }
+    // Validate date ranges
+    const startDate = document.getElementById('workStartDate');
+    const endDate = document.getElementById('workEndDate');
+    
+    if (startDate && endDate && startDate.value && endDate.value) {
+        if (new Date(endDate.value) < new Date(startDate.value)) {
+            showError(endDate, 'End date must be after start date');
+            isValid = false;
         }
     }
     
@@ -336,7 +433,7 @@ function validateFile(field) {
 }
 
 function validateField(field) {
-    if (field.offsetParent === null) return null;
+    if (!field || field.offsetParent === null) return null;
     
     let error = validateRequired(field);
     if (error) return error;
@@ -344,15 +441,17 @@ function validateField(field) {
     if (isEmpty(field)) return null;
     
     const type = field.type;
-    const label = field.closest('.field').querySelector('label').textContent;
+    const labelElement = field.closest('.field')?.querySelector('label');
+    const label = labelElement ? labelElement.textContent : '';
+    const fieldId = field.id;
     
+    if (fieldId === 'schoolName') return validateSchoolName(field);
     if (label.includes('Name')) return validateName(field);
     if (type === 'tel' || label.includes('Phone')) return validatePhone(field);
     if (type === 'email') return validateEmail(field);
     if (type === 'url') return validateUrl(field);
     if (type === 'date') return validateDate(field);
     if (type === 'file') return validateFile(field);
-    
     return null;
 }
 
@@ -369,10 +468,14 @@ function isFieldFilled(field) {
     }
 }
 
-function isSectionComplete(section) {
-    const required = section.querySelectorAll('[data-required]');
-    for (let el of required) {
-        if (!isFieldFilled(el)) return false;
+function isSectionComplete(sectionNumber) {
+    const section = document.querySelector(`.card[data-section="${sectionNumber}"]`);
+    if (!section) return false;
+    
+    const requiredFields = section.querySelectorAll('[data-required]');
+    for (let field of requiredFields) {
+        if (field.disabled) continue; // Skip disabled fields
+        if (!isFieldFilled(field)) return false;
     }
     return true;
 }
@@ -386,64 +489,67 @@ function updateProgress() {
         if (!step) return;
         
         step.classList.remove('active', 'done');
-        if (isSectionComplete(card)) {
+        if (isSectionComplete(index + 1)) {
             step.classList.add('done');
-        }
-    });
-
-    let foundActive = false;
-    steps.forEach((step) => {
-        if (!step.classList.contains('done') && !foundActive) {
-            step.classList.add('active');
-            foundActive = true;
+        } else {
+            // Find the first incomplete step
+            const previousComplete = index === 0 || isSectionComplete(index);
+            if (previousComplete) {
+                step.classList.add('active');
+            }
         }
     });
 }
 
-// -------------------------------------------------------------------------------- DATABASE-READY DATA COLLECTION -
+// Single function to update everything without recursion
+function updateFormState() {
+    updateProgress();
+    updateStepLocks();
+}
+
+// -------------------------------------------------------------------------------- DATABASE-READY DATA COLLECTION
 
 function collectFormData() {
-    // This structure maps directly to your database table columns
     const formData = {
         // Contact Information
-        last_name: document.querySelector('fieldset.name input:nth-child(1)')?.value?.trim() || '',
-        first_name: document.querySelector('fieldset.name input:nth-child(2)')?.value?.trim() || '',
-        middle_name: document.querySelector('fieldset.name input:nth-child(3)')?.value?.trim() || '',
+        last_name: document.getElementById('lastName')?.value?.trim() || '',
+        first_name: document.getElementById('firstName')?.value?.trim() || '',
+        middle_name: document.getElementById('middleName')?.value?.trim() || '',
         
         // Contacts
-        phone_number: document.querySelector('fieldset.contacts input[type="tel"]')?.value?.trim() || '',
-        email: document.querySelector('fieldset.contacts input[type="email"]')?.value?.trim() || '',
-        facebook_link: document.querySelector('fieldset.contacts input[type="url"]')?.value?.trim() || '',
+        phone_number: document.getElementById('phoneNumber')?.value?.trim() || '',
+        email: document.getElementById('emailAddress')?.value?.trim() || '',
+        facebook_link: document.getElementById('facebookUrl')?.value?.trim() || '',
         
         // Address
-        region: document.getElementById('region')?.value || '',
-        province: document.getElementById('province')?.value || '',
-        city: document.getElementById('city')?.value || '',
-        barangay: document.getElementById('barangay')?.value || '',
-        street: document.querySelector('fieldset.address input[type="text"]:nth-of-type(1)')?.value?.trim() || '',
-        house_number: document.querySelector('fieldset.address input[type="text"]:nth-of-type(2)')?.value?.trim() || '',
+        region: document.getElementById('addressRegion')?.value || '',
+        province: document.getElementById('addressProvince')?.value || '',
+        city: document.getElementById('addressCity')?.value || '',
+        barangay: document.getElementById('addressBarangay')?.value || '',
+        street: document.getElementById('addressStreet')?.value?.trim() || '',
+        house_number: document.getElementById('addressHouseNumber')?.value?.trim() || '',
         
         // Job History - Position
-        position_applying: document.querySelector('.position-information input')?.value?.trim() || '',
+        position_applying: document.getElementById('positionApplying')?.value?.trim() || '',
         
         // Work Experience
-        company_name: document.querySelector('.work-experience input:nth-of-type(1)')?.value?.trim() || '',
-        previous_position: document.querySelector('.work-experience input:nth-of-type(2)')?.value?.trim() || '',
-        years_of_stay: document.querySelector('.work-experience input[inputmode="numeric"]')?.value?.trim() || '',
-        start_date: document.querySelectorAll('.work-experience input[type="date"]')[0]?.value || '',
-        end_date: document.querySelectorAll('.work-experience input[type="date"]')[1]?.value || '',
+        company_name: document.getElementById('workCompany')?.value?.trim() || '',
+        previous_position: document.getElementById('workPosition')?.value?.trim() || '',
+        start_date: document.getElementById('workStartDate')?.value || '',
+        end_date: document.getElementById('workEndDate')?.value || '',
         
         // Education
-        highest_education: document.querySelector('.education select')?.value || '',
-        
+        school_name: document.getElementById('schoolName')?.value?.trim() || '',
+        highest_education: document.getElementById('educationLevel')?.value || '',
+
         // Availability
-        availability_date: document.querySelector('[data-section="3"] input[type="date"]')?.value || '',
+        availability_date: document.getElementById('availabilityDate')?.value || '',
         resume_filename: document.getElementById('resumeFile')?.files[0]?.name || '',
         
         // Metadata
         submitted_at: new Date().toISOString(),
         status: 'pending',
-        ip_address: '' // Will be filled by backend
+        ip_address: ''
     };
     
     return formData;
@@ -453,9 +559,8 @@ function collectFormData() {
 
 async function submitToDatabase(formData) {
     // SIMULATION: This is where you'll connect to your real database
-    // Replace this entire function with your actual API call
     
-    // OPTION 1: Using fetch to send to your backend API
+    // Uncomment and use this for actual API call:
     /*
     const response = await fetch(DB_CONFIG.apiEndpoint, {
         method: 'POST',
@@ -472,32 +577,11 @@ async function submitToDatabase(formData) {
     return await response.json();
     */
     
-    // OPTION 2: If using FormData (for file upload)
-    /*
-    const formDataToSend = new FormData();
-    for (const [key, value] of Object.entries(formData)) {
-        formDataToSend.append(key, value);
-    }
-    
-    // Add the actual file
-    const fileInput = document.getElementById('resumeFile');
-    if (fileInput.files[0]) {
-        formDataToSend.append('resume_file', fileInput.files[0]);
-    }
-    
-    const response = await fetch(DB_CONFIG.apiEndpoint, {
-        method: 'POST',
-        body: formDataToSend
-    });
-    */
-    
     // For now, simulate database save
     return new Promise((resolve) => {
         setTimeout(() => {
-            // Log what would be saved to database
             console.log('📦 DATA READY FOR DATABASE:', formData);
             
-            // Here's the SQL that would run on your backend:
             console.log(`
                 -- SQL for your database:
                 INSERT INTO ${DB_CONFIG.table} (
@@ -505,17 +589,19 @@ async function submitToDatabase(formData) {
                     phone_number, email, facebook_link,
                     region, province, city, barangay, street, house_number,
                     position_applying,
-                    company_name, previous_position, years_of_stay, start_date, end_date,
-                    highest_education,
+                    company_name, previous_position, start_date, end_date,
+                    school_name, highest_education,
                     availability_date, resume_filename,
                     submitted_at, status
                 ) VALUES (
                     '${formData.last_name}', '${formData.first_name}', '${formData.middle_name}',
                     '${formData.phone_number}', '${formData.email}', '${formData.facebook_link}',
-                    '${formData.region}', '${formData.province}', '${formData.city}', '${formData.barangay}', '${formData.street}', '${formData.house_number}',
+                    '${formData.region}', '${formData.province}', '${formData.city}', '${formData.barangay}', 
+                    '${formData.street}', '${formData.house_number}',
                     '${formData.position_applying}',
-                    '${formData.company_name}', '${formData.previous_position}', '${formData.years_of_stay}', '${formData.start_date}', '${formData.end_date}',
-                    '${formData.highest_education}',
+                    '${formData.company_name}', '${formData.previous_position}', 
+                    '${formData.start_date}', '${formData.end_date}',
+                    '${formData.school_name}', '${formData.highest_education}',
                     '${formData.availability_date}', '${formData.resume_filename}',
                     '${formData.submitted_at}', '${formData.status}'
                 );
@@ -530,10 +616,9 @@ async function submitToDatabase(formData) {
     });
 }
 
-// -------------------------------------------------------------------------------- POPUP CONFIRMATION NG SUBMIT
+// -------------------------------------------------------------------------------- POPUP CONFIRMATION
 
 function createPopupModal() {
-    // Create modal if it doesn't exist
     if (document.getElementById('successModal')) return;
     
     const modal = document.createElement('div');
@@ -552,7 +637,6 @@ function createPopupModal() {
     
     document.body.appendChild(modal);
     
-    // Add modal styles
     const modalStyles = document.createElement('style');
     modalStyles.textContent = `
         #successModal {
@@ -692,7 +776,7 @@ function showModal(referenceId) {
 
 function closeModal() {
     const modal = document.getElementById('successModal');
-    modal.classList.remove('show');
+    if (modal) modal.classList.remove('show');
 }
 
 // -------------------------------------------------------------------------------- RESET FORM 
@@ -700,32 +784,26 @@ function closeModal() {
 function resetForm() {
     const form = document.getElementById('applicationForm');
     
-    // Reset all inputs
     form.reset();
     
-    // Clear all error messages
     document.querySelectorAll('.field-error').forEach(error => error.remove());
     document.querySelectorAll('.error').forEach(field => field.classList.remove('error'));
     
-    // Clear file name display
     const fileName = document.getElementById('resumeFileName');
     if (fileName) fileName.textContent = '';
     
-    // Reset select dropdowns to first option
     document.querySelectorAll('select').forEach(select => {
         select.selectedIndex = 0;
     });
     
-    // Disable dependent dropdowns
-    ['province', 'city', 'barangay'].forEach(id => {
+    ['addressProvince', 'addressCity', 'addressBarangay'].forEach(id => {
         const select = document.getElementById(id);
         if (select) select.disabled = true;
     });
     
-    // Reset progress
-    updateProgress();
+    // Reset step locks
+    updateFormState();
     
-    // Reset submit button
     const submitBtn = document.getElementById('submitBtn');
     submitBtn.disabled = false;
     submitBtn.textContent = 'Submit Application';
@@ -733,7 +811,6 @@ function resetForm() {
     const submitStatus = document.getElementById('submitStatus');
     submitStatus.textContent = '';
     
-    // Scroll to top
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -745,7 +822,7 @@ async function handleFormSubmit(e) {
     const submitBtn = document.getElementById('submitBtn');
     const submitStatus = document.getElementById('submitStatus');
     
-    // Validate form
+    // Validate entire form
     if (!validateForm()) {
         submitStatus.textContent = 'Please fix the errors above';
         submitStatus.style.color = '#dc3545';
@@ -757,31 +834,25 @@ async function handleFormSubmit(e) {
         return;
     }
     
-    // Disable button during submission
     submitBtn.disabled = true;
     submitBtn.textContent = 'Submitting...';
     submitStatus.textContent = '';
     
     try {
-        // Collect data in database-ready format
         const formData = collectFormData();
-        
-        // Submit to database
         const result = await submitToDatabase(formData);
         
-        // Show success popup
         createPopupModal();
         showModal(result.id);
         
-        // Reset form after showing modal
         setTimeout(() => {
             resetForm();
         }, 500);
         
-        console.log('✅ Application saved successfully:', result);
+        console.log('Application saved successfully:', result);
         
     } catch (error) {
-        console.error('❌ Submission failed:', error);
+        console.error('Submission failed:', error);
         submitStatus.textContent = 'Failed to submit. Please try again.';
         submitStatus.style.color = '#dc3545';
         submitBtn.disabled = false;
@@ -803,12 +874,12 @@ document.querySelectorAll('input, select, textarea').forEach(field => {
     
     field.addEventListener('input', function() {
         clearError(this);
-        updateProgress();
+        updateFormState();
     });
     
     field.addEventListener('change', function() {
         clearError(this);
-        updateProgress();
+        updateFormState();
     });
 });
 
@@ -822,10 +893,10 @@ document.getElementById('resumeFile')?.addEventListener('change', function() {
     } else {
         fileName.textContent = '';
     }
-    updateProgress();
+    updateFormState();
 });
 
-// Add error styles
+// Add error styles and lock styles
 const style = document.createElement('style');
 style.textContent = `
     .field-error {
@@ -844,9 +915,44 @@ style.textContent = `
         margin-left: 15px;
         font-weight: 500;
     }
+    
+    .card.locked {
+        position: relative;
+        pointer-events: none;
+        user-select: none;
+        opacity: 0.5;
+        transition: opacity 0.3s ease;
+    }
+    
+    .lock-message {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(255, 255, 255, 0.95);
+        padding: 20px;
+        border-radius: 8px;
+        text-align: center;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        z-index: 10;
+        pointer-events: auto;
+    }
+    
+    .lock-icon {
+        font-size: 32px;
+        margin-bottom: 10px;
+    }
+    
+    .lock-message p {
+        margin: 0;
+        color: #666;
+        font-size: 14px;
+        font-weight: 500;
+    }
 `;
+
 document.head.appendChild(style);
 
 // Initialize
 createPopupModal();
-updateProgress();
+updateFormState();
