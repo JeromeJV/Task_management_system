@@ -66,7 +66,7 @@ if (isset($_POST['submit'])) {
         $insert1 = "INSERT INTO `users`(`name`, `email`, `password`, `role`) VALUES ('$safe_name','$safe_email','$safe_password','$safe_role')";
         
         if (mysqli_query($conn, $insert1)) {
-            header('Location: login.php');
+            header('Location: index.php');
             exit();
         } else {
             $msg = "Something went wrong. Please try again later.";
