@@ -45,5 +45,6 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'super') {
 
     <hr>
     <button><a href="delivery_main.php">Logistic</a></button>
+    <button><a href="factory_main.php">Production</a></button>
 </body>
 </html>

@@ -4,22 +4,17 @@ session_start();
 include('config/connection.php');
 include('config/autoLog.php');
 include('config/Supervisor_API.php');
-
-
+include('config/Production_API.php');
 // Authorization sa pag lologin kung tamang role pa ung nag login
 if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'super') {
     header("Location: index.php");
-    
-        // Sinusure lg ung mga variable na existing sila
-        $message = $message ?? '';
-        //----------- Logistic variables ---------------------
-        $route_err = $route_err ?? '';
-        $pieces_err = $pieces_err ?? '';
-        $stock_err = $stock_err ?? '';
-        $delivery_date_err = $delivery_date_err ?? '';
-        $records = $records ?? [];
+        // ---------- Production variables ---------------------
+        $product_name_err = $product_name_err ?? '';
+        $target_pcs_err = $target_pcs_err ?? '';
+        $due_date_err = $due_date_err ?? '';
+        $Stock_number_err = $Stock_number_err ?? '';
+        $quantity_err = $quantity_err ?? '';    
         $count = $count ?? count($records);
-
     exit();
     }
 
@@ -40,31 +35,35 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'super') {
     </div>
 
     <hr>
-    <button><a href="delivery_task.php">Add Delivery Record</a></button>
+    <button><a href="factory_task.php">Add product Record</a></button>
     <button><a href="supervisor.php">Back</a></button>
 
-        <h1>Delivery Record</h1>
+        <h1>Product Record</h1>
 
     <?php if ($count > 0): ?>
         <table border="1" cellpadding="5" cellspacing="0">
             <thead>
                 <tr>
-                    <th>Delivery ID</th>
-                    <th>Route</th>
-                    <th>Pieces</th>
-                    <th>Stock</th>
+                    <th>Product ID</th>
+                    <th>Product Name</th>
+                    <th>Target PCS</th>
+                    <th>Stock Number</th>
+                    <th>Quantity</th>
+                    <th>Due Date</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 <?php foreach ($records as $row): ?>
                     <tr>
-                        <form action="delivery_task.php" method="post">
-                            <input type="hidden" name="idno" value="<?= htmlspecialchars($row['delivery_id']); ?>">
-                            <td><?php echo $row['delivery_id']; ?></td>
-                            <td><?= htmlspecialchars($row['route']); ?></td>
-                            <td><?= htmlspecialchars($row['pieces']); ?></td>
-                            <td><?= htmlspecialchars($row['stock']); ?></td>
+                        <form action="factory_task.php" method="post">
+                            <input type="hidden" name="idno" value="<?= htmlspecialchars($row['production_id']); ?>">
+                            <td><?php echo $row['production_id']; ?></td>
+                            <td><?= htmlspecialchars($row['product_name']); ?></td>
+                            <td><?= htmlspecialchars($row['target_pcs']); ?></td>
+                            <td><?= htmlspecialchars($row['Stock_number']); ?></td>
+                            <td><?= htmlspecialchars($row['quantity']); ?></td>
+                            <td><?= htmlspecialchars($row['due_date']); ?></td>
                             <td>
                                 <input type="submit" name="del" value="Delete" onclick="return confirm('Are you sure you want to delete it?');">
                                 <input type="submit" name="upd" value="Update">

@@ -16,7 +16,7 @@ include'config/Supervisor_API.php';
     </div>
 
     <hr>
-    <button><a href="supervisor_task.php">Add task</a></button>
+    <button><a href="delivery_main.php">Add task</a></button>
 
     <h1>Delivery record</h1>
 

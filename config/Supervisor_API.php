@@ -28,8 +28,23 @@ if (isset($_POST['submit'])) {
         $isValid = false;
     }
 
+    if (mb_strlen($pieces) > 8) {
+        $pieces_err = "Your pieces must not exceed 8 characters.";
+        $isValid = false;
+    }
+
     if (!preg_match("/^[0-9 ]*$/", $stock)) {  
         $stock_err = "Please use only number for your Stock.";
+        $isValid = false;
+    }
+
+    if (mb_strlen($stock) < 4) {
+        $stock_err = "Your stock must be at least 4 characters long.";
+        $isValid = false;
+    }
+
+    if (mb_strlen($stock) > 5) {
+        $stock_err = "Your stock must not exceed 5 characters.";
         $isValid = false;
     }
 
@@ -100,7 +115,7 @@ if (isset($_POST['submit'])) {
         $status_message = "<br>Update Successful<br><br><a href='delivery_main.php'><input type='button' name='back' value='View Records'></a>";
     }
 } elseif (isset($_POST['can'])) {
-    header("Location: supervisor.php");
+    header("Location: delivery_main.php");
     exit();
 }
 
