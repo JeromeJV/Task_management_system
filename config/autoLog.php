@@ -17,7 +17,7 @@ if (isset($_SESSION['id'])) {
             session_destroy();
             
             // babalit na siya sa login.php
-            header("Location: login.php?error=session_expired");
+            header("Location: index.php?error=session_expired");
             exit();
         }
     }

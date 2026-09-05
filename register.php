@@ -59,6 +59,39 @@ include("config/registerBE.php");
             <p class="text-center">Already have an account? <a href="index.php">Login now</a></p>
         </form>
     </div>
+
+    <?php if ($count > 0): ?>
+        <table border="1" cellpadding="5" cellspacing="0">
+            <thead>
+                <tr>
+                    <th>User ID</th>
+                    <th>Employee Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($records as $row): ?>
+                    <tr>
+                        <form action="register.php" method="post">
+                            <input type="hidden" name="idno" value="<?= htmlspecialchars($row['id']); ?>">
+                            <td><?php echo $row['id']; ?></td>
+                            <td><?= htmlspecialchars($row['name']); ?></td>
+                            <td><?= htmlspecialchars($row['email']); ?></td>
+                            <td><?= htmlspecialchars($row['role']); ?></td>
+                            <td>
+                                <input type="submit" name="del" value="Delete" onclick="return confirm('Are you sure you want to delete it?');">
+                                <input type="submit" name="upd" value="Update">
+                            </td>
+                        </form>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    <?php else: ?>
+        <p>No records.</p>
+    <?php endif; ?>
+
 </body> 
 </html>
 

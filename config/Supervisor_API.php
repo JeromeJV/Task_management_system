@@ -1,136 +1,260 @@
 <?php
 // -----------------------------------------------------
-//                          Insert
+// 1. Connection & Initialization
 // -----------------------------------------------------
 include('config/connection.php');
 
-$message = "";
-$route_err = '';
-$pieces_err = '';
-$stock_err = '';
-$delivery_date_err = '';
+$module = $_REQUEST['module'] ?? 'delivery'; 
+$action = $_POST['action'] ?? '';
 
-if (isset($_POST['submit'])) {
-    $route = $_POST['route'];
-    $pieces    = $_POST['pieces'];
-    $stock  = $_POST['stock'];
-    $delivery_date = $_POST['delivery_date'];
+$message          = "";
+$status_message   = "";
+$delete_message   = "";
+$errors           = [];
+$view_data        = null;
+$records          = []; // Inire-reset dito ang records array
+$production_items = []; 
 
-     $isValid = true;
+// -----------------------------------------------------
+// 2. Module: DELIVERY
+// -----------------------------------------------------
+if ($module === 'delivery') {
 
-    if (!preg_match("/^[a-zA-Z0-9 ]*$/", $route)) {
-        $route_err = "Please use only letters and spaces for your Address.";
-        $isValid = false;
-    }
+    // --- INSERT ---
+    if (isset($_POST['submit']) && $action === 'insert') {
+        $production_id = $_POST['production_id'] ?? '';
+        $route         = trim($_POST['route'] ?? '');
+        $delivery_date = trim($_POST['delivery_date'] ?? '');
 
-    if (!preg_match("/^[0-9 ]*$/", $pieces)) {
-        $pieces_err = "Please use only number for your Pieces.";
-        $isValid = false;
-    }
-
-    if (mb_strlen($pieces) > 8) {
-        $pieces_err = "Your pieces must not exceed 8 characters.";
-        $isValid = false;
-    }
-
-    if (!preg_match("/^[0-9 ]*$/", $stock)) {  
-        $stock_err = "Please use only number for your Stock.";
-        $isValid = false;
-    }
-
-    if (mb_strlen($stock) < 4) {
-        $stock_err = "Your stock must be at least 4 characters long.";
-        $isValid = false;
-    }
-
-    if (mb_strlen($stock) > 5) {
-        $stock_err = "Your stock must not exceed 5 characters.";
-        $isValid = false;
-    }
-
-     if ($isValid) {
-        $safe_route     = mysqli_real_escape_string($conn, $route);
-        $safe_pieces    = mysqli_real_escape_string($conn, $pieces);
-        $safe_stock     = mysqli_real_escape_string($conn, $stock);
-        $safe_delivery_date = mysqli_real_escape_string($conn, $delivery_date);
-
-        $sql   = "INSERT INTO delivery (delivery_id, route, pieces, stock, delivery_date) VALUES ('', '$safe_route', '$safe_pieces', '$safe_stock', '$safe_delivery_date')";
-        $query = mysqli_query($conn, $sql);
-
-        if ($query) {
-            $message = "New Task sent";
-        } elseif (isset($_POST['records'])) {
-        header("Location: delivery_main.php");
-        exit();
+        // Validation
+        if (empty($production_id)) {
+            $errors['production_id'] = "Please select a product.";
         }
-     }
-}
+        if (!preg_match("/^[a-zA-Z0-9 ]*$/", $route) || empty($route)) {
+            $errors['route'] = "Please enter a valid route address (letters and numbers only).";
+        }
+        if (empty($delivery_date)) {
+            $errors['delivery_date'] = "Delivery date is required.";
+        }
 
-// -----------------------------------------------------
-//                        Edit
-// -----------------------------------------------------
+        if (empty($errors)) {
+            // Fetch production item specs
+            $get_prod = $conn->prepare("SELECT Stock_number, quantity FROM production WHERE production_id = ?");
+            $get_prod->bind_param("s", $production_id);
+            $get_prod->execute();
+            $prod_res  = $get_prod->get_result();
+            $prod_data = $prod_res->fetch_assoc();
+            $get_prod->close();
 
+            if ($prod_data) {
+                $stock  = $prod_data['Stock_number'];
+                $pieces = $prod_data['quantity']; 
 
-$passid = $_POST['idno'] ?? null;
-$view_data = null;
-$delete_message = "";
-
-if (isset($_POST['del'])) {
-    // Backend Logic for Delete
-    $sql    = "DELETE FROM delivery WHERE delivery_id = '$passid'";
-    $result = mysqli_query($conn, $sql);
-    $delete_message = "Record Deleted Successfully. <br><a href='delivery_main.php'>View Records</a>";
-
-} elseif (isset($_POST['upd'])) {
-    //Dto nag fe-fetch para sa single Record to Update
-    $sql    = "SELECT * FROM delivery WHERE delivery_id = '$passid'";
-    $result = mysqli_query($conn, $sql);
-    $row    = mysqli_fetch_assoc($result);
-
-    $view_data = [
-        'delivery_id'      => $passid,
-        'route' => $row['route'],
-        'pieces'    => $row['pieces'],
-        'stock'    => $row['stock'],
-        'delivery_date' => $row['delivery_date']
-    ];
-}
-
-// -----------------------------------------------------
-//                      Update
-// -----------------------------------------------------
-
-$status_message = "";
-
-if (isset($_POST['submit'])) {
-    $route = $_POST['route'];
-    $pieces    = $_POST['pieces'];
-    $stock    = $_POST['stock'];
-    $delivery_date = $_POST['delivery_date'];
-
-    $sql   = "UPDATE delivery SET  pieces = '$pieces', stock = '$stock', delivery_date = '$delivery_date' WHERE route = '$route' ";
-    $query = mysqli_query($conn, $sql);
-
-    if ($query) {
-        $status_message = "<br>Update Successful<br><br><a href='delivery_main.php'><input type='button' name='back' value='View Records'></a>";
+                $stmt = $conn->prepare("INSERT INTO delivery (route, pieces, stock, delivery_date) VALUES (?, ?, ?, ?)");
+                $stmt->bind_param("ssss", $route, $pieces, $stock, $delivery_date);
+                
+                if ($stmt->execute()) {
+                    $message = "New Delivery Task sent successfully.";
+                }
+                $stmt->close();
+            } else {
+                $errors['production_id'] = "Selected product not found in production records.";
+            }
+        }
     }
-} elseif (isset($_POST['can'])) {
-    header("Location: delivery_main.php");
+
+    // --- EDIT & DELETE ---
+    $passid = $_POST['idno'] ?? null;
+
+    if (isset($_POST['del']) && $passid) {
+        $stmt = $conn->prepare("DELETE FROM delivery WHERE delivery_id = ?");
+        $stmt->bind_param("s", $passid);
+        $stmt->execute();
+        $stmt->close();
+        $delete_message = "Record Deleted Successfully. <br><a href='delivery_main.php'>View Records</a>";
+
+    } elseif (isset($_POST['upd']) && $passid) {
+        $stmt = $conn->prepare("SELECT * FROM delivery WHERE delivery_id = ?");
+        $stmt->bind_param("s", $passid);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $view_data = $result->fetch_assoc();
+        $stmt->close();
+    }
+
+    // --- UPDATE ---
+    if (isset($_POST['submit']) && $action === 'update') {
+        $route         = $_POST['route'] ?? '';
+        $pieces        = $_POST['pieces'] ?? '';
+        $stock         = $_POST['stock'] ?? '';
+        $delivery_date = $_POST['delivery_date'] ?? '';
+
+        $stmt = $conn->prepare("UPDATE delivery SET pieces = ?, stock = ?, delivery_date = ? WHERE route = ?");
+        $stmt->bind_param("ssss", $pieces, $stock, $delivery_date, $route);
+
+        if ($stmt->execute()) {
+            $status_message = "<br>Update Successful<br><br><a href='delivery_main.php'><input type='button' value='View Records'></a>";
+        }
+        $stmt->close();
+    }
+
+    // --- UPDATE STATUS TO DELIVERED (For Driver) ---
+    if (isset($_POST['mark_delivered'])) {
+        $delivery_id = $_POST['idno'] ?? '';
+
+        if (!empty($delivery_id)) {
+            $stmt = $conn->prepare("UPDATE delivery SET status = 'Delivered' WHERE delivery_id = ?");
+            $stmt->bind_param("s", $delivery_id);
+            $stmt->execute();
+            $stmt->close();
+        }
+        
+        // Automatic redirect pabalik sa page na pinagmulan
+        $redirect_page = ($_SESSION['role'] === 'log') ? 'logistic.php' : 'logistic.php';
+        header("Location: $redirect_page");
+        exit();
+    }
+
+    // --- VIEW / FETCH RECORDS (DELIVERY + PRODUCTION JOIN) ---
+    $sql = "SELECT d.delivery_id, d.route, d.pieces, d.stock, d.delivery_date, d.status, 
+                   p.product_name 
+            FROM delivery d 
+            LEFT JOIN production p ON d.stock = p.Stock_number 
+            ORDER BY d.delivery_id DESC";
+            
+    $result = mysqli_query($conn, $sql);
+
+    if ($result && mysqli_num_rows($result) > 0) {
+        while ($row = mysqli_fetch_assoc($result)) {
+            $records[] = $row;
+        }
+    }
+    $count = count($records);
+
+    // Fetch products para sa Delivery Dropdown selection
+    $prod_query = "SELECT production_id, product_name, Stock_number, quantity FROM production";
+    $prod_result = mysqli_query($conn, $prod_query);
+    if ($prod_result) {
+        $production_items = mysqli_fetch_all($prod_result, MYSQLI_ASSOC);
+    }
+} 
+
+// -----------------------------------------------------
+// 3. Module: FACTORY (PRODUCTION)
+// -----------------------------------------------------
+elseif ($module === 'factory') {
+
+    // --- INSERT ---
+    if (isset($_POST['submit']) && $action === 'insert') {
+        $product_name = trim($_POST['product_name'] ?? '');
+        $target_pcs   = trim($_POST['target_pcs'] ?? '');
+        $due_date     = trim($_POST['due_date'] ?? '');
+        $Stock_number = trim($_POST['Stock_number'] ?? '');
+        $quantity     = trim($_POST['quantity'] ?? '');
+
+        if (!preg_match("/^[a-zA-Z0-9 ]*$/", $product_name)) {
+            $errors['product_name'] = "Please use only letters and spaces for your Product Name.";
+        }
+        if (!preg_match("/^[0-9 ]*$/", $target_pcs)) {
+            $errors['target_pcs'] = "Please use only numbers for your Target PCS.";
+        }
+        if (!preg_match("/^[0-9 ]*$/", $quantity)) {
+            $errors['quantity'] = "Please use only numbers for your Quantity.";
+        }
+        if (!preg_match("/^[0-9 ]*$/", $Stock_number)) {
+            $errors['Stock_number'] = "Please use only numbers for your Stock Number.";
+        }
+        if (!empty($Stock_number) && mb_strlen($Stock_number) != 4) {
+            $errors['Stock_number'] = "Your Stock Number must be exactly 4 characters long.";
+        }
+
+        if (empty($errors)) {
+            $stmt = $conn->prepare("INSERT INTO production (product_name, target_pcs, due_date, Stock_number, quantity) VALUES (?, ?, ?, ?, ?)");
+            $stmt->bind_param("sssss", $product_name, $target_pcs, $due_date, $Stock_number, $quantity);
+            
+            if ($stmt->execute()) {
+                $message = "New Production Task sent successfully.";
+            }
+            $stmt->close();
+        }
+    }
+
+    // --- EDIT & DELETE ---
+    $passid = $_POST['idno'] ?? null;
+
+    if (isset($_POST['del']) && $passid) {
+        $stmt = $conn->prepare("DELETE FROM production WHERE production_id = ?");
+        $stmt->bind_param("s", $passid);
+        $stmt->execute();
+        $stmt->close();
+        $delete_message = "Record Deleted Successfully. <br><a href='factory_main.php'>View Records</a>";
+
+    } elseif (isset($_POST['upd']) && $passid) {
+        $stmt = $conn->prepare("SELECT * FROM production WHERE production_id = ?");
+        $stmt->bind_param("s", $passid);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $view_data = $result->fetch_assoc();
+        $stmt->close();
+    }
+
+    // --- UPDATE ---
+    if (isset($_POST['submit']) && $action === 'update') {
+        $production_id = $_POST['production_id'] ?? '';
+        $product_name  = $_POST['product_name'] ?? '';
+        $target_pcs    = $_POST['target_pcs'] ?? '';
+        $due_date      = $_POST['due_date'] ?? '';
+        $Stock_number  = $_POST['Stock_number'] ?? '';
+        $quantity      = $_POST['quantity'] ?? '';
+
+        $stmt = $conn->prepare("UPDATE production SET product_name=?, target_pcs=?, due_date=?, Stock_number=?, quantity=? WHERE production_id=?");
+        $stmt->bind_param("ssssss", $product_name, $target_pcs, $due_date, $Stock_number, $quantity, $production_id);
+
+        if ($stmt->execute()) {
+            $status_message = "<br>Update Successful<br><br><a href='factory_main.php'><input type='button' value='View Records'></a>";
+        }
+        $stmt->close();
+    }
+
+    // --- UPDATE STATUS TO DELIVERED (For Driver) ---
+    if (isset($_POST['mark_done'])) {
+        $production_id = $_POST['idno'] ?? '';
+
+        if (!empty($production_id)) {
+            // SQL query para palitan ang status ng production record
+            $stmt = $conn->prepare("UPDATE production SET product_status = 'product done' WHERE production_id = ?");
+            $stmt->bind_param("s", $production_id);
+            $stmt->execute();
+            $stmt->close();
+        }
+        
+        // Automatic redirect pabalik sa page na pinagmulan
+        $redirect_page = ($_SESSION['role'] === 'pro') ? 'production.php' : 'production.php';
+        header("Location: $redirect_page");
+        exit();
+    }
+
+    // --- VIEW / FETCH RECORDS (TAMA NA ANG SQL QUERY DITO) ---
+    $sql = "SELECT production_id, product_name, target_pcs, Stock_number, quantity, due_date, product_status 
+            FROM production 
+            ORDER BY production_id DESC";
+            
+    $result = mysqli_query($conn, $sql);
+
+    if ($result && mysqli_num_rows($result) > 0) {
+        while ($row = mysqli_fetch_assoc($result)) {
+            $records[] = $row;
+        }
+    }
+    $count = count($records);
+}
+
+// -----------------------------------------------------
+// 4. Cancel Redirection
+// -----------------------------------------------------
+if (isset($_POST['can'])) {
+    $redirect_page = ($module === 'factory') ? 'factory_main.php' : 'delivery_main.php';
+    header("Location: $redirect_page");
     exit();
-}
-
-// -----------------------------------------------------
-//                        View
-// -----------------------------------------------------
-
-$sql    = "SELECT * FROM delivery ORDER BY route ASC";
-$result = mysqli_query($conn, $sql);
-$count  = mysqli_num_rows($result);
-
-$records = [];
-if ($count > 0) {
-    while ($row = mysqli_fetch_assoc($result)) {
-        $records[] = $row;
-    }
 }
 ?>

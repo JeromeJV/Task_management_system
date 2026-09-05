@@ -35,18 +35,22 @@ if (isset($_POST['submit'])) {
     $contact_number = $_POST['contact_number'];
     $email = $_POST['email'];
     $facebook = $_POST['facebook'];
+
     $house_number = $_POST['house_number'];
     $street = $_POST['street'];
     $barangay = $_POST['barangay'];
     $city = $_POST['city'];
     $province = $_POST['province'];
+
     $position_applied = $_POST['position_applied'];
     $company_name = $_POST['company_name'];
     $position = $_POST['position'];
     $year_of_start = $_POST['year_of_start'];
     $date_of_stay = $_POST['date_of_stay'];
     $date_of_end = $_POST['date_of_end'];
+
     $education = $_POST['education'];
+    
     $start_date = $_POST['start_date'];
     $resume = $_POST['resume'];
 

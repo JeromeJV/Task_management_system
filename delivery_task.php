@@ -37,33 +37,36 @@ $count = $count ?? count($records);
     <?php endif; ?>
 
     <form action="<?= htmlspecialchars($_SERVER['PHP_SELF']); ?>" method="post">
-        <label>Destination:</label>
-        <input type="text" name="route" placeholder="Enter destination" class="form-control <?= (!empty($route_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['route'] ?? $view_data['route'] ?? '') ?>" required>
-        <?php if (!empty($route_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($route_err) ?></div><?php endif; ?>
+    <!-- Mahalaga ito kailangan ito para basahin ng backend ($action === 'insert') -->
+    <input type="hidden" name="action" value="<?= isset($view_data) ? 'update' : 'insert'; ?>">
+    <input type="hidden" name="module" value="delivery">
 
-        <br><br>
+    <label>Product:</label> <br>
+    <select name="production_id" required>
+        <option value="">Product</option>
+        <?php foreach ($production_items as $item): ?>
+            <option value="<?= htmlspecialchars($item['production_id']); ?>">
+                <?= htmlspecialchars($item['product_name'] . " (stock: " . $item['Stock_number'] . " | Qty: " . $item['quantity'] . ")"); ?>
+            </option>
+        <?php endforeach; ?>
+    </select>
+    <br><br>
 
-        <label>Pieces:</label>
-        <input type="text" name="pieces" placeholder="Enter pieces of Product" class="form-control <?= (!empty($pieces_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['pieces'] ?? $view_data['pieces'] ?? '') ?>" required>
-        <?php if (!empty($pieces_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($pieces_err) ?></div><?php endif; ?>
+    <label>Destination:</label> <br>
+    <input type="text" name="route" placeholder="Enter destination" class="form-control <?= (!empty($route_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['route'] ?? $view_data['route'] ?? '') ?>" required>
+    <?php if (!empty($route_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($route_err) ?></div><?php endif; ?>
 
-        <br><br>
+    <br><br>
 
-        <label>Stock:</label>
-        <input type="text" name="stock" placeholder="Enter Stock number" class="form-control <?= (!empty($stock_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['stock'] ?? $view_data['stock'] ?? '') ?>" required>
-        <?php if (!empty($stock_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($stock_err) ?></div><?php endif; ?>
+    <label>Delivery Date:</label> <br>
+    <input type="date" name="delivery_date" class="form-control <?= (!empty($delivery_date_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['delivery_date'] ?? $view_data['delivery_date'] ?? '') ?>" required>
+    <?php if (!empty($delivery_date_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($delivery_date_err) ?></div><?php endif; ?>
 
-        <br><br>
+    <br><br>
 
-        <label>Delivery Date:</label>
-        <input type="date" name="delivery_date" class="form-control <?= (!empty($delivery_date_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['delivery_date'] ?? $view_data['delivery_date'] ?? '') ?>" required>
-        <?php if (!empty($delivery_date_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($delivery_date_err) ?></div><?php endif; ?>
-
-        <br><br>
-
-        <input type="submit" name="submit" value="Submit">
-        <input type="reset" value="Reset">
-    </form>
+    <input type="submit" name="submit" value="Submit">
+    <input type="reset" value="Reset">
+</form>
 
     <button><a href="delivery_main.php">Back</a></button>
 </body>
