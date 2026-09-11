@@ -5,28 +5,29 @@ include('config/connection.php');
 include('config/autoLog.php');
 include('config/Supervisor_API.php');
 
+
 // Authorization sa pag lologin kung tamang role pa ung nag login
 if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'super') {
     header("Location: index.php");
     exit();
 }
 
-    // Sinusure lg ung mga variable na existing sila
-    $message = $message ?? '';
-    //----------- Logistic variables ---------------------
-    $route_err = $route_err ?? '';
-    $pieces_err = $pieces_err ?? '';
-    $stock_err = $stock_err ?? '';
-    $delivery_date_err = $delivery_date_err ?? '';
-    $records = $records ?? [];
-    $count = $count ?? count($records);
-    // ---------- Production variables ---------------------
-    $product_name_err = $product_name_err ?? '';
-    $target_pcs_err = $target_pcs_err ?? '';
-    $due_date_err = $due_date_err ?? '';
-    $Stock_number_err = $Stock_number_err ?? '';
-    $quantity_err = $quantity_err ?? '';    
-    $count = $count ?? count($records);
+// Sinusure lg ung mga variable na existing sila
+$message = $message ?? '';
+//----------- Logistic variables ---------------------
+$route_err = $route_err ?? '';
+$pieces_err = $pieces_err ?? '';
+$stock_err = $stock_err ?? '';
+$delivery_date_err = $delivery_date_err ?? '';
+$records = $records ?? [];
+$count = $count ?? count($records);
+// ---------- Production variables ---------------------
+$product_name_err = $product_name_err ?? '';
+$target_pcs_err = $target_pcs_err ?? '';
+$due_date_err = $due_date_err ?? '';
+$Stock_number_err = $Stock_number_err ?? '';
+$quantity_err = $quantity_err ?? '';    
+$count = $count ?? count($records);
 ?>
 
 <!DOCTYPE html>
@@ -35,13 +36,13 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'super') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Supervisor Form</title>
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/supervisor.css">
+    <!-- Chart.js Library sa HEAD -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
-
-    
-    <div class="sidebar">
+<div class="sidebar">
   <div>
     <div class="sidebar-header">
       <div class="avatar">🐐</div>
@@ -78,25 +79,12 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'super') {
       <div class="dash-lower">
         <div class="chart-panel">
           <h3>DEPARTMENT PROGRESS</h3>
-          <div class="wave-wrap" id="waveWrap">
-            <svg id="waveSvg" viewBox="0 0 700 260" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="waveGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#14b8a6" stop-opacity="0.35"/>
-                  <stop offset="100%" stop-color="#14b8a6" stop-opacity="0"/>
-                </linearGradient>
-              </defs>
-              <path id="waveArea" fill="url(#waveGrad)" stroke="none"></path>
-              <path id="waveLine" fill="none" stroke="#14b8a6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
-              <g id="wavePoints"></g>
-            </svg>
-            <div class="wave-tooltip" id="waveTooltip"></div>
-          </div>
-          <div class="wave-months">
-            <span>JAN</span><span>FEB</span><span>MAR</span><span>APR</span><span>MAY</span><span>JUN</span>
-            <span>JUL</span><span>AUG</span><span>SEP</span><span>OCT</span><span>NOV</span><span>DEC</span>
+          <!-- Canvas Container para sa Chart.js -->
+          <div style="position: relative; height: 260px; width: 100%;">
+             <canvas id="myChart"></canvas>
           </div>
         </div>
+
         <div class="recent-panel">
           <h3>RECENT TASK</h3>
           <div class="task-item">
@@ -112,7 +100,7 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'super') {
     </div>
 
     <!-- TASK -->
-    <div id="page-task" class="page">
+    <div id="page-task" class="page" style="display:none;">
       <h2 class="section-title">TASKS</h2>
       <div class="green-table-panel">
         <table class="green-table">
@@ -125,7 +113,7 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'super') {
     </div>
 
     <!-- EMPLOYEE -->
-    <div id="page-employee" class="page">
+    <div id="page-employee" class="page" style="display:none;">
       <div class="employee-layout">
         <div class="employee-list">
           <h4>Employee's</h4>
@@ -136,7 +124,7 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'super') {
     </div>
 
     <!-- LOGISTIC -->
-    <div id="page-logistic" class="page">
+    <div id="page-logistic" class="page" style="display:none;">
       <div class="assign"> <button><a href="delivery_task.php">Add Delivery Record</a></button></div>
       <div class="assign"> <button><a href="supervisor.php">BACK</a></button></div>
       <div class="stat-row">
@@ -165,5 +153,9 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'super') {
           <div class="progress-track"><div class="progress-fill" style="width:62%;"></div></div>
         </div>
       </div>
+    </div>
+
+  </div>
+</div>
 </body>
 </html>

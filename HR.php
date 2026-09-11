@@ -24,6 +24,7 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'HR') {
          
         <a href="logout.php"><button class="">Logout</button></a>
         <button><a href="register.php">Register User</a></button>
+        <button><a href="appli_form.php">Applicant</a></button>
     </div>
 </body>
 </html>

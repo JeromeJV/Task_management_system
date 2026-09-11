@@ -29,7 +29,7 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'log') {
         <a href="logout.php"><button class="">Logout</button></a>
     </div>
 
-    <?php if ($count > 0): ?>
+    <?php if (!empty($pending_records)): ?>
         <table border="1" cellpadding="5" cellspacing="0">
             <thead>
                 <tr>
@@ -44,7 +44,7 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'log') {
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($records as $row): ?>
+                <?php foreach ($pending_records as $row): ?>
                     <tr>
                         <form action="delivery_main.php" method="post">
                             <input type="hidden" name="idno" value="<?= htmlspecialchars($row['delivery_id']); ?>">
@@ -89,5 +89,52 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'log') {
     <?php else: ?>
         <p>No records.</p>
     <?php endif; ?>
+
+    <hr style="margin: 30px 0;">
+
+        <!-- ================= DELIVERY HISTORY TABLE ================= -->
+        <h3>Delivery History (Delivered)</h3>
+
+        <?php if (!empty($history_records)): ?>
+            <table border="1" cellpadding="5" cellspacing="0">
+                <thead>
+                    <tr>
+                        <th>Delivery ID</th>
+                        <th>Product Name</th>
+                        <th>Destination</th>
+                        <th>Quantity</th>
+                        <th>Stock Number</th>
+                        <th>Delivery Date</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($history_records as $row): ?>
+                        <tr>
+                            <form action="delivery_main.php" method="post">
+                                <input type="hidden" name="idno" value="<?= htmlspecialchars($row['delivery_id']); ?>">
+                                <td><?= htmlspecialchars($row['delivery_id']); ?></td>
+                                <td><?= htmlspecialchars($row['product_name'] ?? 'N/A'); ?></td>
+                                <td><?= htmlspecialchars($row['route']); ?></td>
+                                <td><?= htmlspecialchars($row['pieces']); ?></td>
+                                <td><?= htmlspecialchars($row['stock']); ?></td>
+                                <td><?= htmlspecialchars($row['delivery_date']); ?></td>
+                                <td>
+                                    <span style="color: green; font-weight: bold; background-color: #e6ffe6; padding: 4px 8px; border-radius: 4px;">
+                                        Delivered
+                                    </span>
+                                </td>
+                                <td>
+                                    <input type="submit" name="del" value="Delete" onclick="return confirm('Are you sure?');">
+                                </td>
+                            </form>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php else: ?>
+            <p>No delivery history yet.</p>
+        <?php endif; ?>
 </body>
 </html>

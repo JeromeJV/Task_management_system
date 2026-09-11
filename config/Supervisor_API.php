@@ -12,7 +12,13 @@ $status_message   = "";
 $delete_message   = "";
 $errors           = [];
 $view_data        = null;
-$records          = []; // Inire-reset dito ang records array
+
+// Hinihiwalay na mga array para sa Delivery at Factory Modules
+$pending_records  = []; 
+$history_records  = []; 
+
+// Para sa Production Items / Dropdown selection
+$records          = []; 
 $production_items = []; 
 
 // -----------------------------------------------------
@@ -98,7 +104,7 @@ if ($module === 'delivery') {
         $stmt->close();
     }
 
-    // --- UPDATE STATUS TO DELIVERED (For Driver) ---
+    // --- UPDATE STATUS TO DELIVERED ---
     if (isset($_POST['mark_delivered'])) {
         $delivery_id = $_POST['idno'] ?? '';
 
@@ -109,30 +115,47 @@ if ($module === 'delivery') {
             $stmt->close();
         }
         
-        // Automatic redirect pabalik sa page na pinagmulan
-        $redirect_page = ($_SESSION['role'] === 'log') ? 'logistic.php' : 'logistic.php';
+        $redirect_page = ($_SESSION['role'] === 'log') ? 'logistic.php' : 'delivery_main.php';
         header("Location: $redirect_page");
         exit();
     }
 
-    // --- VIEW / FETCH RECORDS (DELIVERY + PRODUCTION JOIN) ---
-    $sql = "SELECT d.delivery_id, d.route, d.pieces, d.stock, d.delivery_date, d.status, 
-                   p.product_name 
-            FROM delivery d 
-            LEFT JOIN production p ON d.stock = p.Stock_number 
-            ORDER BY d.delivery_id DESC";
-            
-    $result = mysqli_query($conn, $sql);
+    // --- VIEW / FETCH RECORDS (DELIVERY) ---
 
-    if ($result && mysqli_num_rows($result) > 0) {
-        while ($row = mysqli_fetch_assoc($result)) {
-            $records[] = $row;
+    // 1. Fetch PENDING Deliveries
+    $sql_pending = "SELECT d.delivery_id, d.route, d.pieces, d.stock, d.delivery_date, d.status, 
+                       p.product_name 
+                FROM delivery d 
+                LEFT JOIN production p ON d.stock = p.Stock_number 
+                WHERE d.status != 'Delivered' OR d.status IS NULL
+                GROUP BY d.delivery_id
+                ORDER BY d.delivery_id DESC";
+
+    $res_pending = mysqli_query($conn, $sql_pending);
+    if ($res_pending && mysqli_num_rows($res_pending) > 0) {
+        while ($row = mysqli_fetch_assoc($res_pending)) {
+            $pending_records[] = $row;
         }
     }
-    $count = count($records);
+
+    // 2. Fetch DELIVERED Deliveries (History)
+    $sql_history = "SELECT d.delivery_id, d.route, d.pieces, d.stock, d.delivery_date, d.status, 
+                       p.product_name 
+                FROM delivery d 
+                LEFT JOIN production p ON d.stock = p.Stock_number 
+                WHERE d.status = 'Delivered' 
+                GROUP BY d.delivery_id
+                ORDER BY d.delivery_id DESC";
+
+    $res_history = mysqli_query($conn, $sql_history);
+    if ($res_history && mysqli_num_rows($res_history) > 0) {
+        while ($row = mysqli_fetch_assoc($res_history)) {
+            $history_records[] = $row;
+        }
+    }
 
     // Fetch products para sa Delivery Dropdown selection
-    $prod_query = "SELECT production_id, product_name, Stock_number, quantity FROM production";
+    $prod_query = "SELECT production_id, product_name, Stock_number, quantity, product_status FROM production";
     $prod_result = mysqli_query($conn, $prod_query);
     if ($prod_result) {
         $production_items = mysqli_fetch_all($prod_result, MYSQLI_ASSOC);
@@ -216,37 +239,53 @@ elseif ($module === 'factory') {
         $stmt->close();
     }
 
-    // --- UPDATE STATUS TO DELIVERED (For Driver) ---
+    // --- UPDATE STATUS TO DONE ---
     if (isset($_POST['mark_done'])) {
         $production_id = $_POST['idno'] ?? '';
 
         if (!empty($production_id)) {
-            // SQL query para palitan ang status ng production record
             $stmt = $conn->prepare("UPDATE production SET product_status = 'product done' WHERE production_id = ?");
             $stmt->bind_param("s", $production_id);
             $stmt->execute();
             $stmt->close();
         }
         
-        // Automatic redirect pabalik sa page na pinagmulan
-        $redirect_page = ($_SESSION['role'] === 'pro') ? 'production.php' : 'production.php';
+        $redirect_page = ($_SESSION['role'] === 'pro') ? 'production.php' : 'factory_main.php';
         header("Location: $redirect_page");
         exit();
     }
 
-    // --- VIEW / FETCH RECORDS (TAMA NA ANG SQL QUERY DITO) ---
-    $sql = "SELECT production_id, product_name, target_pcs, Stock_number, quantity, due_date, product_status 
-            FROM production 
-            ORDER BY production_id DESC";
-            
-    $result = mysqli_query($conn, $sql);
+    // --- VIEW / FETCH RECORDS (FACTORY: HIWALAY NA ANG PENDING AT HISTORY) ---
 
-    if ($result && mysqli_num_rows($result) > 0) {
-        while ($row = mysqli_fetch_assoc($result)) {
-            $records[] = $row;
+    // 1. Fetch PENDING Factory / Production Tasks (Hindi pa 'product done')
+    $sql_pending = "SELECT production_id, product_name, target_pcs, Stock_number, quantity, due_date, product_status 
+                    FROM production 
+                    WHERE product_status != 'product done' OR product_status IS NULL
+                    GROUP BY production_id
+                    ORDER BY production_id DESC";
+
+    $res_pending = mysqli_query($conn, $sql_pending);
+    if ($res_pending && mysqli_num_rows($res_pending) > 0) {
+        while ($row = mysqli_fetch_assoc($res_pending)) {
+            $pending_records[] = $row;
         }
     }
-    $count = count($records);
+
+    // 2. Fetch DONE Factory / Production Tasks (History / 'product done')
+    $sql_history = "SELECT production_id, product_name, target_pcs, Stock_number, quantity, due_date, product_status 
+                    FROM production 
+                    WHERE product_status = 'product done'
+                    GROUP BY production_id 
+                    ORDER BY production_id DESC";
+
+    $res_history = mysqli_query($conn, $sql_history);
+    if ($res_history && mysqli_num_rows($res_history) > 0) {
+        while ($row = mysqli_fetch_assoc($res_history)) {
+            $history_records[] = $row;
+        }
+    }
+
+    $count = count($pending_records);
 }
 
 // -----------------------------------------------------

@@ -11,6 +11,7 @@ include("config/registerBE.php");
     <title>Register</title>
 </head>
 <body>
+    <button><a href="HR.php">Back</a></button>
     <div class="form">
         <form action="" method="post" class="p-4 border rounded bg-light style-form-container">
             <h2>Register</h2>

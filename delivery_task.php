@@ -46,7 +46,7 @@ $count = $count ?? count($records);
         <option value="">Product</option>
         <?php foreach ($production_items as $item): ?>
             <option value="<?= htmlspecialchars($item['production_id']); ?>">
-                <?= htmlspecialchars($item['product_name'] . " (stock: " . $item['Stock_number'] . " | Qty: " . $item['quantity'] . ")"); ?>
+                <?= htmlspecialchars($item['product_name'] . " (stock: " . $item['Stock_number'] . " | Qty: " . $item['quantity'] . " | Status: " . $item['product_status'] . ")"); ?>
             </option>
         <?php endforeach; ?>
     </select>
