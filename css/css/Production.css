@@ -1,0 +1,729 @@
+/* =========================================================
+   TASKTRACK - PRODUCTION MANAGEMENT
+   CSS FOR YOUR EXISTING Production.php
+   ========================================================= */
+
+:root {
+    --navy: #3d5658;
+    --sage: #8fac8a;
+    --sage-dark: #7a9975;
+    --sage-light: #c3d8bd;
+
+    --panel-bg: #f2f2f0;
+    --gray-btn: #e6e6e0;
+
+    --sidebar: #2c4742;
+    --sidebar-btn: #e6e6e0;
+    --sidebar-btn-text: #2c4742;
+    --sidebar-active: #8fac8a;
+
+    --border: #d9d9d3;
+    --text-dark: #2b2b28;
+    --text-mid: #5a5a54;
+
+    --green-status: #b7dba0;
+    --green-status-text: #245c1a;
+
+    --red-status: #e8b0b0;
+    --red-status-text: #6b1f1f;
+
+    --pending-bg: #f0e2b0;
+    --pending-text: #6b5b12;
+
+    --success: #7ed957;
+    --danger: #e8483a;
+}
+
+
+/* ==================== RESET ==================== */
+
+* {
+    box-sizing: border-box;
+}
+
+html {
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+
+    min-height: 100vh;
+
+    font-family: "Segoe UI", system-ui, Arial, sans-serif;
+
+    background: #ffffff;
+    color: var(--text-dark);
+}
+
+
+/* ==================== APP ==================== */
+
+.app {
+    width: 100%;
+    min-height: 100vh;
+
+    display: flex;
+}
+
+
+/* ==================== SIDEBAR ==================== */
+
+.sidebar {
+    width: 280px;
+    min-height: 100vh;
+
+    flex-shrink: 0;
+
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+
+    background: var(--sidebar);
+
+    padding-bottom: 24px;
+}
+
+
+/* ==================== SIDEBAR HEADER ==================== */
+
+.sidebar-header {
+    width: 100%;
+    height: 100px;
+
+    padding: 20px;
+
+    display: flex;
+    align-items: center;
+
+    gap: 14px;
+}
+
+
+.avatar {
+    width: 48px;
+    height: 48px;
+
+    flex-shrink: 0;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 50%;
+
+    background: #3a6ea5;
+
+    font-size: 24px;
+}
+
+
+.titles {
+    min-width: 0;
+}
+
+
+.titles .name {
+    color: #ffffff;
+
+    font-size: 17px;
+    font-weight: 800;
+
+    letter-spacing: 1px;
+}
+
+
+.titles .sub {
+    margin-top: 3px;
+
+    color: #dce5df;
+
+    font-size: 11px;
+    font-weight: 700;
+
+    line-height: 1.25;
+
+    letter-spacing: 0.6px;
+}
+
+
+/* ==================== NAVIGATION ==================== */
+
+.sidebar-nav {
+    width: 100%;
+
+    display: flex;
+    flex-direction: column;
+
+    gap: 12px;
+
+    padding: 10px 20px;
+}
+
+
+.side-btn {
+    width: 100%;
+    min-height: 44px;
+
+    border: none;
+    border-radius: 7px;
+
+    padding: 12px 16px;
+
+    background: var(--sidebar-btn);
+    color: var(--sidebar-btn-text);
+
+    font-family: inherit;
+
+    font-size: 13px;
+    font-weight: 800;
+
+    text-align: left;
+
+    cursor: pointer;
+
+    transition: all 0.18s ease;
+}
+
+
+.side-btn:hover {
+    background: #f1f1ec;
+
+    transform: translateX(2px);
+}
+
+
+.side-btn.active {
+    background: var(--sidebar-active);
+    color: #ffffff;
+}
+
+
+.side-btn.active:hover {
+    background: var(--sage-dark);
+}
+
+
+/* ==================== LOGOUT ==================== */
+
+.sidebar > div:last-child {
+    padding: 0 20px;
+}
+
+
+.logout-btn {
+    width: 100%;
+    min-height: 44px;
+
+    border: none;
+    border-radius: 7px;
+
+    background: var(--sidebar-btn);
+    color: var(--sidebar-btn-text);
+
+    font-family: inherit;
+
+    font-size: 13px;
+    font-weight: 800;
+
+    cursor: pointer;
+
+    transition: all 0.18s ease;
+}
+
+
+.logout-btn:hover {
+    background: #f1f1ec;
+}
+
+
+/* ==================== MAIN ==================== */
+
+.main {
+    flex: 1;
+
+    min-width: 0;
+    min-height: 100vh;
+
+    background: #ffffff;
+}
+
+
+/* ==================== TOPBAR ==================== */
+
+.topbar {
+    width: 100%;
+    min-height: 100px;
+
+    padding: 24px 32px;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    background: var(--panel-bg);
+
+    border-bottom: 1px solid var(--border);
+}
+
+
+.topbar h1 {
+    margin: 0 0 7px 0;
+
+    color: var(--text-dark);
+
+    font-size: 24px;
+    font-weight: 750;
+
+    line-height: 1.2;
+}
+
+
+/* ==================== PRODUCTION USER ==================== */
+
+.production-user {
+    font-size: 13px;
+
+    font-weight: 600;
+
+    color: var(--text-mid);
+}
+
+
+.production-user strong {
+    color: var(--text-dark);
+
+    font-weight: 700;
+}
+
+
+/* ==================== CONTENT ==================== */
+
+.content {
+    width: 100%;
+
+    padding: 28px 32px 40px;
+}
+
+
+/* ==================== SECTION TITLE ==================== */
+
+.section-title {
+    margin: 0 0 18px 0;
+
+    color: var(--text-dark);
+
+    font-size: 20px;
+    font-weight: 750;
+
+    line-height: 1.25;
+}
+
+
+/* ==================== TABLE WRAPPER ==================== */
+
+.table-wrap {
+    width: 100%;
+
+    overflow: hidden;
+
+    background: #ffffff;
+
+    border: 1px solid var(--border);
+
+    border-radius: 10px 10px 12px 12px;
+}
+
+
+/* ==================== PRODUCTION TABLE ==================== */
+
+.production-table {
+    width: 100%;
+
+    border-collapse: collapse;
+
+    background: #ffffff;
+
+    font-size: 14px;
+}
+
+
+.production-table thead tr {
+    background: var(--sage);
+
+    text-align: left;
+}
+
+
+.production-table th {
+    padding: 16px 20px;
+
+    color: #ffffff;
+
+    font-size: 13px;
+    font-weight: 700;
+
+    letter-spacing: 0.4px;
+
+    line-height: 1.25;
+
+    white-space: nowrap;
+}
+
+
+.production-table td {
+    padding: 16px 20px;
+
+    color: var(--text-dark);
+
+    border-top: 1px solid #eeeeea;
+
+    vertical-align: middle;
+}
+
+
+.production-table tbody tr {
+    background: #ffffff;
+
+    transition: background 0.15s ease;
+}
+
+
+.production-table tbody tr:hover {
+    background: #f7f9f6;
+}
+
+
+/* ==================== ACTION CELL ==================== */
+
+.action-cell {
+    white-space: nowrap;
+}
+
+
+.action-cell form {
+    margin: 0;
+}
+
+
+/* ==================== STATUS ==================== */
+
+.status-pill {
+    display: inline-flex;
+
+    align-items: center;
+    justify-content: center;
+
+    min-height: 26px;
+
+    padding: 5px 14px;
+
+    border-radius: 20px;
+
+    font-size: 12px;
+    font-weight: 700;
+
+    line-height: 1;
+
+    white-space: nowrap;
+}
+
+
+/* In Production */
+
+.status-pending {
+    background: var(--pending-bg);
+
+    color: var(--pending-text);
+}
+
+
+/* Product Done */
+
+.status-delivered {
+    background: var(--green-status);
+
+    color: var(--green-status-text);
+}
+
+
+/* ==================== ACTION BUTTON ==================== */
+
+.action-btn {
+    display: inline-flex;
+
+    align-items: center;
+    justify-content: center;
+
+    min-height: 34px;
+
+    padding: 7px 16px;
+
+    border: none;
+
+    border-radius: 20px;
+
+    background: var(--gray-btn);
+
+    color: var(--text-dark);
+
+    font-family: inherit;
+
+    font-size: 12px;
+    font-weight: 700;
+
+    cursor: pointer;
+
+    transition: all 0.18s ease;
+}
+
+
+.action-btn:hover {
+    background: var(--sage);
+
+    color: #ffffff;
+
+    transform: translateY(-1px);
+}
+
+
+/* ==================== MARK DONE ==================== */
+
+.mark-done-btn {
+    display: inline-flex;
+
+    align-items: center;
+    justify-content: center;
+
+    min-height: 34px;
+
+    padding: 7px 16px;
+
+    border: none;
+
+    border-radius: 20px;
+
+    background: var(--sage);
+
+    color: #ffffff;
+
+    font-family: inherit;
+
+    font-size: 12px;
+    font-weight: 700;
+
+    cursor: pointer;
+
+    transition: all 0.18s ease;
+}
+
+
+.mark-done-btn:hover {
+    background: var(--sage-dark);
+
+    transform: translateY(-1px);
+}
+
+
+/* ==================== COMPLETED ==================== */
+
+.completed-text {
+    display: inline-block;
+
+    color: #888888;
+
+    font-size: 13px;
+
+    font-style: italic;
+}
+
+
+/* ==================== DELETE ==================== */
+
+.remove-btn {
+    display: inline-flex;
+
+    align-items: center;
+    justify-content: center;
+
+    min-height: 34px;
+
+    padding: 7px 16px;
+
+    border: none;
+
+    border-radius: 20px;
+
+    background: var(--red-status);
+
+    color: var(--red-status-text);
+
+    font-family: inherit;
+
+    font-size: 12px;
+    font-weight: 700;
+
+    cursor: pointer;
+
+    transition: all 0.18s ease;
+}
+
+
+.remove-btn:hover {
+    background: var(--danger);
+
+    color: #ffffff;
+
+    transform: translateY(-1px);
+}
+
+
+/* ==================== EMPTY STATE ==================== */
+
+.empty-state {
+    width: 100%;
+
+    padding: 30px 25px;
+
+    background: #ffffff;
+
+    border: 1px solid var(--border);
+
+    border-radius: 10px;
+
+    color: var(--text-mid);
+
+    font-size: 14px;
+
+    text-align: center;
+}
+
+
+/* ==================== SECTION SPACING ==================== */
+
+.production-section-spacer {
+    height: 34px;
+}
+
+
+/* ==================== FORM ==================== */
+
+form {
+    margin: 0;
+}
+
+
+/* ==================== BUTTON RESET ==================== */
+
+button {
+    font-family: inherit;
+}
+
+
+/* ==================== FOCUS ==================== */
+
+button:focus-visible {
+    outline: 2px solid var(--sage-dark);
+
+    outline-offset: 2px;
+}
+
+
+/* ==================== RESPONSIVE ==================== */
+
+@media (max-width: 1100px) {
+
+    .sidebar {
+        width: 230px;
+    }
+
+    .content {
+        padding: 24px 20px 35px;
+    }
+
+    .topbar {
+        padding: 22px 20px;
+    }
+
+    .production-table {
+        min-width: 900px;
+    }
+
+    .table-wrap {
+        overflow-x: auto;
+
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+
+@media (max-width: 760px) {
+
+    .app {
+        display: block;
+    }
+
+    .sidebar {
+        width: 100%;
+
+        min-height: auto;
+
+        padding-bottom: 12px;
+    }
+
+    .sidebar-nav {
+        display: grid;
+
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .sidebar > div:last-child {
+        padding: 10px 20px 0;
+    }
+
+    .main {
+        width: 100%;
+    }
+
+    .topbar {
+        min-height: auto;
+
+        padding: 20px;
+    }
+
+    .topbar h1 {
+        font-size: 20px;
+    }
+
+    .content {
+        padding: 22px 16px 30px;
+    }
+
+    .production-table {
+        min-width: 900px;
+    }
+
+    .table-wrap {
+        overflow-x: auto;
+
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+
+@media (max-width: 480px) {
+
+    .sidebar-nav {
+        grid-template-columns: 1fr;
+    }
+
+    .sidebar-header {
+        padding: 16px 20px;
+    }
+
+    .production-section-spacer {
+        height: 25px;
+    }
+}

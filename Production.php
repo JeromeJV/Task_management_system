@@ -1,10 +1,12 @@
 <?php
+
 session_start();
 
 include('config/connection.php');
 include('config/autoLog.php');
 
 $_REQUEST['module'] = 'factory';
+
 include('config/Supervisor_API.php');
 
 // Tiyaking Production Worker ang naka-login
@@ -15,129 +17,409 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'pro') {
 
 $records = $records ?? [];
 $count   = count($records);
+
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Production Form</title>
+
+    <title>Production Management</title>
+
+    <!-- Gamitin ang existing CSS mo -->
+    <link rel="stylesheet" href="css/Production.css">
 </head>
+
 <body>
-    <div class="user-page">
-        <h2>Welcome to production page!</h2>
-        <p>Production: <span><?= htmlspecialchars($_SESSION['name'] ?? ''); ?></span></p>
-        <a href="logout.php"><button type="button">Logout</button></a>
-    </div>
 
-    <br>
+<div class="app">
 
-    <?php if (!empty($pending_records)): ?>
-        <table border="1" cellpadding="5" cellspacing="0">
-            <thead>
-                <tr>
-                    <th>Production ID</th>
-                    <th>Product Name</th>
-                    <th>Target PCS</th>
-                    <th>Stock Number</th>
-                    <th>Quantity</th>
-                    <th>Due Date</th>
-                    <th>Status</th>
-                    <th>Action</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($pending_records as $row): ?>
-                    <tr>
-                        <td><?= htmlspecialchars($row['production_id']); ?></td>
-                        <td><?= htmlspecialchars($row['product_name'] ?? 'N/A'); ?></td>
-                        <td><?= htmlspecialchars($row['target_pcs']); ?></td>
-                        <td><?= htmlspecialchars($row['Stock_number']); ?></td>
-                        <td><?= htmlspecialchars($row['quantity']); ?></td>
-                        <td><?= htmlspecialchars($row['due_date']); ?></td>
-                        
-                        <!-- Status Column -->
-                        <td>
-                            <?php if (($row['product_status'] ?? '') === 'product done'): ?>
-                                <span style="color: green; background-color: #e6ffe6; padding: 4px 8px; border-radius: 4px; font-weight: bold;">
-                                     Product Done
-                                </span>
-                            <?php else: ?>
-                                <span style="color: orange; background-color: #fff3cd; padding: 4px 8px; border-radius: 4px; font-weight: bold;">
-                                     In Production
-                                </span>
-                            <?php endif; ?>
-                        </td>
+    <!-- ================= SIDEBAR ================= -->
+    <aside class="sidebar">
 
-                        <!-- Action Column -->
-                        <td>
-                            <?php if (($row['product_status'] ?? '') !== 'product done'): ?>
-                                <form action="production.php" method="post">
-                                    <input type="hidden" name="idno" value="<?= htmlspecialchars($row['production_id']); ?>">
-                                    <input type="submit" name="mark_done" value="Mark as Done" onclick="return confirm('Product done?');">
-                                </form>
-                            <?php else: ?>
-                                <span style="color: gray; font-style: italic;">Completed</span>
-                            <?php endif; ?>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
-    <?php else: ?>
-        <p>No records found.</p>
-    <?php endif; ?>
+        <div>
 
-    <br><hr><br>
+            <!-- BRAND -->
+            <div class="sidebar-header">
 
-    <h1>Production History (Completed)</h1>
+                <div class="avatar">🚚</div>
 
-    <?php if (!empty($history_records)): ?>
-        <table border="1" cellpadding="5" cellspacing="0">
-            <thead>
-                <tr>
-                    <th>Product ID</th>
-                    <th>Product Name</th>
-                    <th>Target PCS</th>
-                    <th>Stock Number</th>
-                    <th>Quantity</th>
-                    <th>Due Date</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                </tr>   
-            </thead>
-            <tbody>
-                <?php foreach ($history_records as $row): ?>
-                    <tr>
-                        <td><?= htmlspecialchars($row['production_id'] ?? ''); ?></td>
-                        <td><?= htmlspecialchars($row['product_name'] ?? ''); ?></td>
-                        <td><?= htmlspecialchars($row['target_pcs'] ?? ''); ?></td>
-                        <td><?= htmlspecialchars($row['Stock_number'] ?? ''); ?></td>
-                        <td><?= htmlspecialchars($row['quantity'] ?? ''); ?></td>
-                        <td><?= htmlspecialchars($row['due_date'] ?? ''); ?></td>
-                        
-                        <!-- Status Column -->
-                        <td>
-                            <span style="color: green; font-weight: bold; background-color: #e6ffe6; padding: 4px 8px; border-radius: 4px;">
-                                Product Done
-                            </span>
-                        </td>
+                <div class="titles">
+                    <div class="name">TASKTRACK</div>
+                    <div class="sub">LOGISTIC<br>MANAGEMENT</div>
+                </div>
 
-                        <!-- Actions Column -->
-                        <td>
-                            <form action="factory_task.php" method="post">
-                                <input type="hidden" name="idno" value="<?= htmlspecialchars($row['production_id'] ?? ''); ?>">
-                                <input type="submit" name="del" value="Delete" onclick="return confirm('Are you sure you want to delete this record?');">
-                            </form>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
-    <?php else: ?>
-        <p>No completed production records found.</p>
-    <?php endif; ?>
+            </div>
+
+
+            <!-- NAVIGATION -->
+            <nav class="sidebar-nav">
+
+                <button
+                    type="button"
+                    class="side-btn"
+                    onclick="window.location.href='dashboard.php'">
+                    DASHBOARD
+                </button>
+
+                <button
+                    type="button"
+                    class="side-btn"
+                    onclick="window.location.href='task.php'">
+                    TASK
+                </button>
+
+                <button
+                    type="button"
+                    class="side-btn"
+                    onclick="window.location.href='employee.php'">
+                    EMPLOYEE
+                </button>
+
+                <button
+                    type="button"
+                    class="side-btn active">
+                    PRODUCTION
+                </button>
+
+                <button
+                    type="button"
+                    class="side-btn"
+                    onclick="window.location.href='logistic.php'">
+                    LOGISTIC
+                </button>
+
+            </nav>
+
+        </div>
+
+
+        <!-- LOGOUT -->
+        <div>
+            <a href="logout.php" style="text-decoration:none;">
+                <button type="button" class="logout-btn">
+                    LOGOUT
+                </button>
+            </a>
+        </div>
+
+    </aside>
+
+
+    <!-- ================= MAIN ================= -->
+    <main class="main">
+
+        <!-- TOPBAR -->
+        <header class="topbar">
+
+            <h1>Production Management</h1>
+
+            <div class="production-user">
+                Production:
+                <strong>
+                    <?= htmlspecialchars($_SESSION['name'] ?? ''); ?>
+                </strong>
+            </div>
+
+        </header>
+
+
+        <!-- CONTENT -->
+        <section class="content">
+
+
+            <!-- ================= PENDING ================= -->
+
+            <h2 class="section-title">
+                Pending Production Tasks
+            </h2>
+
+
+            <?php if (!empty($pending_records)): ?>
+
+                <div class="table-wrap">
+
+                    <table class="production-table">
+
+                        <thead>
+                            <tr>
+                                <th>Production<br>ID</th>
+                                <th>Product<br>Name</th>
+                                <th>Target<br>PCS</th>
+                                <th>Stock<br>Number</th>
+                                <th>Quantity</th>
+                                <th>Due<br>Date</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+
+
+                        <tbody>
+
+                        <?php foreach ($pending_records as $row): ?>
+
+                            <tr>
+
+                                <td>
+                                    <?= htmlspecialchars(
+                                        $row['production_id'] ?? ''
+                                    ); ?>
+                                </td>
+
+                                <td>
+                                    <?= htmlspecialchars(
+                                        $row['product_name'] ?? 'N/A'
+                                    ); ?>
+                                </td>
+
+                                <td>
+                                    <?= htmlspecialchars(
+                                        $row['target_pcs'] ?? ''
+                                    ); ?>
+                                </td>
+
+                                <td>
+                                    <?= htmlspecialchars(
+                                        $row['Stock_number'] ?? ''
+                                    ); ?>
+                                </td>
+
+                                <td>
+                                    <?= htmlspecialchars(
+                                        $row['quantity'] ?? ''
+                                    ); ?>
+                                </td>
+
+                                <td>
+                                    <?= htmlspecialchars(
+                                        $row['due_date'] ?? ''
+                                    ); ?>
+                                </td>
+
+
+                                <!-- STATUS -->
+                                <td>
+
+                                    <?php if (
+                                        ($row['product_status'] ?? '') === 'product done'
+                                    ): ?>
+
+                                        <span class="status-pill status-delivered">
+                                            Product Done
+                                        </span>
+
+                                    <?php else: ?>
+
+                                        <span class="status-pill status-pending">
+                                            In Production
+                                        </span>
+
+                                    <?php endif; ?>
+
+                                </td>
+
+
+                                <!-- ACTION -->
+                                <td class="action-cell">
+
+                                    <?php if (
+                                        ($row['product_status'] ?? '') !== 'product done'
+                                    ): ?>
+
+                                        <form
+                                            action="production.php"
+                                            method="post"
+                                            style="display:inline;"
+                                        >
+
+                                            <input
+                                                type="hidden"
+                                                name="idno"
+                                                value="<?= htmlspecialchars(
+                                                    $row['production_id'] ?? ''
+                                                ); ?>"
+                                            >
+
+                                            <button
+                                                type="submit"
+                                                name="mark_done"
+                                                class="action-btn mark-done-btn"
+                                                onclick="return confirm('Product done?');"
+                                            >
+                                                Mark as Done
+                                            </button>
+
+                                        </form>
+
+                                    <?php else: ?>
+
+                                        <span class="completed-text">
+                                            Completed
+                                        </span>
+
+                                    <?php endif; ?>
+
+                                </td>
+
+                            </tr>
+
+                        <?php endforeach; ?>
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+            <?php else: ?>
+
+                <div class="empty-state">
+                    No pending production records found.
+                </div>
+
+            <?php endif; ?>
+
+
+            <!-- ================= HISTORY ================= -->
+
+            <div class="production-section-spacer"></div>
+
+            <h2 class="section-title">
+                Production History (Completed)
+            </h2>
+
+
+            <?php if (!empty($history_records)): ?>
+
+                <div class="table-wrap">
+
+                    <table class="production-table">
+
+                        <thead>
+                            <tr>
+                                <th>Production<br>ID</th>
+                                <th>Product<br>Name</th>
+                                <th>Target<br>PCS</th>
+                                <th>Stock<br>Number</th>
+                                <th>Quantity</th>
+                                <th>Due<br>Date</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+
+
+                        <tbody>
+
+                        <?php foreach ($history_records as $row): ?>
+
+                            <tr>
+
+                                <td>
+                                    <?= htmlspecialchars(
+                                        $row['production_id'] ?? ''
+                                    ); ?>
+                                </td>
+
+                                <td>
+                                    <?= htmlspecialchars(
+                                        $row['product_name'] ?? ''
+                                    ); ?>
+                                </td>
+
+                                <td>
+                                    <?= htmlspecialchars(
+                                        $row['target_pcs'] ?? ''
+                                    ); ?>
+                                </td>
+
+                                <td>
+                                    <?= htmlspecialchars(
+                                        $row['Stock_number'] ?? ''
+                                    ); ?>
+                                </td>
+
+                                <td>
+                                    <?= htmlspecialchars(
+                                        $row['quantity'] ?? ''
+                                    ); ?>
+                                </td>
+
+                                <td>
+                                    <?= htmlspecialchars(
+                                        $row['due_date'] ?? ''
+                                    ); ?>
+                                </td>
+
+
+                                <!-- STATUS -->
+                                <td>
+
+                                    <span class="status-pill status-delivered">
+                                        Product Done
+                                    </span>
+
+                                </td>
+
+
+                                <!-- DELETE -->
+                                <td class="action-cell">
+
+                                    <form
+                                        action="factory_task.php"
+                                        method="post"
+                                        style="display:inline;"
+                                    >
+
+                                        <input
+                                            type="hidden"
+                                            name="idno"
+                                            value="<?= htmlspecialchars(
+                                                $row['production_id'] ?? ''
+                                            ); ?>"
+                                        >
+
+                                        <button
+                                            type="submit"
+                                            name="del"
+                                            class="remove-btn"
+                                            onclick="return confirm('Are you sure you want to delete this record?');"
+                                        >
+                                            Delete
+                                        </button>
+
+                                    </form>
+
+                                </td>
+
+                            </tr>
+
+                        <?php endforeach; ?>
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+            <?php else: ?>
+
+                <div class="empty-state">
+                    No completed production records found.
+                </div>
+
+            <?php endif; ?>
+
+
+        </section>
+
+    </main>
+
+</div>
 
 </body>
 </html>

@@ -126,7 +126,7 @@ $count = $count ?? count($records);
     <!-- LOGISTIC -->
     <div id="page-logistic" class="page" style="display:none;">
       <div class="assign"> <button><a href="delivery_task.php">Add Delivery Record</a></button></div>
-      <div class="assign"> <button><a href="supervisor.php">BACK</a></button></div>
+      <div class="assign"> <button><a href="factory_main.php">BACK</a></button></div>
       <div class="stat-row">
         <div class="stat-card green">
           <div class="label" style="font-size:15px;opacity:0.9;">Total delivery</div>
