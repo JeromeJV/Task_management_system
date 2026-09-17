@@ -62,11 +62,14 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'super') {
                 <div class="titles">
 
                     <div class="name">
-                        TASKTRACK
+                        <div class="sub">Supervisor : <span><?= htmlspecialchars($_SESSION['name'] ?? ''); ?></span></div>
+        <div class="sub"><span><?php echo isset($_SESSION['email']) ? $_SESSION['email'] : ''; ?></span></div>
+                        
                     </div>
 
                     <div class="sub">
-                        LOGISTIC MANAGEMENT
+                    
+                        
                     </div>
 
                 </div>

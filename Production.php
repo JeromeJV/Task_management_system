@@ -29,8 +29,7 @@ $count   = count($records);
 
     <title>Production Management</title>
 
-    <!-- Gamitin ang existing CSS mo -->
-    <link rel="stylesheet" href="css/Production.css">
+
 </head>
 
 <body>
