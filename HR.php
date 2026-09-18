@@ -21,10 +21,13 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'HR') {
     <div class="user-page">
         <h2>Welcome to human resource page!</h2>
         <p>Human Resource : <span><?php echo $_SESSION['name']; ?></span></p>
-         
+        
+        <button><a href="dashboard_form.php">DASHBOARD</a></button> <!--NAKA LAGAY DTO UNG MGA REGULAR EMPLOYEE-->
+        <button><a href="register.php">REGISTER USER</a></button>
+        <button><a href="attendance_form.php">ATTENDANCE</a></button>
+        <button><a href="appli_form.php">APPLICANT</a></button>
+        <button><a href="interview_sched.php">INTERVIEW SCHEDULE</a></button>
         <a href="logout.php"><button class="">Logout</button></a>
-        <button><a href="register.php">Register User</a></button>
-        <button><a href="appli_form.php">Applicant</a></button>
     </div>
 </body>
 </html>

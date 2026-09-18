@@ -52,6 +52,7 @@ $count = $count ?? count($records);
         <div class="sub"><span><?php echo isset($_SESSION['email']) ? $_SESSION['email'] : ''; ?></span></div>
       </div>
     </div>
+    
     <div class="sidebar-nav">
       <button id="navDashboard" class="side-btn active" onclick="showPage('dashboard')">DASHBOARD</button>
       <button id="navTask" class="side-btn" onclick="showPage('task')">TASK</button>

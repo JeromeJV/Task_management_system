@@ -1,0 +1,425 @@
+/* =========================================================
+   TASKTRACK - SYSTEM GLOBAL STYLESHEET
+   ========================================================= */
+
+:root {
+    --navy: #3d5658;
+    --sidebar: #3d5658;
+
+    --sage: #8fac8a;
+    --sage-dark: #789b75;
+    --sage-light: #c3d8bd;
+
+    --page-bg: #ffffff;
+    --header-bg: #f2f2f0;
+
+    --sidebar-btn: #e8e8e3;
+    --sidebar-text: #172431;
+
+    --text-dark: #111820;
+    --text-mid: #5a5a54;
+
+    --border: #dddddd;
+    --row-border: #eeeeee;
+
+    --danger: #ef4b43;
+    --danger-dark: #d93d36;
+
+    --pending-bg: #f0dfaa;
+    --pending-text: #725c10;
+
+    --done-bg: #b7dfa5;
+    --done-text: #245c1a;
+}
+
+/* RESET - INAYOS PARA WALANG LINYA SA TAAS */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    border: none;
+    outline: none;
+}
+
+html {
+    width: 100%;
+    min-height: 100%;
+    scroll-behavior: smooth;
+}
+
+body {
+    width: 100%;
+    min-height: 100vh;
+    font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+    font-size: 14px;
+    color: var(--text-dark);
+    background: #ffffff;
+    overflow-x: hidden;
+}
+
+a {
+    text-decoration: none;
+    color: inherit;
+}
+
+button, input, select, textarea {
+    font-family: inherit;
+}
+
+/* APP CONTAINER */
+.app {
+    width: 100%;
+    min-height: 100vh;
+    display: flex;
+}
+
+/* SIDEBAR */
+.sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 284px;
+    height: 100vh;
+    background: var(--sidebar);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+    z-index: 1000;
+    padding: 0 0 24px 0;
+    border: none;
+}
+
+.sidebar-header {
+    width: 100%;
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 24px 24px 22px 24px;
+    min-height: 105px;
+}
+
+.avatar {
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    border-radius: 50%;
+    background: #3b78b7;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 23px;
+    flex-shrink: 0;
+    color: #ffffff;
+}
+
+.titles {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+}
+
+.titles .name {
+    color: #ffffff;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+}
+
+.titles .sub {
+    color: #e1e7e7;
+    font-size: 13px;
+    line-height: 1.35;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px;
+}
+
+/* SIDEBAR BUTTONS */
+.sidebar-nav {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px 20px 0 20px;
+}
+
+.side-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 49px;
+    padding: 13px 18px;
+    border-radius: 7px;
+    background: var(--sidebar-btn);
+    color: var(--sidebar-text);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-align: center;
+    cursor: pointer;
+    transition: background 0.18s ease, color 0.18s ease;
+}
+
+.side-btn:hover {
+    background: #ffffff;
+    color: #172431;
+}
+
+/* PRODUCTION PAGE ACTIVE (BERDE) */
+body.production-page .sidebar-nav .side-btn[href*="production"],
+body.production-page .sidebar-nav .side-btn[href*="factory"] {
+    background: var(--sage) !important;
+    color: #ffffff !important;
+}
+
+/* LOGISTIC PAGE ACTIVE (BERDE - AKTIBO KAPAG NA-CLICK) */
+body.logistic-page .sidebar-nav .side-btn[href*="delivery"],
+body.logistic-page .sidebar-nav .side-btn[href*="logistic"],
+body.logistic-page .sidebar-nav .side-btn.active,
+.sidebar-nav .side-btn.active {
+    background: var(--sage) !important;
+    color: #ffffff !important;
+}
+
+/* MAIN CONTENT AREA */
+.main {
+    width: calc(100% - 284px);
+    min-height: 100vh;
+    margin-left: 284px;
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+    min-width: 0;
+}
+
+/* TOPBAR - INAYOS PARA WALANG LINYA SA TAAS */
+.topbar {
+    width: 100%;
+
+    height: 104px;
+
+    padding: 0 32px;
+
+    background: var(--header-bg);
+
+    border-bottom: 1px solid #d8d8d8;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    flex-shrink: 0;
+}
+
+.topbar h1 {
+    margin: 0;
+    color: #111820;
+    font-size: 27px;
+    font-weight: 1000;
+    letter-spacing: 0.8px;
+}
+
+.topbar-actions, .assign {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 30px;
+}
+
+.btn-header, .assign button {
+    height: 40px;
+    padding: 0 21px;
+    border-radius: 6px;
+    background: var(--sage);
+    color: #ffffff !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.18s ease;
+}
+
+.btn-header:hover, .assign button:hover {
+    background: var(--sage-dark);
+}
+
+.assign button a {
+    color: #ffffff;
+}
+
+/* CONTENT AREA */
+.content {
+    width: 100%;
+    flex: 1;
+    padding: 31px 32px 40px 32px;
+    background: #ffffff;
+    overflow-x: auto;
+}
+
+h2.section-title, .section-title {
+    margin: 0 0 21px 0;
+    color: #111820;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+}
+
+/* TABLE STYLES */
+.table-wrap {
+    width: 100%;
+    background: #ffffff;
+    border: 1px solid #d9d9d9;
+    border-radius: 9px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    margin-bottom: 25px;
+}
+
+.table-wrap table {
+    width: 100%;
+    min-width: 990px;
+    border-collapse: collapse;
+    background: #ffffff;
+    font-size: 14px;
+}
+
+/* TABLE HEADER */
+.table-wrap thead tr {
+    background: var(--sage);
+}
+
+.table-wrap th {
+    height: 53px;
+    padding: 15px 18px;
+    background: var(--sage);
+    color: #ffffff;
+    text-align: left;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+}
+
+/* TABLE BODY */
+.table-wrap tbody tr {
+    background: #ffffff;
+    transition: background 0.15s ease;
+}
+
+.table-wrap tbody tr:hover {
+    background: #f8faf7;
+}
+
+.table-wrap td {
+    height: 74px;
+    padding: 15px 18px;
+    background: #ffffff;
+    color: #172431;
+    font-size: 14px;
+    border-top: 1px solid var(--row-border);
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+/* STATUS BADGES */
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+    padding: 5px 15px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.status-pending {
+    background: var(--pending-bg) !important;
+    color: var(--pending-text) !important;
+}
+
+.status-delivered, .status-done {
+    background: var(--done-bg) !important;
+    color: var(--done-text) !important;
+}
+
+/* ACTION BUTTONS */
+.action-cell {
+    white-space: nowrap;
+}
+
+.action-cell form, .action-cell {
+    margin: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.edit-btn {
+    min-height: 34px;
+    padding: 7px 17px;
+    border-radius: 20px;
+    background: #e6e6e6;
+    color: #111820;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease;
+}
+
+.edit-btn:hover {
+    background: #fffdfd;
+}
+
+.remove-btn {
+    min-height: 34px;
+    padding: 7px 17px;
+    border-radius: 20px;
+    background: var(--danger);
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease;
+}
+
+.remove-btn:hover {
+    background: var(--danger-dark);
+}
+
+/* SCROLLBARS & RESPONSIVE */
+.table-wrap::-webkit-scrollbar { height: 9px; }
+.table-wrap::-webkit-scrollbar-track { background: #eeeeee; border-radius: 10px; }
+.table-wrap::-webkit-scrollbar-thumb { background: #999999; border-radius: 10px; }
+
+.sidebar::-webkit-scrollbar { width: 7px; }
+.sidebar::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.05); }
+.sidebar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.25); border-radius: 10px; }
+
+@media (max-width: 1024px) {
+    .sidebar { width: 250px; }
+    .main { width: calc(100% - 250px); margin-left: 250px; }
+    .content { padding: 25px 22px 35px 22px; }
+    .topbar { padding: 0 22px; }
+}
+
+@media (max-width: 768px) {
+    .sidebar { width: 245px; transform: translateX(-100%); transition: transform 0.25s ease; }
+    .sidebar.open { transform: translateX(0); }
+    .main { width: 100%; margin-left: 0; }
+    .topbar { height: 70px; padding: 0 15px; }
+}

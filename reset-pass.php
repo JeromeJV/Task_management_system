@@ -1,7 +1,6 @@
 <?php
 include 'config/connection.php';
 include 'config/reset-password.php';
-include 'config/PHPMailer';
 
 
 ?>
