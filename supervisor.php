@@ -71,7 +71,6 @@ $count = $count ?? count($records);
 
     <!-- DASHBOARD -->
     <div id="page-dashboard" class="page active">
-      <h2 class="section-title">MONTH OF APRIL</h2>
       <div class="stat-row">
         <div class="stat-card"><div class="num" id="statCompleted">0</div><div class="label">COMPLETED</div></div>
         <div class="stat-card"><div class="num" id="statPending">0</div><div class="label">PENDING</div></div>
@@ -80,22 +79,13 @@ $count = $count ?? count($records);
       <div class="dash-lower">
         <div class="chart-panel">
           <h3>DEPARTMENT PROGRESS</h3>
-          <!-- Canvas Container para sa Chart.js -->
-          <div style="position: relative; height: 260px; width: 100%;">
-             <canvas id="myChart"></canvas>
-          </div>
-        </div>
 
-        <div class="recent-panel">
-          <h3>RECENT TASK</h3>
-          <div class="task-item">
-            <div class="who">RALA, IRISH MARIE</div>
-            <div class="what">Write blog/article about product/service</div>
+          <div style="position: relative; height: 300px; width: 100%;">
+            <canvas id="myChart"></canvas>
           </div>
-          <div class="task-item">
-            <div class="who">RALA, IRISH MARIE</div>
-            <div class="what">Launch Facebook & Instagram ad campaign</div>
-          </div>
+          
+
+          <script src="js/supervisor.js"></script>
         </div>
       </div>
     </div>

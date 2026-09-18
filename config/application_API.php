@@ -330,12 +330,16 @@ if (isset($_POST['save_interview'])) {
 
 $selected_status = isset($_GET['interview_status']) ? $_GET['interview_status'] : 'all';
 
-// Kunin LALONG-LALO NA ang mga applicant na WALANG interview schedule pa
-$sql = "SELECT * FROM applicant WHERE (interview_date IS NULL OR interview_date = '0000-00-00 00:00:00' OR interview_date = '')";
-
-if ($selected_status !== 'all') {
+// Paghiwalayin ang filter base sa napiling dropdown status
+if ($selected_status === 'all') {
+    // Ipakita ang lahat ng WALA PANG interview schedule
+    $sql = "SELECT * FROM applicant 
+            WHERE (interview_date IS NULL OR interview_date = '0000-00-00 00:00:00' OR interview_date = '')";
+} else {
+    // Kapag may piniling partikular na stage sa filter dropdown
     $status_clean = mysqli_real_escape_string($conn, $selected_status);
-    $sql .= " AND LOWER(REPLACE(interview_type, '_', ' ')) = LOWER(REPLACE('$status_clean', '_', ' '))";
+    $sql = "SELECT * FROM applicant 
+            WHERE LOWER(REPLACE(interview_type, '_', ' ')) = LOWER(REPLACE('$status_clean', '_', ' '))";
 }
 
 $sql .= " ORDER BY applicant_id ASC";
