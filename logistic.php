@@ -4,6 +4,7 @@ session_start();
 
 include('config/connection.php');
 include('config/autoLog.php');
+$_REQUEST['module'] = 'delivery';
 include('config/Supervisor_API.php');
 
 

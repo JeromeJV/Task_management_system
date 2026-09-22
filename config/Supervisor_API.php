@@ -1,10 +1,23 @@
 <?php
+include('config/connection.php');
 // -----------------------------------------------------
 // 1. Connection & Initialization
 // -----------------------------------------------------
-include('config/connection.php');
 
-$module = $_REQUEST['module'] ?? 'delivery'; 
+$module = $_REQUEST['module'] ?? 'delivery';
+
+// Authorization Check
+if (!isset($_SESSION['email'])) {
+    header("Location: index.php");
+    exit();
+}
+
+$allowed_roles = ($module === 'factory') ? ['super', 'pro'] : ['super', 'log'];
+if (!in_array($_SESSION['role'], $allowed_roles, true)) {
+    header("Location: index.php");
+    exit();
+}
+
 $action = $_POST['action'] ?? '';
 
 $message          = "";
@@ -13,26 +26,40 @@ $delete_message   = "";
 $errors           = [];
 $view_data        = null;
 
-// Hinihiwalay na mga array para sa Delivery at Factory Modules
+// Arrays para sa data handling
 $pending_records  = []; 
 $history_records  = []; 
-
-// Para sa Production Items / Dropdown selection
 $records          = []; 
 $production_items = []; 
+
+// Trusted list ng products mula sa ENUM schema
+$allowed_products = [
+    "Ginga Turmeric Brew",
+    "Ginga Turmeric w/ Guyabano",
+    "Ginga Turmeric w/ Lemon",
+    "Ginga Ginger - Regural Pouch",
+    "Ginga Ginger Brew with Turmeric And Lemon",
+    "Ginga Ginger - Strong",
+    "Ginga Ginger - Regural",
+    "Ginga Ginger Pure Tea",
+    "Ginga Turmeric Pure Tea",
+    "Ginga Mangosteen Pure Tea",
+    "Ginga Guyabano Pure Tea",
+    "Ginga Butterfly Pea Tea",
+    "Herbal Green Tea"
+];
 
 // -----------------------------------------------------
 // 2. Module: DELIVERY
 // -----------------------------------------------------
 if ($module === 'delivery') {
 
-    // --- INSERT ---
+    // --- INSERT DELIVERY ---
     if (isset($_POST['submit']) && $action === 'insert') {
         $production_id = $_POST['production_id'] ?? '';
         $route         = trim($_POST['route'] ?? '');
         $delivery_date = trim($_POST['delivery_date'] ?? '');
 
-        // Validation
         if (empty($production_id)) {
             $errors['production_id'] = "Please select a product.";
         }
@@ -44,7 +71,6 @@ if ($module === 'delivery') {
         }
 
         if (empty($errors)) {
-            // Fetch production item specs
             $get_prod = $conn->prepare("SELECT Stock_number, quantity FROM production WHERE production_id = ?");
             $get_prod->bind_param("s", $production_id);
             $get_prod->execute();
@@ -69,7 +95,7 @@ if ($module === 'delivery') {
         }
     }
 
-    // --- EDIT & DELETE ---
+    // --- EDIT & DELETE DELIVERY ---
     $passid = $_POST['idno'] ?? null;
 
     if (isset($_POST['del']) && $passid) {
@@ -88,20 +114,23 @@ if ($module === 'delivery') {
         $stmt->close();
     }
 
-    // --- UPDATE ---
+    // --- UPDATE DELIVERY ---
     if (isset($_POST['submit']) && $action === 'update') {
+        $delivery_id   = $_POST['delivery_id'] ?? '';
         $route         = $_POST['route'] ?? '';
         $pieces        = $_POST['pieces'] ?? '';
         $stock         = $_POST['stock'] ?? '';
         $delivery_date = $_POST['delivery_date'] ?? '';
 
-        $stmt = $conn->prepare("UPDATE delivery SET pieces = ?, stock = ?, delivery_date = ? WHERE route = ?");
-        $stmt->bind_param("ssss", $pieces, $stock, $delivery_date, $route);
+        if (!empty($delivery_id)) {
+            $stmt = $conn->prepare("UPDATE delivery SET route = ?, pieces = ?, stock = ?, delivery_date = ? WHERE delivery_id = ?");
+            $stmt->bind_param("sssss", $route, $pieces, $stock, $delivery_date, $delivery_id);
 
-        if ($stmt->execute()) {
-            $status_message = "<br>Update Successful<br><br><a href='delivery_main.php'><input type='button' value='View Records'></a>";
+            if ($stmt->execute()) {
+                $message = "Delivery record updated successfully.";
+            }
+            $stmt->close();
         }
-        $stmt->close();
     }
 
     // --- UPDATE STATUS TO DELIVERED ---
@@ -120,16 +149,14 @@ if ($module === 'delivery') {
         exit();
     }
 
-    // --- VIEW / FETCH RECORDS (DELIVERY) ---
-
-    // 1. Fetch PENDING Deliveries
+    // --- FETCH PENDING DELIVERIES ---
     $sql_pending = "SELECT d.delivery_id, d.route, d.pieces, d.stock, d.delivery_date, d.status, 
-                       p.product_name 
-                FROM delivery d 
-                LEFT JOIN production p ON d.stock = p.Stock_number 
-                WHERE d.status != 'Delivered' OR d.status IS NULL
-                GROUP BY d.delivery_id
-                ORDER BY d.delivery_id DESC";
+                           p.product_name, p.product_status 
+                    FROM delivery d 
+                    LEFT JOIN production p ON d.stock = p.Stock_number 
+                    WHERE d.status != 'Delivered' OR d.status IS NULL
+                    GROUP BY d.delivery_id
+                    ORDER BY d.delivery_id DESC";
 
     $res_pending = mysqli_query($conn, $sql_pending);
     if ($res_pending && mysqli_num_rows($res_pending) > 0) {
@@ -138,14 +165,14 @@ if ($module === 'delivery') {
         }
     }
 
-    // 2. Fetch DELIVERED Deliveries (History)
+    // --- FETCH DELIVERY HISTORY ---
     $sql_history = "SELECT d.delivery_id, d.route, d.pieces, d.stock, d.delivery_date, d.status, 
-                       p.product_name 
-                FROM delivery d 
-                LEFT JOIN production p ON d.stock = p.Stock_number 
-                WHERE d.status = 'Delivered' 
-                GROUP BY d.delivery_id
-                ORDER BY d.delivery_id DESC";
+                           p.product_name, p.product_status 
+                    FROM delivery d 
+                    LEFT JOIN production p ON d.stock = p.Stock_number 
+                    WHERE d.status = 'Delivered' 
+                    GROUP BY d.delivery_id
+                    ORDER BY d.delivery_id DESC";
 
     $res_history = mysqli_query($conn, $sql_history);
     if ($res_history && mysqli_num_rows($res_history) > 0) {
@@ -154,8 +181,13 @@ if ($module === 'delivery') {
         }
     }
 
-    // Fetch products para sa Delivery Dropdown selection
-    $prod_query = "SELECT production_id, product_name, Stock_number, quantity, product_status FROM production";
+    // --- FETCH COMPLETED PRODUCTS ---
+    $prod_query = "SELECT production_id, product_name, Stock_number, quantity, product_status   
+                   FROM production 
+                   WHERE product_status = 'product done' 
+                   AND Stock_number NOT IN (
+                       SELECT stock FROM delivery WHERE stock IS NOT NULL
+                   )";
     $prod_result = mysqli_query($conn, $prod_query);
     if ($prod_result) {
         $production_items = mysqli_fetch_all($prod_result, MYSQLI_ASSOC);
@@ -167,7 +199,7 @@ if ($module === 'delivery') {
 // -----------------------------------------------------
 elseif ($module === 'factory') {
 
-    // --- INSERT ---
+    // --- INSERT PRODUCTION ---
     if (isset($_POST['submit']) && $action === 'insert') {
         $product_name = trim($_POST['product_name'] ?? '');
         $target_pcs   = trim($_POST['target_pcs'] ?? '');
@@ -175,8 +207,8 @@ elseif ($module === 'factory') {
         $Stock_number = trim($_POST['Stock_number'] ?? '');
         $quantity     = trim($_POST['quantity'] ?? '');
 
-        if (!preg_match("/^[a-zA-Z0-9 ]*$/", $product_name)) {
-            $errors['product_name'] = "Please use only letters and spaces for your Product Name.";
+        if (!in_array($product_name, $allowed_products)) {
+            $errors['product_name'] = "Please select a valid product from the list.";
         }
         if (!preg_match("/^[0-9 ]*$/", $target_pcs)) {
             $errors['target_pcs'] = "Please use only numbers for your Target PCS.";
@@ -202,7 +234,7 @@ elseif ($module === 'factory') {
         }
     }
 
-    // --- EDIT & DELETE ---
+    // --- DELETE PRODUCTION ---
     $passid = $_POST['idno'] ?? null;
 
     if (isset($_POST['del']) && $passid) {
@@ -210,33 +242,42 @@ elseif ($module === 'factory') {
         $stmt->bind_param("s", $passid);
         $stmt->execute();
         $stmt->close();
-        $delete_message = "Record Deleted Successfully. <br><a href='factory_main.php'>View Records</a>";
-
-    } elseif (isset($_POST['upd']) && $passid) {
-        $stmt = $conn->prepare("SELECT * FROM production WHERE production_id = ?");
-        $stmt->bind_param("s", $passid);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $view_data = $result->fetch_assoc();
-        $stmt->close();
+        $message = "Record deleted successfully.";
     }
 
-    // --- UPDATE ---
+    // --- UPDATE PRODUCTION ---
     if (isset($_POST['submit']) && $action === 'update') {
-        $production_id = $_POST['production_id'] ?? '';
-        $product_name  = $_POST['product_name'] ?? '';
-        $target_pcs    = $_POST['target_pcs'] ?? '';
-        $due_date      = $_POST['due_date'] ?? '';
-        $Stock_number  = $_POST['Stock_number'] ?? '';
-        $quantity      = $_POST['quantity'] ?? '';
+        $production_id = trim($_POST['production_id'] ?? '');
+        $product_name  = trim($_POST['product_name'] ?? '');
+        $target_pcs    = trim($_POST['target_pcs'] ?? '');
+        $due_date      = trim($_POST['due_date'] ?? '');
+        $Stock_number  = trim($_POST['Stock_number'] ?? '');
+        $quantity      = trim($_POST['quantity'] ?? '');
 
-        $stmt = $conn->prepare("UPDATE production SET product_name=?, target_pcs=?, due_date=?, Stock_number=?, quantity=? WHERE production_id=?");
-        $stmt->bind_param("ssssss", $product_name, $target_pcs, $due_date, $Stock_number, $quantity, $production_id);
-
-        if ($stmt->execute()) {
-            $status_message = "<br>Update Successful<br><br><a href='factory_main.php'><input type='button' value='View Records'></a>";
+        if (!in_array($product_name, $allowed_products)) {
+            $errors['product_name'] = "Please select a valid product from the list.";
         }
-        $stmt->close();
+        if (!preg_match("/^[0-9 ]*$/", $target_pcs)) {
+            $errors['target_pcs'] = "Please use only numbers for your Target PCS.";
+        }
+        if (!preg_match("/^[0-9 ]*$/", $quantity)) {
+            $errors['quantity'] = "Please use only numbers for your Quantity.";
+        }
+        if (!preg_match("/^[0-9 ]*$/", $Stock_number)) {
+            $errors['Stock_number'] = "Please use only numbers for your Stock Number.";
+        }
+
+        if (empty($errors) && !empty($production_id)) {
+            $stmt = $conn->prepare("UPDATE production SET product_name=?, target_pcs=?, due_date=?, Stock_number=?, quantity=? WHERE production_id=?");
+            $stmt->bind_param("ssssss", $product_name, $target_pcs, $due_date, $Stock_number, $quantity, $production_id);
+
+            if ($stmt->execute()) {
+                $message = "Production Task updated successfully.";
+            } else {
+                $message = "Failed to update Production Task.";
+            }
+            $stmt->close();
+        }
     }
 
     // --- UPDATE STATUS TO DONE ---
@@ -255,9 +296,7 @@ elseif ($module === 'factory') {
         exit();
     }
 
-    // --- VIEW / FETCH RECORDS (FACTORY: HIWALAY NA ANG PENDING AT HISTORY) ---
-
-    // 1. Fetch PENDING Factory / Production Tasks (Hindi pa 'product done')
+    // --- FETCH PRODUCTION RECORDS ---
     $sql_pending = "SELECT production_id, product_name, target_pcs, Stock_number, quantity, due_date, product_status 
                     FROM production 
                     WHERE product_status != 'product done' OR product_status IS NULL
@@ -271,7 +310,6 @@ elseif ($module === 'factory') {
         }
     }
 
-    // 2. Fetch DONE Factory / Production Tasks (History / 'product done')
     $sql_history = "SELECT production_id, product_name, target_pcs, Stock_number, quantity, due_date, product_status 
                     FROM production 
                     WHERE product_status = 'product done'
@@ -284,8 +322,6 @@ elseif ($module === 'factory') {
             $history_records[] = $row;
         }
     }
-
-    $count = count($pending_records);
 }
 
 // -----------------------------------------------------
@@ -296,4 +332,3 @@ if (isset($_POST['can'])) {
     header("Location: $redirect_page");
     exit();
 }
-?>

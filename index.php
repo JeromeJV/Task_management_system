@@ -1,5 +1,4 @@
 <?php
-include 'config/connection.php';
 //session_start(); 
 include 'config/loginBE.php';
 ?>
@@ -28,6 +27,7 @@ include 'config/loginBE.php';
                 <a href="#" class="active">Login</a>
                 <a href="TaskTrackWeb.php">Website</a>
                 <a href="register.php">Register</a>
+                <a href="attendance_form.php">ATTENDANCE</a>
             </nav>
         </header>
 

@@ -1,3 +1,4 @@
+<!-- Sunod na aayusin is ung sa attendance registration at tracking -->
 <?php
     session_start();
     include('config/connection.php');
