@@ -25,7 +25,7 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'HR') {
         
         <button><a href="dashboard_form.php">DASHBOARD</a></button> <!--NAKA LAGAY DTO UNG MGA REGULAR EMPLOYEE-->
         <button><a href="register.php">REGISTER USER</a></button>
-        <button><a href="attendance_form.php">ATTENDANCE</a></button>
+        <button><a href="atten.php">ATTENDANCE</a></button>
         <button><a href="appli_form.php">APPLICANT</a></button>
         <button><a href="interview_sched.php">INTERVIEW SCHEDULE</a></button>
         <a href="logout.php"><button class="">Logout</button></a>

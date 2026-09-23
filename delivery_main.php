@@ -6,12 +6,40 @@ include('config/connection.php');
 include('config/autoLog.php');
 include('config/Supervisor_API.php');
 
-// Unang i-initialize ang $action para laging may value
-$module = $_REQUEST['module'] ?? 'delivery'; 
-$action = $_POST['action'] ?? $_GET['action'] ?? ''; // <-- Dinedeklara agad dito
+// Timezone setup
+date_default_timezone_set('Asia/Manila');
+$currentDate = date('Y-m-d');
 
-$message          = "";
-$status_message   = "";
+$module = $_REQUEST['module'] ?? 'delivery'; 
+$action = $_POST['action'] ?? $_GET['action'] ?? '';
+
+$message        = "";
+$status_message = "";
+
+// =========================================================
+// FETCH DRIVERS / EMPLOYEES WHO ARE PRESENT TODAY
+// =========================================================
+$available_drivers = [];
+$driverStmt = $conn->prepare("
+    SELECT DISTINCT
+        e.employee_id,
+        COALESCE(NULLIF(e.username, ''), NULLIF(u.name, ''), CONCAT('Employee #', e.employee_id)) AS driver_name
+    FROM employee e
+    INNER JOIN attendance a ON e.employee_id = a.employee_id
+    LEFT JOIN users u ON u.id = e.user_id 
+        OR (NULLIF(e.email, '') IS NOT NULL AND LOWER(u.email) = LOWER(e.email))
+    WHERE a.attendance_date = ? 
+      AND LOWER(TRIM(a.status)) IN ('present', 'late')
+      AND LOWER(TRIM(e.position)) LIKE '%driver%'
+");
+
+if ($driverStmt) {
+    $driverStmt->bind_param('s', $currentDate);
+    $driverStmt->execute();
+    $res = $driverStmt->get_result();
+    $available_drivers = $res->fetch_all(MYSQLI_ASSOC);
+    $driverStmt->close();
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -158,6 +186,7 @@ $status_message   = "";
                                     <th>Delivery ID</th>
                                     <th>Product Name</th>
                                     <th>Product Status</th>
+                                    <th>Assigned Driver</th>
                                     <th>Destination</th>
                                     <th>Quantity</th>
                                     <th>Stock Number</th>
@@ -177,6 +206,7 @@ $status_message   = "";
                                                 <?= htmlspecialchars(!empty($row['product_status']) ? $row['product_status'] : 'In Production'); ?>
                                             </span>
                                         </td>
+                                        <td><?= htmlspecialchars($row['driver_name'] ?? 'Unassigned'); ?></td>
                                         <td><?= htmlspecialchars($row['route']); ?></td>
                                         <td><?= htmlspecialchars($row['pieces']); ?></td>
                                         <td><?= htmlspecialchars($row['stock']); ?></td>
@@ -302,24 +332,38 @@ $status_message   = "";
                 <?php endif; ?>
             </div>
 
+            <!-- DRIVER SELECTION (PRESENT ONLY) -->
             <div class="form-group">
-                <label for="route">Destination (Route):</label>
-                <input type="text" id="route" name="route" value="<?= htmlspecialchars($_POST['route'] ?? ''); ?>" required>
-                <?php if (isset($errors['route'])): ?>
-                    <div class="error-message"><?= htmlspecialchars($errors['route']); ?></div>
+                <label for="driver_id">Assign Driver (Present Today):</label>
+                <select name="driver_id" id="driver_id" required>
+                    <option value="">-- Select Present Driver --</option>
+                    <?php if (!empty($available_drivers)): ?>
+                        <?php foreach ($available_drivers as $driver): ?>
+                            <option value="<?= htmlspecialchars($driver['employee_id']); ?>">
+                                <?= htmlspecialchars($driver['driver_name']); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <option value="" disabled>No drivers marked Present/Late today</option>
+                    <?php endif; ?>
+                </select>
+                <?php if (isset($errors['driver_id'])): ?>
+                    <div class="error-message"><?= htmlspecialchars($errors['driver_id']); ?></div>
                 <?php endif; ?>
+            </div>
+
+            <div class="form-group">
+                <label for="route">Destination Route:</label>
+                <input type="text" id="route" name="route" placeholder="Enter destination..." required>
             </div>
 
             <div class="form-group">
                 <label for="delivery_date">Delivery Date:</label>
-                <input type="date" id="delivery_date" name="delivery_date" value="<?= htmlspecialchars($_POST['delivery_date'] ?? ''); ?>" required>
-                <?php if (isset($errors['delivery_date'])): ?>
-                    <div class="error-message"><?= htmlspecialchars($errors['delivery_date']); ?></div>
-                <?php endif; ?>
+                <input type="date" id="delivery_date" name="delivery_date" value="<?= $currentDate; ?>" required>
             </div>
 
             <div class="modal-actions">
-                <button type="submit" name="submit" class="btn-submit">Create Task</button>
+                <button type="submit" class="btn-submit">Add Task</button>
                 <button type="button" class="btn-cancel" onclick="closeDeliveryModal()">Cancel</button>
             </div>
         </form>
@@ -329,35 +373,35 @@ $status_message   = "";
 <!-- ================= POP-UP MODAL SA PAG-UPDATE NG DELIVERY ================= -->
 <div id="editDeliveryModal" class="modal">
     <div class="modal-content">
-        <h3>Update Delivery Record</h3>
+        <h3>Update Delivery Task</h3>
         
         <form action="delivery_main.php" method="POST">
-            <input type="hidden" name="action" value="update">
             <input type="hidden" name="module" value="delivery">
+            <input type="hidden" name="action" value="update">
             <input type="hidden" id="edit_delivery_id" name="delivery_id">
 
             <div class="form-group">
-                <label>Destination (Route):</label>
+                <label for="edit_route">Destination Route:</label>
                 <input type="text" id="edit_route" name="route" required>
             </div>
 
             <div class="form-group">
-                <label>Quantity (Pieces):</label>
+                <label for="edit_pieces">Quantity:</label>
                 <input type="number" id="edit_pieces" name="pieces" required>
             </div>
 
             <div class="form-group">
-                <label>Stock Number:</label>
+                <label for="edit_stock">Stock Number:</label>
                 <input type="text" id="edit_stock" name="stock" required>
             </div>
 
             <div class="form-group">
-                <label>Delivery Date:</label>
+                <label for="edit_delivery_date">Delivery Date:</label>
                 <input type="date" id="edit_delivery_date" name="delivery_date" required>
             </div>
-            
+
             <div class="modal-actions">
-                <button type="submit" name="submit" class="btn-submit">Save Changes</button>
+                <button type="submit" class="btn-submit">Save Changes</button>
                 <button type="button" class="btn-cancel" onclick="closeEditDeliveryModal()">Cancel</button>
             </div>
         </form>
@@ -366,38 +410,37 @@ $status_message   = "";
 
 <script>
 function openDeliveryModal() {
-    document.getElementById("deliveryModal").style.display = "block";
+    document.getElementById('deliveryModal').style.display = 'block';
 }
 
 function closeDeliveryModal() {
-    document.getElementById("deliveryModal").style.display = "none";
+    document.getElementById('deliveryModal').style.display = 'none';
 }
 
 function openEditDeliveryModal(id, route, pieces, stock, date) {
-    document.getElementById("edit_delivery_id").value = id;
-    document.getElementById("edit_route").value = route;
-    document.getElementById("edit_pieces").value = pieces;
-    document.getElementById("edit_stock").value = stock;
-    document.getElementById("edit_delivery_date").value = date;
-    
-    document.getElementById("editDeliveryModal").style.display = "block";
+    document.getElementById('edit_delivery_id').value = id;
+    document.getElementById('edit_route').value = route;
+    document.getElementById('edit_pieces').value = pieces;
+    document.getElementById('edit_stock').value = stock;
+    document.getElementById('edit_delivery_date').value = date;
+    document.getElementById('editDeliveryModal').style.display = 'block';
 }
 
 function closeEditDeliveryModal() {
-    document.getElementById("editDeliveryModal").style.display = "none";
+    document.getElementById('editDeliveryModal').style.display = 'none';
 }
 
+// Close modals when clicking outside modal content
 window.onclick = function(event) {
-    var addModal = document.getElementById("deliveryModal");
-    var editModal = document.getElementById("editDeliveryModal");
-    
-    if (event.target == addModal) {
-        addModal.style.display = "none";
+    var addModal = document.getElementById('deliveryModal');
+    var editModal = document.getElementById('editDeliveryModal');
+    if (event.target === addModal) {
+        closeDeliveryModal();
     }
-    if (event.target == editModal) {
-        editModal.style.display = "none";
+    if (event.target === editModal) {
+        closeEditDeliveryModal();
     }
-}
+};
 </script>
 
 </body>

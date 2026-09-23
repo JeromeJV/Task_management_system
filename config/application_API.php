@@ -241,7 +241,7 @@ if (isset($_POST['update_submit'])) {
 }
 
 // -----------------------------------------------------
-//          Save / Update Interview Schedule
+//          Save / Update Interview Schedule & Auto-Hire
 // -----------------------------------------------------
 
 if (isset($_POST['save_interview'])) {
@@ -268,14 +268,50 @@ if (isset($_POST['save_interview'])) {
 
             if ($stmt->execute()) {
                 
-                // Magpadala ng email notification sa applicant
+                // =========================================================
+                // 1. KUNG "PASSED" ANG STATUS -> AUTO-REGISTER SA EMPLOYEE TABLE
+                // =========================================================
+                if ($status === 'Passed') {
+                    // Kunin muna ang buong detalye ng applicant mula sa database
+                    $get_app = $conn->prepare("SELECT * FROM applicant WHERE applicant_id = ?");
+                    $get_app->bind_param("i", $applicant_id);
+                    $get_app->execute();
+                    $app_data = $get_app->get_result()->fetch_assoc();
+                    $get_app->close();
+
+                    if ($app_data) {
+                        $emp_email    = $app_data['email'];
+                        $emp_username = strtolower($app_data['firstname'] . '_' . $app_data['lastname']);
+                        $emp_contact  = $app_data['contact_number'];
+                        $emp_address  = trim($app_data['house_number'] . ' ' . $app_data['street'] . ' ' . $app_data['barangay'] . ' ' . $app_data['city'] . ' ' . $app_data['province']);
+                        $emp_position = $app_data['position_applied'];
+                        $emp_dept     = 'General'; // Baguhin ayon sa default department ninyo
+
+                        // I-check muna kung na-insert na siya dati para maiwasan ang duplicate
+                        $check_emp = $conn->prepare("SELECT employee_id FROM employee WHERE email = ?");
+                        $check_emp->bind_param("s", $emp_email);
+                        $check_emp->execute();
+                        $emp_exists = $check_emp->get_result()->num_rows > 0;
+                        $check_emp->close();
+
+                        if (!$emp_exists) {
+                            $ins_emp = $conn->prepare("INSERT INTO employee (username, email, contact_number, address, position, department) VALUES (?, ?, ?, ?, ?, ?)");
+                            $ins_emp->bind_param("ssssss", $emp_username, $emp_email, $emp_contact, $emp_address, $emp_position, $emp_dept);
+                            $ins_emp->execute();
+                            $ins_emp->close();
+                        }
+                    }
+                }
+
+                // =========================================================
+                // 2. MAGPADALA NG EMAIL NOTIFICATION SA APPLICANT
+                // =========================================================
                 if (!empty($email)) {
                     $formatted_date = date("F j, Y - g:i A", strtotime($interview_date));
                     $subject = "Interview Schedule Notice - " . $interview_type;
                     $body = "
-
                         <h3>Magandang araw, {$username}!</h3>
-                        <p>Thank you for applying at Ginga! We reviewed your application and we'd love to invite you for an interview.:</p>
+                        <p>Thank you for applying at Ginga! We reviewed your application and we'd love to invite you for an interview:</p>
                         <ul>
                             <li><strong>Interview Type:</strong> {$interview_type}</li>
                             <li><strong>Mode:</strong> {$interview_mode}</li>
@@ -285,18 +321,17 @@ if (isset($_POST['save_interview'])) {
                         <p>Salamat at mag-ingat!</p>
                     ";
 
-                    // DIREKTANG PHPMAILER CODE (Pinalitan ang sendEmail):
                     $mail = new PHPMailer(true);
                     try {
                         $mail->isSMTP();
                         $mail->Host       = 'smtp.gmail.com';
                         $mail->SMTPAuth   = true;
-                        $mail->Username   = 'tasktrack74@gmail.com';       // <-- PALITAN NG GMAIL MO
-                        $mail->Password   = 'wukj ciyu ihsm xpqt';     // <-- PALITAN NG GMAIL APP PASSWORD MO
+                        $mail->Username   = 'tasktrack74@gmail.com'; 
+                        $mail->Password   = 'wukj ciyu ihsm xpqt'; 
                         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
                         $mail->Port       = 587;
 
-                        $mail->setFrom('tasktrack74@gmail.com', 'HR Team'); // <-- PALITAN NG GMAIL MO
+                        $mail->setFrom('tasktrack74@gmail.com', 'HR Team');
                         $mail->addAddress($email, $username);
     
                         $mail->isHTML(true);
@@ -305,13 +340,20 @@ if (isset($_POST['save_interview'])) {
 
                         $mail->send();
                     } catch (Exception $e) {
-                        // Iniiwasan nito na mag-crash ang page sakaling mag-fail ang connection sa mailer
+                        // Keep page running even if mail sending fails
                     }
                 }
 
+                $alert_msg = ($status === 'Passed') 
+                    ? 'Schedule updated, email sent, and applicant automatically registered as Employee for Attendance!' 
+                    : 'Interview schedule successfully updated and email sent!';
+
+                // BINAGO: Kukunin ang kasalukuyang URL kung saan nanggaling ang request
+                $redirect_target = $_SERVER['HTTP_REFERER'] ?? 'interview_sched.php';
+
                 echo "<script>
-                        alert('Interview schedule successfully updated and email sent!');
-                        window.location.href = 'appli_form.php';
+                        alert('{$alert_msg}');
+                        window.location.href = '{$redirect_target}';
                       </script>";
             } else {
                 echo "Execution Error: " . htmlspecialchars($stmt->error);

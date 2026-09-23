@@ -117,7 +117,6 @@
                         <option value="Payroll" <?= (($_POST['position_applied'] ?? '') === 'Payroll') ? 'selected' : '' ?>>Payroll</option>
                         <option value="Supervisor" <?= (($_POST['position_applied'] ?? '') === 'Supervisor') ? 'selected' : '' ?>>Supervisor</option>
                         <option value="Logistics" <?= (($_POST['position_applied'] ?? '') === 'Logistics') ? 'selected' : '' ?>>Logistics</option>
-                        <option value="Driver" <?= (($_POST['position_applied'] ?? '') === 'Driver') ? 'selected' : '' ?>>Driver</option>
                         <option value="Production" <?= (($_POST['position_applied'] ?? '') === 'Production') ? 'selected' : '' ?>>Production</option>
                     </select>
                 </div>
