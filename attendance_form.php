@@ -4,7 +4,7 @@ date_default_timezone_set('Asia/Manila');
 include 'config/connection.php';
 
 // Fetch all employees for dropdown list
-$employees = $conn->query("SELECT employee_id, username, position, user_id FROM employee");
+$employees = $conn->query("SELECT employee_id, username, role, user_id FROM employee");
 ?>
 
 <!DOCTYPE html>
