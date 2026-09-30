@@ -3,7 +3,7 @@ session_start();
 date_default_timezone_set('Asia/Manila');
 include 'config/connection.php';
 
-// Fetch users with employee details
+// Fetch users with employee detailss
 $query = "
     SELECT 
         u.id AS user_id,
