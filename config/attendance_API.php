@@ -1,93 +1,105 @@
 <?php
-// config/attendance_API.php
+header('Content-Type: application/json');
 
-ob_start();
-header('Content-Type: application/json; charset=utf-8');
-
-// Set Philippine Timezone
+// 1. I-set ang Timezone sa Asia/Manila para 6:00 PM ang ma-record
 date_default_timezone_set('Asia/Manila');
 
-mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+// Siguraduhing tama ang path ng connection file
+include __DIR__ . '/connection.php';
 
-try {
-    require_once __DIR__ . '/connection.php';
+$raw_employee_id = $_POST['employee_id'] ?? '';
+$action_type = $_POST['action_type'] ?? '';
 
-    if (!$conn || $conn->connect_error) {
-        throw new Exception('Database connection failed!');
-    }
+// Sanitize & validate action types
+$allowed_actions = ['time_in', 'time_out', 'time_in_2', 'time_out_2'];
+if (empty($raw_employee_id) || !in_array($action_type, $allowed_actions)) {
+    echo json_encode(['status' => 'error', 'message' => 'Invalid parameters.']);
+    exit;
+}
 
-    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        $employee_id = isset($_POST['employee_id']) ? (int) $_POST['employee_id'] : 0;
-        $action_type = isset($_POST['action_type']) ? trim($_POST['action_type']) : '';
-        $current_date = date('Y-m-d');
+$employee_id = null;
+$user_id = null;
+$username = '';
+
+// Check kung galing sa system account (USER_ prefix)
+if (strpos($raw_employee_id, 'USER_') === 0) {
+    $userId = (int) str_replace('USER_', '', $raw_employee_id);
+    
+    // Hanapin sa users table
+    $userQuery = $conn->prepare("SELECT id, name FROM users WHERE id = ?");
+    $userQuery->bind_param("i", $userId);
+    $userQuery->execute();
+    $userRes = $userQuery->get_result();
+
+    if ($userRow = $userRes->fetch_assoc()) {
+        $user_id = $userRow['id'];
+        $username = $userRow['name'];
         
-        // 12-Hour standard time format (AM/PM)
-        $current_time = date('h:i:s A');
-
-        if ($employee_id <= 0 || empty($action_type)) {
-            ob_end_clean();
-            echo json_encode(['status' => 'error', 'message' => 'Please select an employee!']);
-            exit();
-        }
-
-        // FETCH EMPLOYEE USERNAME FROM EMPLOYEE TABLE
-        $empUsername = '';
-        $getEmpStmt = $conn->prepare('SELECT username FROM employee WHERE employee_id = ?');
-        $getEmpStmt->bind_param('i', $employee_id);
-        $getEmpStmt->execute();
-        $empResult = $getEmpStmt->get_result();
-
-        if ($empResult && $empResult->num_rows > 0) {
-            $empRow = $empResult->fetch_assoc();
-            $empUsername = !empty($empRow['username']) ? $empRow['username'] : ('Employee #' . $employee_id);
+        // Hanapin kung may kaugnay na record sa employee table
+        $empCheck = $conn->prepare("SELECT employee_id FROM employee WHERE username = ? OR employee_id = ?");
+        $empCheck->bind_param("si", $username, $user_id);
+        $empCheck->execute();
+        $empRes = $empCheck->get_result();
+        
+        if ($empRow = $empRes->fetch_assoc()) {
+            $employee_id = $empRow['employee_id'];
         } else {
-            ob_end_clean();
-            echo json_encode(['status' => 'error', 'message' => 'Employee not found!']);
-            exit();
+            // Auto-create employee record para sa system account
+            $insertEmp = $conn->prepare("INSERT INTO employee (username, position) VALUES (?, 'System User')");
+            $insertEmp->bind_param("s", $username);
+            $insertEmp->execute();
+            $employee_id = $conn->insert_id;
         }
-
-        // CHECK IF ATTENDANCE RECORD EXISTS FOR TODAY
-        $checkStmt = $conn->prepare('SELECT attendance_id FROM attendance WHERE employee_id = ? AND attendance_date = ?');
-        $checkStmt->bind_param('is', $employee_id, $current_date);
-        $checkStmt->execute();
-        $checkResult = $checkStmt->get_result();
-
-        if ($checkResult && $checkResult->num_rows > 0) {
-            $allowed_columns = ['time_in', 'time_out', 'time_in_2', 'time_out_2'];
-
-            if (in_array($action_type, $allowed_columns, true)) {
-                // Update time column and username
-                $updateStmt = $conn->prepare("UPDATE attendance SET $action_type = ?, username = ? WHERE employee_id = ? AND attendance_date = ?");
-                $updateStmt->bind_param('ssis', $current_time, $empUsername, $employee_id, $current_date);
-                $updateStmt->execute();
-
-                $action_label = str_replace('_', ' ', strtoupper($action_type));
-                ob_end_clean();
-                echo json_encode(['status' => 'success', 'message' => "Recorded $action_label ($current_time) for $empUsername"]);
-            } else {
-                ob_end_clean();
-                echo json_encode(['status' => 'error', 'message' => 'Invalid action type!']);
-            }
-        } else {
-            if ($action_type === 'time_in') {
-                // INSERT NEW ATTENDANCE RECORD
-                $insertStmt = $conn->prepare("INSERT INTO attendance (employee_id, username, attendance_date, time_in, status) VALUES (?, ?, ?, ?, 'Present')");
-                $insertStmt->bind_param('isss', $employee_id, $empUsername, $current_date, $current_time);
-                $insertStmt->execute();
-
-                ob_end_clean();
-                echo json_encode(['status' => 'success', 'message' => "Time In 1 recorded ($current_time) for $empUsername"]);
-            } else {
-                ob_end_clean();
-                echo json_encode(['status' => 'error', 'message' => 'You must record Time In 1 first for today!']);
-            }
-        }
-
-        exit();
     }
-} catch (Exception $e) {
-    ob_end_clean();
-    echo json_encode(['status' => 'error', 'message' => 'Database Error: ' . $e->getMessage()]);
-    exit();
+} else {
+    // Normal Employee ID Search
+    $empIdInt = (int) $raw_employee_id;
+    $empCheck = $conn->prepare("SELECT employee_id, username FROM employee WHERE employee_id = ?");
+    $empCheck->bind_param("i", $empIdInt);
+    $empCheck->execute();
+    $empRes = $empCheck->get_result();
+    
+    if ($empRow = $empRes->fetch_assoc()) {
+        $employee_id = $empRow['employee_id'];
+        $username = $empRow['username'];
+    }
+}
+
+if (!$employee_id && !$user_id) {
+    echo json_encode(['status' => 'error', 'message' => 'Employee not found!']);
+    exit;
+}
+
+// Tamang Oras at Petsa para sa Pilipinas
+$today = date('Y-m-d');
+$nowTime = date('H:i:s');
+
+// 1. Hanapin kung may attendance record na ngayong araw
+$checkAtt = $conn->prepare("SELECT attendance_id FROM attendance WHERE (employee_id = ? OR user_id = ?) AND attendance_date = ?");
+$checkAtt->bind_param("iis", $employee_id, $user_id, $today);
+$checkAtt->execute();
+$attRes = $checkAtt->get_result();
+
+if ($attRow = $attRes->fetch_assoc()) {
+    // Update existing attendance record
+    $attendance_id = $attRow['attendance_id'];
+    $updateQuery = $conn->prepare("UPDATE attendance SET {$action_type} = ?, status = 'Present' WHERE attendance_id = ?");
+    $updateQuery->bind_param("si", $nowTime, $attendance_id);
+    
+    if ($updateQuery->execute()) {
+        echo json_encode(['status' => 'success', 'message' => "Successfully recorded {$action_type} for {$username}!"]);
+    } else {
+        echo json_encode(['status' => 'error', 'message' => 'Failed to update attendance.']);
+    }
+} else {
+    // Insert new attendance record
+    $insertQuery = $conn->prepare("INSERT INTO attendance (employee_id, user_id, username, attendance_date, {$action_type}, status) VALUES (?, ?, ?, ?, ?, 'Present')");
+    $insertQuery->bind_param("iisss", $employee_id, $user_id, $username, $today, $nowTime);
+    
+    if ($insertQuery->execute()) {
+        echo json_encode(['status' => 'success', 'message' => "Successfully recorded {$action_type} for {$username}!"]);
+    } else {
+        echo json_encode(['status' => 'error', 'message' => 'Failed to record attendance.']);
+    }
 }
 ?>

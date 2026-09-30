@@ -4,14 +4,14 @@ require_once 'config/connection.php';
 // Set Timezone sa Philippine Time
 date_default_timezone_set('Asia/Manila');
 
-$currentDate = date('Y-m-d');
-$currentTime = date('H:i:s');
+$currentDate = date('Y-m-d');$currentTime = date('H:i:s');
 
 // =========================================================
 // AUTO-MARK ABSENT TRIGGER PAGPATAK NG 5:01 PM (17:01:00)
 // =========================================================
 if ($currentTime >= '17:01:00') {
-    $autoAbsentStmt = $conn->prepare("
+    // Inayos ang Subquery sa pamamagitan ng pagdagdag ng "FROM attendance"
+    $autoAbsentStmt =$conn->prepare("
         INSERT INTO attendance (employee_id, username, attendance_date, status)
         SELECT 
             e.employee_id, 
@@ -25,69 +25,87 @@ if ($currentTime >= '17:01:00') {
             WHERE attendance_date = ?
         )
     ");
-    if ($autoAbsentStmt) {
-        $autoAbsentStmt->bind_param('ss', $currentDate, $currentDate);
-        $autoAbsentStmt->execute();
-        $autoAbsentStmt->close();
+    if ($autoAbsentStmt) {$autoAbsentStmt->bind_param('ss', $currentDate,$currentDate);
+        $autoAbsentStmt->execute();$autoAbsentStmt->close();
     }
 }
 
 // Get selected date from GET parameter if provided
 $selectedDate = isset($_GET['date']) ? trim($_GET['date']) : '';
 
-$records = [];
-$count = 0;
+$records = [];$count = 0;
 
 // Counter variables for summary cards
 $totalPresent = 0;
 $totalLate    = 0;
 $totalAbsent  = 0;
 
-// Fetch Attendance Records using Prepared Statements
+// =========================================================
+// FETCH ATTENDANCE WITH USER DETAILS (JOIN USERS & EMPLOYEE)
+// =========================================================
+// Ginamitan ng LEFT JOIN sa `users` (base sa email o user_id/employee relation)
 if (!empty($selectedDate)) {
-    $stmt = $conn->prepare(
-        'SELECT attendance_id, username, employee_id, attendance_date, '
-        . 'time_in, time_out, time_in_2, time_out_2, status '
-        . 'FROM attendance '
-        . 'WHERE attendance_date = ? '
-        . 'ORDER BY attendance_id DESC'
-    );
-    $stmt->bind_param('s', $selectedDate);
+    $stmt =$conn->prepare("
+        SELECT 
+            a.attendance_id, 
+            a.employee_id, 
+            a.attendance_date, 
+            a.time_in, 
+            a.time_out, 
+            a.time_in_2, 
+            a.time_out_2, 
+            a.status,
+            COALESCE(u.name, e.username, a.username, 'N/A') AS display_name,
+            u.email AS user_email,
+            u.role AS user_role
+        FROM attendance a
+        LEFT JOIN employee e ON a.employee_id = e.employee_id
+        LEFT JOIN users u ON a.user_id = u.id OR e.username = u.name
+        WHERE a.attendance_date = ? 
+        ORDER BY a.attendance_id DESC
+    ");
+    $stmt->bind_param('s',$selectedDate);
 } else {
-    $stmt = $conn->prepare(
-        'SELECT attendance_id, username, employee_id, attendance_date, '
-        . 'time_in, time_out, time_in_2, time_out_2, status '
-        . 'FROM attendance '
-        . 'ORDER BY attendance_date DESC, attendance_id DESC'
-    );
+    $stmt =$conn->prepare("
+        SELECT 
+            a.attendance_id, 
+            a.employee_id, 
+            a.attendance_date, 
+            a.time_in, 
+            a.time_out, 
+            a.time_in_2, 
+            a.time_out_2, 
+            a.status,
+            COALESCE(u.name, e.username, a.username, 'N/A') AS display_name,
+            u.email AS user_email,
+            u.role AS user_role
+        FROM attendance a
+        LEFT JOIN employee e ON a.employee_id = e.employee_id
+        LEFT JOIN users u ON a.user_id = u.id OR e.username = u.name
+        ORDER BY a.attendance_date DESC, a.attendance_id DESC
+    ");
 }
 
-if ($stmt && $stmt->execute()) {
-    $result = $stmt->get_result();
-    $rawRecords = $result->fetch_all(MYSQLI_ASSOC);
-    $stmt->close();
+if ($stmt && $stmt->execute()) {$result = $stmt->get_result();$rawRecords = $result->fetch_all(MYSQLI_ASSOC);$stmt->close();
 
     // Process status for each record to handle NULL or empty statuses
-    foreach ($rawRecords as $rec) {
+    foreach ($rawRecords as$rec) {
         $st = strtolower(trim($rec['status'] ?? ''));
 
         // Kung walang status sa DB pero may Time In, i-determine base sa Time In
-        if (empty($st) && !empty($rec['time_in']) && $rec['time_in'] !== '00:00:00') {
+        if (empty($st) && !empty($rec['time_in']) &&$rec['time_in'] !== '00:00:00') {
             $st = (strtotime($rec['time_in']) > strtotime('08:00:00')) ? 'late' : 'present';
         }
 
         $rec['display_status'] = !empty($st) ? ucfirst($st) : 'N/A';
 
         // Increment summary counts
-        if ($st === 'present') {
-            $totalPresent++;
-        } elseif ($st === 'late') {
-            $totalLate++;
-        } elseif ($st === 'absent') {
-            $totalAbsent++;
+        if ($st === 'present') {$totalPresent++;
+        } elseif ($st === 'late') {$totalLate++;
+        } elseif ($st === 'absent') {$totalAbsent++;
         }
 
-        $records[] = $rec;
+        $records[] =$rec;
     }
 
     $count = count($records);
@@ -95,7 +113,7 @@ if ($stmt && $stmt->execute()) {
 
 // Helper function to format time (e.g., 08:30 AM)
 function formatTime($timeStr) {
-    return (!empty($timeStr) && $timeStr !== '00:00:00') ? date('h:i A', strtotime($timeStr)) : '-';
+    return (!empty($timeStr) &&$timeStr !== '00:00:00') ? date('h:i A', strtotime($timeStr)) : '-';
 }
 ?>
 
@@ -203,6 +221,12 @@ function formatTime($timeStr) {
         .status-absent { background-color: #f8d7da; color: #842029; }
         .status-late { background-color: #fff3cd; color: #664d03; }
         .status-default { background-color: #e2e3e5; color: #41464b; }
+        
+        .sub-text {
+            display: block;
+            font-size: 11px;
+            color: #6c757d;
+        }
     </style>
 </head>
 <body>
@@ -262,7 +286,8 @@ function formatTime($timeStr) {
             <thead>
                 <tr>
                     <th>Attendance ID</th>
-                    <th>Username</th>
+                    <th>System Account (Name / Email)</th>
+                    <th>Role</th>
                     <th>Employee ID</th>
                     <th>Attendance Date</th>
                     <th>1st Time In</th>
@@ -273,11 +298,17 @@ function formatTime($timeStr) {
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($records as $row): ?>
+                <?php foreach ($records as$row): ?>
                     <tr>
                         <td><?= htmlspecialchars($row['attendance_id']); ?></td>
-                        <td><?= htmlspecialchars($row['username']); ?></td>
-                        <td><?= htmlspecialchars($row['employee_id']); ?></td>
+                        <td>
+                            <strong><?= htmlspecialchars($row['display_name']); ?></strong>
+                            <?php if (!empty($row['user_email'])): ?>
+                                <span class="sub-text"><?= htmlspecialchars($row['user_email']); ?></span>
+                            <?php endif; ?>
+                        </td>
+                        <td><?= htmlspecialchars($row['user_role'] ?? 'N/A'); ?></td>
+                        <td><?= htmlspecialchars($row['employee_id'] ?? 'N/A'); ?></td>
                         <td><?= date('M d, Y', strtotime($row['attendance_date'])); ?></td>
                         <td><?= formatTime($row['time_in']); ?></td>
                         <td><?= formatTime($row['time_out']); ?></td>
