@@ -1,5 +1,6 @@
 <?php
 include('config/connection.php');
+
 // -----------------------------------------------------
 // 1. Connection & Initialization
 // -----------------------------------------------------
@@ -54,24 +55,74 @@ $allowed_products = [
 // -----------------------------------------------------
 if ($module === 'delivery') {
 
+    // --- FETCH PRESENT DRIVERS TODAY ---
+    $present_drivers = [];
+    $sql_drivers = "SELECT DISTINCT u.id, u.name 
+                    FROM users u
+                    INNER JOIN employee e ON (e.username = u.name OR e.email = u.email)
+                    INNER JOIN attendance a ON a.employee_id = e.employee_id
+                    WHERE u.role = 'log' 
+                    AND DATE(a.attendance_date) = CURDATE()
+                    AND LOWER(a.status) = 'present'
+                    AND a.time_in IS NOT NULL 
+                    AND a.time_in != '00:00:00'";
+
+    $res_drivers = mysqli_query($conn, $sql_drivers);
+    if ($res_drivers && mysqli_num_rows($res_drivers) > 0) {
+        while ($d = mysqli_fetch_assoc($res_drivers)) {
+            $present_drivers[] = $d;
+        }
+    }
+
+    function isDriverPresentToday($conn, $driver_id) {
+        $check_sql = "SELECT a.attendance_id 
+                    FROM attendance a
+                    INNER JOIN employee e ON a.employee_id = e.employee_id
+                    INNER JOIN users u ON (u.name = e.username OR u.email = e.email)
+                    WHERE u.id = ? 
+                        AND u.role = 'log'
+                        AND DATE(a.attendance_date) = CURDATE()
+                        AND LOWER(a.status) = 'present'
+                        AND a.time_in IS NOT NULL 
+                        AND a.time_in != '00:00:00'";
+        
+        $stmt = $conn->prepare($check_sql);
+        $stmt->bind_param("i", $driver_id);
+        $stmt->execute();
+        $stmt->store_result();
+        $is_present = ($stmt->num_rows > 0);
+        $stmt->close();
+        
+        return $is_present;
+    }
+
     // --- INSERT DELIVERY ---
     if (isset($_POST['submit']) && $action === 'insert') {
         $production_id = $_POST['production_id'] ?? '';
+        $driver_id     = $_POST['driver_id'] ?? '';
         $route         = trim($_POST['route'] ?? '');
         $delivery_date = trim($_POST['delivery_date'] ?? '');
 
         if (empty($production_id)) {
             $errors['production_id'] = "Please select a product.";
         }
+        
+        if (empty($driver_id)) {
+            $errors['driver_id'] = "Please assign a present driver.";
+        } else if (!isDriverPresentToday($conn, $driver_id)) {
+            $errors['driver_id'] = "Selected driver is not timed in / present today or has already timed out.";
+        }
+
         if (!preg_match("/^[a-zA-Z0-9 ]*$/", $route) || empty($route)) {
-            $errors['route'] = "Please enter a valid route address (letters and numbers only).";
+            $errors['route'] = "Please enter a valid route address.";
         }
         if (empty($delivery_date)) {
             $errors['delivery_date'] = "Delivery date is required.";
         }
 
         if (empty($errors)) {
-            $get_prod = $conn->prepare("SELECT Stock_number, quantity FROM production WHERE production_id = ?");
+            // Kunin lang ang data ng product kung ito ay 'product done'
+            $get_prod = $conn->prepare("SELECT Stock_number, quantity FROM production WHERE production_id = ? AND product_status = 'product done'");
             $get_prod->bind_param("s", $production_id);
             $get_prod->execute();
             $prod_res  = $get_prod->get_result();
@@ -82,49 +133,37 @@ if ($module === 'delivery') {
                 $stock  = $prod_data['Stock_number'];
                 $pieces = $prod_data['quantity']; 
 
-                $stmt = $conn->prepare("INSERT INTO delivery (route, pieces, stock, delivery_date) VALUES (?, ?, ?, ?)");
-                $stmt->bind_param("ssss", $route, $pieces, $stock, $delivery_date);
+                $stmt = $conn->prepare("INSERT INTO delivery (production_id, route, pieces, stock, driver_id, delivery_date) VALUES (?, ?, ?, ?, ?, ?)");
+                $stmt->bind_param("ssssss", $production_id, $route, $pieces, $stock, $driver_id, $delivery_date);
                 
                 if ($stmt->execute()) {
-                    $message = "New Delivery Task sent successfully.";
+                    $message = "New Delivery Task assigned and created successfully.";
                 }
                 $stmt->close();
             } else {
-                $errors['production_id'] = "Selected product not found in production records.";
+                $errors['production_id'] = "Selected product is either not found or not yet completed ('product done').";
             }
         }
-    }
-
-    // --- EDIT & DELETE DELIVERY ---
-    $passid = $_POST['idno'] ?? null;
-
-    if (isset($_POST['del']) && $passid) {
-        $stmt = $conn->prepare("DELETE FROM delivery WHERE delivery_id = ?");
-        $stmt->bind_param("s", $passid);
-        $stmt->execute();
-        $stmt->close();
-        $delete_message = "Record Deleted Successfully. <br><a href='delivery_main.php'>View Records</a>";
-
-    } elseif (isset($_POST['upd']) && $passid) {
-        $stmt = $conn->prepare("SELECT * FROM delivery WHERE delivery_id = ?");
-        $stmt->bind_param("s", $passid);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $view_data = $result->fetch_assoc();
-        $stmt->close();
     }
 
     // --- UPDATE DELIVERY ---
     if (isset($_POST['submit']) && $action === 'update') {
         $delivery_id   = $_POST['delivery_id'] ?? '';
-        $route         = $_POST['route'] ?? '';
-        $pieces        = $_POST['pieces'] ?? '';
-        $stock         = $_POST['stock'] ?? '';
-        $delivery_date = $_POST['delivery_date'] ?? '';
+        $driver_id     = $_POST['driver_id'] ?? '';
+        $route         = trim($_POST['route'] ?? '');
+        $pieces        = trim($_POST['pieces'] ?? '');
+        $stock         = trim($_POST['stock'] ?? '');
+        $delivery_date = trim($_POST['delivery_date'] ?? '');
 
-        if (!empty($delivery_id)) {
-            $stmt = $conn->prepare("UPDATE delivery SET route = ?, pieces = ?, stock = ?, delivery_date = ? WHERE delivery_id = ?");
-            $stmt->bind_param("sssss", $route, $pieces, $stock, $delivery_date, $delivery_id);
+        if (empty($driver_id)) {
+            $errors['driver_id'] = "Please select a driver.";
+        } else if (!isDriverPresentToday($conn, $driver_id)) {
+            $errors['driver_id'] = "Selected driver is not timed in / present today or has already timed out.";
+        }
+
+        if (!empty($delivery_id) && empty($errors)) {
+            $stmt = $conn->prepare("UPDATE delivery SET route = ?, pieces = ?, stock = ?, driver_id = ?, delivery_date = ? WHERE delivery_id = ?");
+            $stmt->bind_param("ssssss", $route, $pieces, $stock, $driver_id, $delivery_date, $delivery_id);
 
             if ($stmt->execute()) {
                 $message = "Delivery record updated successfully.";
@@ -133,66 +172,116 @@ if ($module === 'delivery') {
         }
     }
 
-    // --- UPDATE STATUS TO DELIVERED ---
-    if (isset($_POST['mark_delivered'])) {
-        $delivery_id = $_POST['idno'] ?? '';
+    // --- CONFIRM DELIVERY ---
+    if (($_POST['mark_delivered'] ?? '') === '1') {
+        $delivery_id = filter_var($_POST['idno'] ?? '', FILTER_VALIDATE_INT);
+        $current_user_id = $_SESSION['id'] ?? $_SESSION['user_id'] ?? null;
 
-        if (!empty($delivery_id)) {
-            $stmt = $conn->prepare("UPDATE delivery SET status = 'Delivered' WHERE delivery_id = ?");
-            $stmt->bind_param("s", $delivery_id);
+        if ($delivery_id && $current_user_id !== null) {
+            $stmt = $conn->prepare("UPDATE delivery SET status = 'Delivered' WHERE delivery_id = ? AND driver_id = ? AND (status != 'Delivered' OR status IS NULL)");
+            $stmt->bind_param("ii", $delivery_id, $current_user_id);
             $stmt->execute();
             $stmt->close();
         }
-        
-        $redirect_page = ($_SESSION['role'] === 'log') ? 'logistic.php' : 'delivery_main.php';
-        header("Location: $redirect_page");
-        exit();
     }
 
-    // --- FETCH PENDING DELIVERIES ---
-    $sql_pending = "SELECT d.delivery_id, d.route, d.pieces, d.stock, d.delivery_date, d.status, 
-                           p.product_name, p.product_status 
-                    FROM delivery d 
-                    LEFT JOIN production p ON d.stock = p.Stock_number 
-                    WHERE d.status != 'Delivered' OR d.status IS NULL
-                    GROUP BY d.delivery_id
-                    ORDER BY d.delivery_id DESC";
+    // -----------------------------------------------------------------
+    // ACCOUNT-LEVEL DATA ISOLATION (FETCH PENDING & HISTORY DELIVERIES)
+    // -----------------------------------------------------------------
+    
+    // Kunin ang Role at User ID mula sa active session
+    $current_role    = $_SESSION['role'] ?? '';
+    $current_user_id = $_SESSION['id'] ?? $_SESSION['user_id'] ?? null; 
 
-    $res_pending = mysqli_query($conn, $sql_pending);
-    if ($res_pending && mysqli_num_rows($res_pending) > 0) {
-        while ($row = mysqli_fetch_assoc($res_pending)) {
+    // --- FETCH PENDING DELIVERIES ---
+    if ($current_role === 'super') {
+        // PAG SUPERVISOR: Nakikita lahat ng delivery ng kahit sinong driver
+        $sql_pending = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.delivery_date, d.status, 
+                               p.product_name, p.product_status,
+                               u.name AS driver_name
+                        FROM delivery d 
+                        LEFT JOIN production p ON d.production_id = p.production_id 
+                        LEFT JOIN users u ON d.driver_id = u.id
+                        WHERE d.status != 'Delivered' OR d.status IS NULL
+                        GROUP BY d.delivery_id
+                        ORDER BY d.delivery_id DESC";
+        $stmt_pending = $conn->prepare($sql_pending);
+    } else {
+        // PAG DRIVER / LOGISTICS ('log'): ACCOUNT-LEVEL FILTERING
+        // I-filter gamit ang d.driver_id = ? para KANYANG ACCOUNT LANG ANG LUMABAS
+        $sql_pending = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.delivery_date, d.status, 
+                               p.product_name, p.product_status,
+                               u.name AS driver_name
+                        FROM delivery d 
+                        LEFT JOIN production p ON d.production_id = p.production_id 
+                        LEFT JOIN users u ON d.driver_id = u.id
+                        WHERE (d.status != 'Delivered' OR d.status IS NULL)
+                          AND d.driver_id = ?
+                        GROUP BY d.delivery_id
+                        ORDER BY d.delivery_id DESC";
+        $stmt_pending = $conn->prepare($sql_pending);
+        $stmt_pending->bind_param("i", $current_user_id);
+    }
+
+    if ($stmt_pending->execute()) {
+        $res_pending = $stmt_pending->get_result();
+        while ($row = $res_pending->fetch_assoc()) {
             $pending_records[] = $row;
         }
     }
+    $stmt_pending->close();
+
 
     // --- FETCH DELIVERY HISTORY ---
-    $sql_history = "SELECT d.delivery_id, d.route, d.pieces, d.stock, d.delivery_date, d.status, 
-                           p.product_name, p.product_status 
-                    FROM delivery d 
-                    LEFT JOIN production p ON d.stock = p.Stock_number 
-                    WHERE d.status = 'Delivered' 
-                    GROUP BY d.delivery_id
-                    ORDER BY d.delivery_id DESC";
+    if ($current_role === 'super') {
+        // PAG SUPERVISOR: Nakikita ang buong kasaysayan ng delivery ng lahat
+        $sql_history = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.delivery_date, d.status, 
+                               p.product_name, p.product_status,
+                               u.name AS driver_name 
+                        FROM delivery d 
+                        LEFT JOIN production p ON d.production_id = p.production_id 
+                        LEFT JOIN users u ON d.driver_id = u.id
+                        WHERE d.status = 'Delivered' 
+                        GROUP BY d.delivery_id
+                        ORDER BY d.delivery_id DESC";
+        $stmt_history = $conn->prepare($sql_history);
+    } else {
+        // PAG DRIVER / LOGISTICS ('log'): ACCOUNT-LEVEL FILTERING
+        $sql_history = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.delivery_date, d.status, 
+                               p.product_name, p.product_status,
+                               u.name AS driver_name 
+                        FROM delivery d 
+                        LEFT JOIN production p ON d.production_id = p.production_id 
+                        LEFT JOIN users u ON d.driver_id = u.id
+                        WHERE d.status = 'Delivered'
+                          AND d.driver_id = ?
+                        GROUP BY d.delivery_id
+                        ORDER BY d.delivery_id DESC";
+        $stmt_history = $conn->prepare($sql_history);
+        $stmt_history->bind_param("i", $current_user_id);
+    }
 
-    $res_history = mysqli_query($conn, $sql_history);
-    if ($res_history && mysqli_num_rows($res_history) > 0) {
-        while ($row = mysqli_fetch_assoc($res_history)) {
+    if ($stmt_history->execute()) {
+        $res_history = $stmt_history->get_result();
+        while ($row = $res_history->fetch_assoc()) {
             $history_records[] = $row;
         }
     }
+    $stmt_history->close();
 
-    // --- FETCH COMPLETED PRODUCTS ---
-    $prod_query = "SELECT production_id, product_name, Stock_number, quantity, product_status   
-                   FROM production 
-                   WHERE product_status = 'product done' 
-                   AND Stock_number NOT IN (
-                       SELECT stock FROM delivery WHERE stock IS NOT NULL
-                   )";
+    
+    // --- FETCH COMPLETED PRODUCTS ONLY ('product done') ---
+    $prod_query = "SELECT p.production_id, p.product_name, p.Stock_number, p.quantity, p.product_status   
+                   FROM production p
+                   LEFT JOIN delivery d ON p.production_id = d.production_id
+                   WHERE p.product_status = 'product done' 
+                     AND d.delivery_id IS NULL";
+
     $prod_result = mysqli_query($conn, $prod_query);
     if ($prod_result) {
         $production_items = mysqli_fetch_all($prod_result, MYSQLI_ASSOC);
     }
-} 
+}
 
 // -----------------------------------------------------
 // 3. Module: FACTORY (PRODUCTION)

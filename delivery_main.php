@@ -94,6 +94,10 @@ $status_message   = "";
             color: #495057;
             font-weight: bold;
         }
+        .driver-tag {
+            color: #0d6efd;
+            font-weight: 600;
+        }
     </style>
 </head>
 
@@ -158,6 +162,7 @@ $status_message   = "";
                                     <th>Delivery ID</th>
                                     <th>Product Name</th>
                                     <th>Product Status</th>
+                                    <th>Assigned Driver</th>
                                     <th>Destination</th>
                                     <th>Quantity</th>
                                     <th>Stock Number</th>
@@ -177,6 +182,9 @@ $status_message   = "";
                                                 <?= htmlspecialchars(!empty($row['product_status']) ? $row['product_status'] : 'In Production'); ?>
                                             </span>
                                         </td>
+                                        <td class="driver-tag">
+                                            <?= htmlspecialchars($row['driver_name'] ?? 'Unassigned'); ?>
+                                        </td>
                                         <td><?= htmlspecialchars($row['route']); ?></td>
                                         <td><?= htmlspecialchars($row['pieces']); ?></td>
                                         <td><?= htmlspecialchars($row['stock']); ?></td>
@@ -191,7 +199,7 @@ $status_message   = "";
                                                 <input type="hidden" name="idno" value="<?= htmlspecialchars($row['delivery_id']); ?>">
 
                                                 <button type="button" class="edit-btn" 
-                                                    onclick="openEditDeliveryModal('<?= htmlspecialchars($row['delivery_id']); ?>', '<?= htmlspecialchars($row['route']); ?>', '<?= htmlspecialchars($row['pieces']); ?>', '<?= htmlspecialchars($row['stock']); ?>', '<?= htmlspecialchars($row['delivery_date']); ?>')">
+                                                    onclick="openEditDeliveryModal('<?= htmlspecialchars($row['delivery_id']); ?>', '<?= htmlspecialchars($row['route']); ?>', '<?= htmlspecialchars($row['pieces']); ?>', '<?= htmlspecialchars($row['stock']); ?>', '<?= htmlspecialchars($row['delivery_date']); ?>', '<?= htmlspecialchars($row['driver_id'] ?? ''); ?>')">
                                                     Update
                                                 </button>
 
@@ -222,6 +230,7 @@ $status_message   = "";
                                     <th>Delivery ID</th>
                                     <th>Product Name</th>
                                     <th>Product Status</th>
+                                    <th>Assigned Driver</th>
                                     <th>Destination</th>
                                     <th>Quantity</th>
                                     <th>Stock Number</th>
@@ -240,6 +249,9 @@ $status_message   = "";
                                             <span class="prod-status-tag">
                                                 <?= htmlspecialchars(!empty($row['product_status']) ? $row['product_status'] : 'product done'); ?>
                                             </span>
+                                        </td>
+                                        <td class="driver-tag">
+                                            <?= htmlspecialchars($row['driver_name'] ?? 'N/A'); ?>
                                         </td>
                                         <td><?= htmlspecialchars($row['route']); ?></td>
                                         <td><?= htmlspecialchars($row['pieces']); ?></td>
@@ -303,6 +315,25 @@ $status_message   = "";
             </div>
 
             <div class="form-group">
+                <label for="driver_id">Assign to Active Driver (Timed In Today):</label>
+                <select name="driver_id" id="driver_id" required>
+                    <option value="">-- Select Driver --</option>
+                    <?php if (!empty($present_drivers)): ?>
+                        <?php foreach ($present_drivers as $drv): ?>
+                            <option value="<?= htmlspecialchars($drv['id']); ?>">
+                                <?= htmlspecialchars($drv['name']); ?> (Present)
+                            </option>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <option value="" disabled>❌ No drivers are currently timed in today</option>
+                    <?php endif; ?>
+                </select>
+                <?php if (isset($errors['driver_id'])): ?>
+                    <div class="error-message"><?= htmlspecialchars($errors['driver_id']); ?></div>
+                <?php endif; ?>
+            </div>
+
+            <div class="form-group">
                 <label for="route">Destination (Route):</label>
                 <input type="text" id="route" name="route" value="<?= htmlspecialchars($_POST['route'] ?? ''); ?>" required>
                 <?php if (isset($errors['route'])): ?>
@@ -335,6 +366,22 @@ $status_message   = "";
             <input type="hidden" name="action" value="update">
             <input type="hidden" name="module" value="delivery">
             <input type="hidden" id="edit_delivery_id" name="delivery_id">
+
+            <div class="form-group">
+                <label for="edit_driver_id">Reassign Driver:</label>
+                <select name="driver_id" id="edit_driver_id" required>
+                    <option value="">-- Select Driver --</option>
+                    <?php if (!empty($present_drivers)): ?>
+                        <?php foreach ($present_drivers as $drv): ?>
+                            <option value="<?= htmlspecialchars($drv['id']); ?>">
+                                <?= htmlspecialchars($drv['name']); ?> (Present)
+                            </option>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <option value="" disabled>❌ No active drivers present today</option>
+                    <?php endif; ?>
+                </select>
+            </div>
 
             <div class="form-group">
                 <label>Destination (Route):</label>
@@ -373,12 +420,16 @@ function closeDeliveryModal() {
     document.getElementById("deliveryModal").style.display = "none";
 }
 
-function openEditDeliveryModal(id, route, pieces, stock, date) {
+function openEditDeliveryModal(id, route, pieces, stock, date, driverId) {
     document.getElementById("edit_delivery_id").value = id;
     document.getElementById("edit_route").value = route;
     document.getElementById("edit_pieces").value = pieces;
     document.getElementById("edit_stock").value = stock;
     document.getElementById("edit_delivery_date").value = date;
+    
+    if (driverId) {
+        document.getElementById("edit_driver_id").value = driverId;
+    }
     
     document.getElementById("editDeliveryModal").style.display = "block";
 }

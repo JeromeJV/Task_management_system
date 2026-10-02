@@ -90,7 +90,7 @@ if ($attRow = $attRes->fetch_assoc()) {
         echo json_encode(['status' => 'success', 'message' => "Successfully recorded {$action_type} for {$username}!"]);
     } else {
         echo json_encode(['status' => 'error', 'message' => 'Failed to update attendance.']);
-    }
+    }   
 } else {
     // Insert new attendance record
     $insertQuery = $conn->prepare("INSERT INTO attendance (employee_id, user_id, username, attendance_date, {$action_type}, status) VALUES (?, ?, ?, ?, ?, 'Present')");

@@ -3,7 +3,7 @@ session_start();
 date_default_timezone_set('Asia/Manila');
 include 'config/connection.php';
 
-// Fetch users with employee detailss
+// Fetch users with employee details
 $query = "
     SELECT 
         u.id AS user_id,
@@ -52,25 +52,17 @@ $employees = $conn->query($query);
 
     <div class="form-group">
         <label for="employee_id">Choose Employee / System Account:</label>
-        <select id="employee_id" required>
+        <select name="employee_id" id="employee_id" class="form-control">
             <option value="">-- Select Employee --</option>
             <?php
-            if ($employees && $employees->num_rows > 0) {
-                while ($emp = $employees->fetch_assoc()) {
-                    // Gamitin ang employee_id kung mayroon, o user_id bilang fallback
-                    $targetId = !empty($emp['employee_id']) ? $emp['employee_id'] : "USER_" . $emp['user_id'];
-                    $displayName = $emp['user_name'];
-                    
-                    $roleOrPos = "";
-                    if (!empty($emp['position'])) {
-                        $roleOrPos = " - " . $emp['position'];
-                    } elseif (!empty($emp['user_role'])) {
-                        $roleOrPos = " - " . $emp['user_role'];
-                    }
-
-                    echo "<option value='" . htmlspecialchars($targetId) . "'>" 
-                            . htmlspecialchars($displayName . $roleOrPos) 
-                        . "</option>";
+            // Isinama ang 'position' sa SELECT query
+            $empList = mysqli_query($conn, "SELECT employee_id, username, position FROM employee ORDER BY username ASC");
+            if ($empList && mysqli_num_rows($empList) > 0) {
+                while ($emp = mysqli_fetch_assoc($empList)) {
+                    $posText = !empty($emp['position']) ? $emp['position'] : 'No Position';
+                    echo "<option value='" . htmlspecialchars($emp['employee_id']) . "' data-position='" . htmlspecialchars($posText) . "'>";
+                    echo htmlspecialchars($emp['username']) . " (" . htmlspecialchars($posText) . " - ID: " . htmlspecialchars($emp['employee_id']) . ")";
+                    echo "</option>";
                 }
             }
             ?>
@@ -99,7 +91,8 @@ $employees = $conn->query($query);
     updateClock();
 
     function recordAttendance(actionType) {
-        const employeeId = document.getElementById('employee_id').value;
+        const selectElement = document.getElementById('employee_id');
+        const employeeId = selectElement.value;
         const alertMsg = document.getElementById('alert-msg');
 
         if (!employeeId) {
@@ -108,9 +101,14 @@ $employees = $conn->query($query);
             return;
         }
 
+        // Kunin ang position mula sa napiling option
+        const selectedOption = selectElement.options[selectElement.selectedIndex];
+        const position = selectedOption.getAttribute('data-position') || '';
+
         const formData = new FormData();
         formData.append('employee_id', employeeId);
         formData.append('action_type', actionType);
+        formData.append('position', position); // Isinama ang position sa request
 
         fetch('config/attendance_API.php', {
             method: 'POST',

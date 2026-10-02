@@ -41,11 +41,10 @@ $totalLate    = 0;
 $totalAbsent  = 0;
 
 // =========================================================
-// FETCH ATTENDANCE WITH USER DETAILS (JOIN USERS & EMPLOYEE)
+// FETCH ATTENDANCE WITH USER & EMPLOYEE DETAILS
 // =========================================================
-// Ginamitan ng LEFT JOIN sa `users` (base sa email o user_id/employee relation)
 if (!empty($selectedDate)) {
-    $stmt =$conn->prepare("
+    $stmt = $conn->prepare("
         SELECT 
             a.attendance_id, 
             a.employee_id, 
@@ -56,17 +55,17 @@ if (!empty($selectedDate)) {
             a.time_out_2, 
             a.status,
             COALESCE(u.name, e.username, a.username, 'N/A') AS display_name,
-            u.email AS user_email,
-            u.role AS user_role
+            COALESCE(u.email, e.email, '') AS user_email,
+            COALESCE(u.role, e.position, 'N/A') AS user_role
         FROM attendance a
         LEFT JOIN employee e ON a.employee_id = e.employee_id
         LEFT JOIN users u ON a.user_id = u.id OR e.username = u.name
         WHERE a.attendance_date = ? 
         ORDER BY a.attendance_id DESC
     ");
-    $stmt->bind_param('s',$selectedDate);
+    $stmt->bind_param('s', $selectedDate);
 } else {
-    $stmt =$conn->prepare("
+    $stmt = $conn->prepare("
         SELECT 
             a.attendance_id, 
             a.employee_id, 
@@ -77,8 +76,8 @@ if (!empty($selectedDate)) {
             a.time_out_2, 
             a.status,
             COALESCE(u.name, e.username, a.username, 'N/A') AS display_name,
-            u.email AS user_email,
-            u.role AS user_role
+            COALESCE(u.email, e.email, '') AS user_email,
+            COALESCE(u.role, e.position, 'N/A') AS user_role
         FROM attendance a
         LEFT JOIN employee e ON a.employee_id = e.employee_id
         LEFT JOIN users u ON a.user_id = u.id OR e.username = u.name

@@ -1,8 +1,9 @@
 <?php
 // -----------------------------------------------------
-//                      Insert
+//                      Insert Applicant
 // -----------------------------------------------------
 include('config/connection.php');
+
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
@@ -241,21 +242,21 @@ if (isset($_POST['update_submit'])) {
 }
 
 // -----------------------------------------------------
-//          Save / Update Interview Schedule
+//          Save / Update Interview Schedule & Auto-Hire
 // -----------------------------------------------------
 
 if (isset($_POST['save_interview'])) {
     $applicant_id   = $_POST['applicant_id'] ?? '';
     $interview_type = $_POST['interview_type'] ?? '';
     $interview_mode = $_POST['interview_mode'] ?? '';
-    $status         = $_POST['status'] ?? '';
+    $status         = $_POST['status'] ?? ''; // e.g., 'Hired', 'Passed', 'Pending'
     $interview_date = $_POST['interview_date'] ?? '';
     
-    // Kunin ang username at email mula sa modal submission
     $username       = $_POST['username'] ?? 'Applicant';
     $email          = $_POST['email'] ?? '';
 
     if (!empty($applicant_id) && !empty($interview_date)) {
+        // Step 1: I-update ang interview details sa applicant table
         $stmt = $conn->prepare("UPDATE applicant SET 
             interview_type = ?, 
             interview_mode = ?, 
@@ -267,13 +268,49 @@ if (isset($_POST['save_interview'])) {
             $stmt->bind_param("ssssi", $interview_type, $interview_mode, $status, $interview_date, $applicant_id);
 
             if ($stmt->execute()) {
-                
-                // Magpadala ng email notification sa applicant
+                $stmt->close();
+
+                // Step 2: KONEKSIYON SA EMPLOYEE TABLE (Auto-Hire Transfer)
+                $normalized_status = strtolower(trim($status));
+                if (in_array($normalized_status, ['hired', 'passed'])) {
+                    
+                    // Kunin ang kumpletong detalye ng applicant
+                    $fetch_stmt = $conn->prepare("SELECT * FROM applicant WHERE applicant_id = ?");
+                    $fetch_stmt->bind_param("i", $applicant_id);
+                    $fetch_stmt->execute();
+                    $app_data = $fetch_stmt->get_result()->fetch_assoc();
+                    $fetch_stmt->close();
+
+                    if ($app_data) {
+                        $full_name    = trim(($app_data['firstname'] ?? '') . ' ' . ($app_data['lastname'] ?? ''));
+                        $app_email    = $app_data['email'] ?? '';
+                        $app_contact  = $app_data['contact_number'] ?? '';
+                        $app_position = !empty($app_data['position_applied']) ? $app_data['position_applied'] : ($app_data['position'] ?? 'New Hire');
+                        $full_address = trim(($app_data['house_number'] ?? '') . ' ' . ($app_data['street'] ?? '') . ' ' . ($app_data['barangay'] ?? '') . ' ' . ($app_data['city'] ?? ''));
+                        $department   = 'General'; // Default Department
+
+                        // I-insert sa employee table (o i-update kung umiiral na)
+                        $emp_stmt = $conn->prepare("INSERT INTO employee (username, department, position, contact_number, address, email) 
+                            VALUES (?, ?, ?, ?, ?, ?) 
+                            ON DUPLICATE KEY UPDATE 
+                            department = VALUES(department), 
+                            position = VALUES(position), 
+                            contact_number = VALUES(contact_number), 
+                            address = VALUES(address)");
+                            
+                        if ($emp_stmt) {
+                            $emp_stmt->bind_param("ssssss", $full_name, $department, $app_position, $app_contact, $full_address, $app_email);
+                            $emp_stmt->execute();
+                            $emp_stmt->close();
+                        }
+                    }
+                }
+
+                // Step 3: Magpadala ng Email Notification
                 if (!empty($email)) {
                     $formatted_date = date("F j, Y - g:i A", strtotime($interview_date));
                     $subject = "Interview Schedule Notice - " . $interview_type;
                     $body = "
-
                         <h3>Magandang araw, {$username}!</h3>
                         <p>Thank you for applying at Ginga! We reviewed your application and we'd love to invite you for an interview.:</p>
                         <ul>
@@ -285,18 +322,17 @@ if (isset($_POST['save_interview'])) {
                         <p>Salamat at mag-ingat!</p>
                     ";
 
-                    // DIREKTANG PHPMAILER CODE (Pinalitan ang sendEmail):
                     $mail = new PHPMailer(true);
                     try {
                         $mail->isSMTP();
                         $mail->Host       = 'smtp.gmail.com';
                         $mail->SMTPAuth   = true;
-                        $mail->Username   = 'tasktrack74@gmail.com';       // <-- PALITAN NG GMAIL MO
-                        $mail->Password   = 'wukj ciyu ihsm xpqt';     // <-- PALITAN NG GMAIL APP PASSWORD MO
+                        $mail->Username   = 'tasktrack74@gmail.com';
+                        $mail->Password   = 'wukj ciyu ihsm xpqt';
                         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
                         $mail->Port       = 587;
 
-                        $mail->setFrom('tasktrack74@gmail.com', 'HR Team'); // <-- PALITAN NG GMAIL MO
+                        $mail->setFrom('tasktrack74@gmail.com', 'HR Team');
                         $mail->addAddress($email, $username);
     
                         $mail->isHTML(true);
@@ -305,18 +341,18 @@ if (isset($_POST['save_interview'])) {
 
                         $mail->send();
                     } catch (Exception $e) {
-                        // Iniiwasan nito na mag-crash ang page sakaling mag-fail ang connection sa mailer
+                        // Iwas crash kung mag-fail ang mailer
                     }
                 }
 
                 echo "<script>
-                        alert('Interview schedule successfully updated and email sent!');
-                        window.location.href = 'appli_form.php';
+                        alert('Interview schedule updated! If status is Hired/Passed, applicant was transferred to Employee records.');
+                        window.location.href = 'interview_sched.php';
                       </script>";
+                exit();
             } else {
                 echo "Execution Error: " . htmlspecialchars($stmt->error);
             }
-            $stmt->close();
         } else {
             echo "Prepare Error: " . htmlspecialchars($conn->error);
         }
@@ -324,19 +360,17 @@ if (isset($_POST['save_interview'])) {
         echo "<script>alert('Please complete the interview details!');</script>";
     }
 }
+
 // -----------------------------------------------------
 //                 View & Filter Logic
 // -----------------------------------------------------
 
 $selected_status = isset($_GET['interview_status']) ? $_GET['interview_status'] : 'all';
 
-// Paghiwalayin ang filter base sa napiling dropdown status
 if ($selected_status === 'all') {
-    // Ipakita ang lahat ng WALA PANG interview schedule
     $sql = "SELECT * FROM applicant 
             WHERE (interview_date IS NULL OR interview_date = '0000-00-00 00:00:00' OR interview_date = '')";
 } else {
-    // Kapag may piniling partikular na stage sa filter dropdown
     $status_clean = mysqli_real_escape_string($conn, $selected_status);
     $sql = "SELECT * FROM applicant 
             WHERE LOWER(REPLACE(interview_type, '_', ' ')) = LOWER(REPLACE('$status_clean', '_', ' '))";
