@@ -5,7 +5,7 @@ require_once __DIR__ . '/connection.php';
 session_start();
 
 // Security Check: Ensure user is logged in
-if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'payroll') {
+if (!isset($_SESSION['email'])) {
     http_response_code(401);
     echo json_encode([
         'status' => 'error',
@@ -18,9 +18,85 @@ $method = $_SERVER['REQUEST_METHOD'];
 $action = $_REQUEST['action'] ?? ($method === 'GET' ? 'get_all' : '');
 
 // =================================================================
-// 1. GET ALL PAYROLL RECORDS OR SINGLE RECORD
+// 1. GET ALL PAYROLL RECORDS, SINGLE RECORD, OR ATTENDANCE COUNT
 // =================================================================
 if ($method === 'GET') {
+    
+    // ACTION: GET ATTENDANCE DAYS WORKED FOR A PAY PERIOD
+    if ($action === 'get_attendance') {
+        $employee_id = intval($_GET['employee_id'] ?? 0);
+        $pay_period = $_GET['pay_period'] ?? '1st Half';
+        $pay_date = $_GET['pay_date'] ?? date('Y-m-d');
+        
+        // I-parse ang Pay Date para makuha ang Target Month at Year
+        $timestamp = strtotime($pay_date);
+        if (!$timestamp) {
+            // Support para sa MM/DD/YYYY format mula sa HTML date input
+            $parts = explode('/', $pay_date);
+            if (count($parts) === 3) {
+                $timestamp = strtotime("{$parts[2]}-{$parts[0]}-{$parts[1]}");
+            }
+        }
+        
+        $target_year = $timestamp ? date('Y', $timestamp) : date('Y');
+        $target_month = $timestamp ? date('m', $timestamp) : date('m');
+
+        // Pagtukoy sa Day Range (1st Half vs 2nd Half)
+        if (strpos($pay_period, '1st') !== false || strpos($pay_period, 'Kinsenas') !== false) {
+            $start_day = 1;
+            $end_day = 15;
+        } else {
+            $start_day = 16;
+            $end_day = 31;
+        }
+
+        /*
+         * Correct Column: attendance_date
+         * Hina-handle pareho ang YYYY-MM-DD at 'Oct 01, 2026' string formats
+         */
+        $query = $conn->prepare("
+            SELECT COUNT(DISTINCT 
+                CASE 
+                    WHEN attendance_date LIKE '%-%' THEN attendance_date
+                    ELSE STR_TO_DATE(attendance_date, '%b %d, %Y')
+                END
+            ) as days_worked 
+            FROM attendance 
+            WHERE (employee_id = ? OR user_id = ?)
+              AND LOWER(status) = 'present' 
+              AND (
+                  DAY(CASE WHEN attendance_date LIKE '%-%' THEN attendance_date ELSE STR_TO_DATE(attendance_date, '%b %d, %Y') END) BETWEEN ? AND ?
+              )
+              AND MONTH(CASE WHEN attendance_date LIKE '%-%' THEN attendance_date ELSE STR_TO_DATE(attendance_date, '%b %d, %Y') END) = ?
+              AND YEAR(CASE WHEN attendance_date LIKE '%-%' THEN attendance_date ELSE STR_TO_DATE(attendance_date, '%b %d, %Y') END) = ?
+        ");
+
+        if ($query) {
+            $query->bind_param("iiiiii", $employee_id, $employee_id, $start_day, $end_day, $target_month, $target_year);
+            $query->execute();
+            $res = $query->get_result()->fetch_assoc();
+            
+            echo json_encode([
+                'status' => 'success',
+                'days_worked' => intval($res['days_worked'] ?? 0),
+                'debug' => [
+                    'employee_id' => $employee_id,
+                    'month' => $target_month,
+                    'year' => $target_year,
+                    'start_day' => $start_day,
+                    'end_day' => $end_day
+                ]
+            ]);
+        } else {
+            echo json_encode([
+                'status' => 'error',
+                'days_worked' => 0, 
+                'error' => $conn->error
+            ]);
+        }
+        exit();
+    }
+
     if ($action === 'get_all') {
         $sql = "SELECT p.*, e.tin_no, e.sss_no, e.hdmf_no, e.position, e.department, e.username 
                 FROM payroll p 

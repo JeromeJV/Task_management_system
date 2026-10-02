@@ -4,14 +4,14 @@ require_once 'config/connection.php';
 // Set Timezone sa Philippine Time
 date_default_timezone_set('Asia/Manila');
 
-$currentDate = date('Y-m-d');$currentTime = date('H:i:s');
+$currentDate = date('Y-m-d');
+$currentTime = date('H:i:s');
 
 // =========================================================
 // AUTO-MARK ABSENT TRIGGER PAGPATAK NG 5:01 PM (17:01:00)
 // =========================================================
 if ($currentTime >= '17:01:00') {
-    // Inayos ang Subquery sa pamamagitan ng pagdagdag ng "FROM attendance"
-    $autoAbsentStmt =$conn->prepare("
+    $autoAbsentStmt = $conn->prepare("
         INSERT INTO attendance (employee_id, username, attendance_date, status)
         SELECT 
             e.employee_id, 
@@ -25,15 +25,19 @@ if ($currentTime >= '17:01:00') {
             WHERE attendance_date = ?
         )
     ");
-    if ($autoAbsentStmt) {$autoAbsentStmt->bind_param('ss', $currentDate,$currentDate);
-        $autoAbsentStmt->execute();$autoAbsentStmt->close();
+    if ($autoAbsentStmt) {
+        $autoAbsentStmt->bind_param('ss', $currentDate, $currentDate);
+        $autoAbsentStmt->execute();
+        $autoAbsentStmt->close();
     }
 }
 
-// Get selected date from GET parameter if provided
+// Get GET parameters
 $selectedDate = isset($_GET['date']) ? trim($_GET['date']) : '';
+$searchName   = isset($_GET['search']) ? trim($_GET['search']) : '';
 
-$records = [];$count = 0;
+$records = [];
+$count = 0;
 
 // Counter variables for summary cards
 $totalPresent = 0;
@@ -41,78 +45,89 @@ $totalLate    = 0;
 $totalAbsent  = 0;
 
 // =========================================================
-// FETCH ATTENDANCE WITH USER & EMPLOYEE DETAILS
+// FETCH ATTENDANCE WITH USER & EMPLOYEE DETAILS + SEARCH
 // =========================================================
+$query = "
+    SELECT 
+        a.attendance_id, 
+        a.employee_id, 
+        a.attendance_date, 
+        a.time_in, 
+        a.time_out, 
+        a.time_in_2, 
+        a.time_out_2, 
+        a.status,
+        COALESCE(u.name, e.username, a.username, 'N/A') AS display_name,
+        COALESCE(u.email, e.email, '') AS user_email,
+        COALESCE(u.role, e.position, 'N/A') AS user_role
+    FROM attendance a
+    LEFT JOIN employee e ON a.employee_id = e.employee_id
+    LEFT JOIN users u ON a.user_id = u.id OR e.username = u.name
+    WHERE 1=1
+";
+
+$params = [];
+$types  = "";
+
+// Date Filter
 if (!empty($selectedDate)) {
-    $stmt = $conn->prepare("
-        SELECT 
-            a.attendance_id, 
-            a.employee_id, 
-            a.attendance_date, 
-            a.time_in, 
-            a.time_out, 
-            a.time_in_2, 
-            a.time_out_2, 
-            a.status,
-            COALESCE(u.name, e.username, a.username, 'N/A') AS display_name,
-            COALESCE(u.email, e.email, '') AS user_email,
-            COALESCE(u.role, e.position, 'N/A') AS user_role
-        FROM attendance a
-        LEFT JOIN employee e ON a.employee_id = e.employee_id
-        LEFT JOIN users u ON a.user_id = u.id OR e.username = u.name
-        WHERE a.attendance_date = ? 
-        ORDER BY a.attendance_id DESC
-    ");
-    $stmt->bind_param('s', $selectedDate);
-} else {
-    $stmt = $conn->prepare("
-        SELECT 
-            a.attendance_id, 
-            a.employee_id, 
-            a.attendance_date, 
-            a.time_in, 
-            a.time_out, 
-            a.time_in_2, 
-            a.time_out_2, 
-            a.status,
-            COALESCE(u.name, e.username, a.username, 'N/A') AS display_name,
-            COALESCE(u.email, e.email, '') AS user_email,
-            COALESCE(u.role, e.position, 'N/A') AS user_role
-        FROM attendance a
-        LEFT JOIN employee e ON a.employee_id = e.employee_id
-        LEFT JOIN users u ON a.user_id = u.id OR e.username = u.name
-        ORDER BY a.attendance_date DESC, a.attendance_id DESC
-    ");
+    $query .= " AND a.attendance_date = ?";
+    $params[] = $selectedDate;
+    $types .= "s";
 }
 
-if ($stmt && $stmt->execute()) {$result = $stmt->get_result();$rawRecords = $result->fetch_all(MYSQLI_ASSOC);$stmt->close();
+// Name/Email Filter
+if (!empty($searchName)) {
+    $query .= " AND (u.name LIKE ? OR e.username LIKE ? OR a.username LIKE ? OR u.email LIKE ? OR e.email LIKE ?)";
+    $searchTerm = "%" . $searchName . "%";
+    $params = array_merge($params, [$searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
+    $types .= "sssss";
+}
 
-    // Process status for each record to handle NULL or empty statuses
-    foreach ($rawRecords as$rec) {
-        $st = strtolower(trim($rec['status'] ?? ''));
+$query .= " ORDER BY a.attendance_date DESC, a.attendance_id DESC";
 
-        // Kung walang status sa DB pero may Time In, i-determine base sa Time In
-        if (empty($st) && !empty($rec['time_in']) &&$rec['time_in'] !== '00:00:00') {
-            $st = (strtotime($rec['time_in']) > strtotime('08:00:00')) ? 'late' : 'present';
-        }
+$stmt = $conn->prepare($query);
 
-        $rec['display_status'] = !empty($st) ? ucfirst($st) : 'N/A';
-
-        // Increment summary counts
-        if ($st === 'present') {$totalPresent++;
-        } elseif ($st === 'late') {$totalLate++;
-        } elseif ($st === 'absent') {$totalAbsent++;
-        }
-
-        $records[] =$rec;
+if ($stmt) {
+    if (!empty($params)) {
+        $stmt->bind_param($types, ...$params);
     }
+    
+    if ($stmt->execute()) {
+        $result = $stmt->get_result();
+        $rawRecords = $result->fetch_all(MYSQLI_ASSOC);
+        $stmt->close();
 
-    $count = count($records);
+        // Process status for each record
+        foreach ($rawRecords as $rec) {
+            $st = strtolower(trim($rec['status'] ?? ''));
+
+            // Kung walang status sa DB pero may Time In
+            if (empty($st) && !empty($rec['time_in']) && $rec['time_in'] !== '00:00:00') {
+                $st = (strtotime($rec['time_in']) > strtotime('08:00:00')) ? 'late' : 'present';
+            }
+
+            $rec['display_status'] = !empty($st) ? ucfirst($st) : 'N/A';
+
+            // Increment summary counts
+            if ($st === 'present') {
+                $totalPresent++;
+            } elseif ($st === 'late') {
+                $totalLate++;
+            } elseif ($st === 'absent') {
+                $totalAbsent++;
+            }
+
+            $records[] = $rec;
+        }
+
+        $count = count($records);
+    }
 }
 
 // Helper function to format time (e.g., 08:30 AM)
 function formatTime($timeStr) {
-    return (!empty($timeStr) &&$timeStr !== '00:00:00') ? date('h:i A', strtotime($timeStr)) : '-';
+    return (!empty($timeStr) && $timeStr !== '00:00:00') ? date('h:i A', strtotime($timeStr)) : '-';
 }
 ?>
 
@@ -145,12 +160,13 @@ function formatTime($timeStr) {
             display: flex;
             align-items: center;
             gap: 10px;
+            flex-wrap: wrap;
         }
         .filter-card label {
             font-weight: bold;
             font-size: 14px;
         }
-        input[type="date"] {
+        input[type="date"], input[type="text"] {
             padding: 6px 10px;
             border: 1px solid #ccc;
             border-radius: 4px;
@@ -234,29 +250,49 @@ function formatTime($timeStr) {
         <!-- Back Button -->
         <a href="HR.php" class="btn btn-secondary">&larr; Back to HR</a>
 
-        <!-- Date Filter Form -->
+        <!-- Filter & Search Form -->
         <form method="GET" action="" class="filter-card">
-            <label for="date">Filter by Date:</label>
+            <!-- Name / Email Search -->
+            <label for="search">Search Employee:</label>
+            <input 
+                type="text" 
+                id="search" 
+                name="search" 
+                placeholder="Name or Email..."
+                value="<?= htmlspecialchars($searchName); ?>"
+            >
+
+            <!-- Date Filter -->
+            <label for="date">Date:</label>
             <input 
                 type="date" 
                 id="date" 
                 name="date" 
                 value="<?= htmlspecialchars($selectedDate); ?>" 
-                required
             >
-            <button type="submit" class="btn btn-primary">Filter</button>
+
+            <button type="submit" class="btn btn-primary">Search / Filter</button>
             
-            <?php if (!empty($selectedDate)): ?>
-                <a href="atten.php" class="btn btn-outline">Show All Records</a>
+            <?php if (!empty($selectedDate) || !empty($searchName)): ?>
+                <a href="atten.php" class="btn btn-outline">Clear Filter</a>
             <?php endif; ?>
         </form>
     </div>
 
-    <!-- Title Header -->
+    <!-- Dynamic Title Header -->
     <h2>
-        <?= !empty($selectedDate) 
-            ? 'Attendance for ' . date('F j, Y', strtotime($selectedDate)) 
-            : 'All Attendance Records'; 
+        <?php 
+            $titleParts = [];
+            if (!empty($searchName)) {
+                $titleParts[] = 'Results for "' . htmlspecialchars($searchName) . '"';
+            }
+            if (!empty($selectedDate)) {
+                $titleParts[] = 'Date: ' . date('F j, Y', strtotime($selectedDate));
+            }
+
+            echo !empty($titleParts) 
+                ? 'Attendance - ' . implode(' | ', $titleParts) 
+                : 'All Attendance Records'; 
         ?>
     </h2>
 
@@ -297,7 +333,7 @@ function formatTime($timeStr) {
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($records as$row): ?>
+                <?php foreach ($records as $row): ?>
                     <tr>
                         <td><?= htmlspecialchars($row['attendance_id']); ?></td>
                         <td>
@@ -333,7 +369,7 @@ function formatTime($timeStr) {
         </table>
     <?php else: ?>
         <p style="background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
-            No attendance records found <?= !empty($selectedDate) ? 'for this date' : ''; ?>.
+            No attendance records found.
         </p>
     <?php endif; ?>
 
