@@ -30,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         mysqli_stmt_execute($updateStmt);
 
         // Dto ung link papuntang rest-password.php
-        $resetLink = "http://localhost/Task%20system/reset-password.php?token=" . $token; 
+        $resetLink = "http://localhost/task%20management%20system/reset-pass.php?token=" . $token; 
         
         $mail = new PHPMailer(true);
 
@@ -39,8 +39,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $mail->isSMTP();
             $mail->Host       = 'smtp.gmail.com';
             $mail->SMTPAuth   = true;
-            $mail->Username   = 'harveyjeromev@gmail.com'; // Acc na ginagamit para mag send ng Verification
-            $mail->Password   = 'kuefhwhbwaulrryh';      // Pass sa Google app
+            $mail->Username   = 'tasktrack74@gmail.com'; // Acc na ginagamit para mag send ng Verification
+            $mail->Password   = 'wukj ciyu ihsm xpqt';      // Pass sa Google app
             $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
             $mail->Port       = 587;
 
@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
 
             // Sino ang nag-send at sino ang makakatanggap
-            $mail->setFrom('harveyjeromev@gmail.com', 'Task Management System'); // Gmail ng nag send
+            $mail->setFrom('tasktrack74@gmail.com', 'Task Management System'); // Gmail ng nag send
             $mail->addAddress($email); 
 
             // Eto ung formal sa gmail

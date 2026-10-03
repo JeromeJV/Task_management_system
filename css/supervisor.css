@@ -1,0 +1,1394 @@
+/* ============================================================
+   TASKTRACK — SUPERVISOR CSS
+   FULL CSS
+   CSS ONLY — NO PHP / JS CHANGES
+   ============================================================ */
+
+
+/* ============================================================
+   1. RESET & BASE
+   ============================================================ */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family: "Inter", "Segoe UI", Arial, sans-serif;
+    background: #F1F3F2;
+    color: #1E1E1E;
+    min-height: 100vh;
+}
+
+a {
+    text-decoration: none;
+    color: inherit;
+}
+
+button,
+input,
+select,
+textarea {
+    font-family: inherit;
+}
+
+
+/* ============================================================
+   2. SIDEBAR
+   ============================================================ */
+
+.sidebar {
+    width: 75px;
+    height: 100vh;
+
+    position: fixed;
+    top: 0;
+    left: 0;
+
+    background: #FFFFFF;
+
+    border-right: 1px solid #E5E7EB;
+
+    display: flex;
+    flex-direction: column;
+
+    padding: 24px 0;
+
+    overflow: hidden;
+
+    z-index: 1000;
+
+    transition:
+        width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+        box-shadow 0.35s ease;
+}
+
+
+/* Expand sidebar */
+
+.sidebar:hover {
+    width: 240px;
+
+    box-shadow:
+        6px 0 24px rgba(0, 0, 0, 0.08);
+}
+
+
+/* ============================================================
+   3. SIDEBAR HEADER
+   ============================================================ */
+
+.sidebar-header {
+    width: 100%;
+
+    display: flex;
+    align-items: center;
+
+    gap: 12px;
+
+    padding: 0 17px 20px;
+
+    border-bottom: 1px solid #E5E7EB;
+
+    margin-bottom: 20px;
+
+    white-space: nowrap;
+}
+
+
+/* ============================================================
+   TASKTRACK LOGO
+   ============================================================ */
+
+.sidebar-header .avatar {
+    width: 40px;
+    height: 40px;
+
+    min-width: 40px;
+
+    background: #1F6E4A;
+
+    border-radius: 9px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    position: relative;
+
+    overflow: hidden;
+
+    flex-shrink: 0;
+
+    font-size: 0;
+}
+
+
+/* Main T logo */
+
+.sidebar-header .avatar::before {
+    content: "T";
+
+    width: 24px;
+    height: 24px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border: 2px solid #FFFFFF;
+
+    border-radius: 6px;
+
+    color: #FFFFFF;
+
+    font-size: 14px;
+    font-weight: 700;
+
+    line-height: 1;
+}
+
+
+/* Logo small detail */
+
+.sidebar-header .avatar::after {
+    content: "";
+
+    position: absolute;
+
+    width: 6px;
+    height: 6px;
+
+    right: 7px;
+    bottom: 7px;
+
+    background: #FFFFFF;
+
+    border-radius: 2px;
+
+    opacity: 0.9;
+}
+
+
+/* ============================================================
+   SIDEBAR TEXT
+   ============================================================ */
+
+.sidebar-header .name {
+    font-size: 15px;
+
+    line-height: 20px;
+
+    font-weight: 700;
+
+    color: #111827;
+
+    opacity: 0;
+
+    transform: translateX(-10px);
+
+    transition:
+        opacity 0.25s ease,
+        transform 0.25s ease;
+}
+
+.sidebar-header .sub {
+    max-width: 160px;
+
+    font-size: 12px;
+
+    line-height: 17px;
+
+    color: #6B7280;
+
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+
+    white-space: nowrap;
+
+    opacity: 0;
+
+    transform: translateX(-10px);
+
+    transition:
+        opacity 0.25s ease,
+        transform 0.25s ease;
+}
+
+.sidebar-header .sub span {
+    color: #6B7280;
+}
+
+
+/* Show information */
+
+.sidebar:hover .sidebar-header .name,
+.sidebar:hover .sidebar-header .sub {
+    opacity: 1;
+
+    transform: translateX(0);
+}
+
+
+/* ============================================================
+   4. SIDEBAR NAVIGATION
+   ============================================================ */
+
+.sidebar-nav {
+    width: 100%;
+
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 4px;
+}
+
+
+/* ============================================================
+   NAV BUTTON
+   ============================================================ */
+
+.side-btn {
+    width: 100%;
+
+    height: 52px;
+
+    display: flex;
+
+    align-items: center;
+
+    position: relative;
+
+    padding: 0;
+
+    border: none;
+
+    border-left: 4px solid transparent;
+
+    background: transparent;
+
+    color: #6B7280;
+
+    font-size: 0;
+
+    font-weight: 500;
+
+    text-align: left;
+
+    cursor: pointer;
+
+    white-space: nowrap;
+
+    transition:
+        background 0.2s ease,
+        color 0.2s ease,
+        border-color 0.2s ease;
+}
+
+
+/* ============================================================
+   NAV ICON
+   ============================================================ */
+
+.side-btn::before {
+    width: 71px;
+
+    min-width: 71px;
+
+    height: 52px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    color: #6B7280;
+
+    font-size: 18px;
+
+    font-weight: 400;
+
+    flex-shrink: 0;
+
+    transition:
+        color 0.2s ease,
+        transform 0.2s ease;
+}
+
+
+/* ============================================================
+   DASHBOARD ICON
+   ============================================================ */
+
+#navDashboard::before {
+    content: "▦";
+}
+
+
+/* ============================================================
+   EMPLOYEE ICON
+   Existing PHP ID is navTask,
+   but visually it becomes EMPLOYEE.
+   ============================================================ */
+
+#navTask::before {
+    content: "♙";
+
+    font-size: 20px;
+}
+
+
+/* ============================================================
+   PRODUCTION ICON
+   ============================================================ */
+
+.sidebar-nav .side-btn:nth-child(3)::before {
+    content: "▤";
+
+    font-size: 18px;
+}
+
+
+/* ============================================================
+   LOGISTIC ICON
+   ============================================================ */
+
+.sidebar-nav .side-btn:nth-child(4)::before {
+    content: "▰";
+
+    font-size: 15px;
+}
+
+
+/* ============================================================
+   NAV TEXT
+   ============================================================ */
+
+.side-btn {
+    position: relative;
+}
+
+
+/*
+   Hide original text visually.
+   This lets us replace TASK with EMPLOYEE
+   without touching PHP.
+*/
+
+#navTask {
+    font-size: 0;
+}
+
+#navTask::after {
+    content: "EMPLOYEE";
+
+    font-size: 15px;
+
+    font-weight: 500;
+
+    color: inherit;
+
+    opacity: 0;
+
+    transform: translateX(-10px);
+
+    transition:
+        opacity 0.25s ease,
+        transform 0.25s ease;
+}
+
+
+/* Dashboard text */
+
+#navDashboard {
+    font-size: 0;
+}
+
+#navDashboard::after {
+    content: "DASHBOARD";
+
+    font-size: 15px;
+
+    font-weight: 500;
+
+    color: inherit;
+
+    opacity: 0;
+
+    transform: translateX(-10px);
+
+    transition:
+        opacity 0.25s ease,
+        transform 0.25s ease;
+}
+
+
+/* Production text */
+
+.sidebar-nav .side-btn:nth-child(3) {
+    font-size: 0;
+}
+
+.sidebar-nav .side-btn:nth-child(3)::after {
+    content: "PRODUCTION";
+
+    font-size: 15px;
+
+    font-weight: 500;
+
+    color: inherit;
+
+    opacity: 0;
+
+    transform: translateX(-10px);
+
+    transition:
+        opacity 0.25s ease,
+        transform 0.25s ease;
+}
+
+
+/* Logistic text */
+
+.sidebar-nav .side-btn:nth-child(4) {
+    font-size: 0;
+}
+
+.sidebar-nav .side-btn:nth-child(4)::after {
+    content: "LOGISTIC";
+
+    font-size: 15px;
+
+    font-weight: 500;
+
+    color: inherit;
+
+    opacity: 0;
+
+    transform: translateX(-10px);
+
+    transition:
+        opacity 0.25s ease,
+        transform 0.25s ease;
+}
+
+
+/* ============================================================
+   SHOW NAV LABELS ON HOVER
+   ============================================================ */
+
+.sidebar:hover #navDashboard::after,
+.sidebar:hover #navTask::after,
+.sidebar:hover .sidebar-nav .side-btn:nth-child(3)::after,
+.sidebar:hover .sidebar-nav .side-btn:nth-child(4)::after {
+    opacity: 1;
+
+    transform: translateX(0);
+}
+
+
+/* ============================================================
+   NAV LINKS
+   ============================================================ */
+
+.side-btn a {
+    position: absolute;
+
+    left: 75px;
+
+    top: 0;
+
+    height: 52px;
+
+    display: flex;
+
+    align-items: center;
+
+    width: 160px;
+
+    font-size: 15px;
+
+    font-weight: 500;
+
+    color: inherit;
+
+    white-space: nowrap;
+
+    opacity: 0;
+
+    pointer-events: none;
+
+    transition:
+        opacity 0.25s ease;
+}
+
+
+/* Show Production / Logistic link */
+
+.sidebar:hover .side-btn a {
+    opacity: 1;
+
+    pointer-events: auto;
+}
+
+
+/* Hide pseudo text for buttons that have real links */
+
+.sidebar-nav .side-btn:nth-child(3)::after,
+.sidebar-nav .side-btn:nth-child(4)::after {
+    display: none;
+}
+
+
+/* ============================================================
+   NAV HOVER
+   ============================================================ */
+
+.side-btn:hover {
+    background: #F3F4F6;
+
+    color: #111827;
+}
+
+.side-btn:hover::before {
+    color: #1F6E4A;
+}
+
+
+/* ============================================================
+   ACTIVE NAV
+   ============================================================ */
+
+.side-btn.active {
+    background: #F3F4F6;
+
+    color: #111827;
+
+    font-weight: 600;
+
+    border-left-color: #1F6E4A;
+}
+
+.side-btn.active::before {
+    color: #1F6E4A;
+}
+
+
+/* ============================================================
+   5. LOGOUT
+   ============================================================ */
+
+
+/*
+   IMPORTANT:
+   The <a> is the flex item.
+   margin-top:auto pushes it to the bottom.
+*/
+
+.sidebar > a {
+    width: 100%;
+
+    display: block;
+
+    margin-top: auto;
+
+    flex-shrink: 0;
+}
+
+
+/* Logout button */
+
+.logout-btn {
+    width: 100%;
+
+    height: 54px;
+
+    display: flex;
+
+    align-items: center;
+
+    padding: 0;
+
+    border: none;
+
+    border-top: 1px solid #E5E7EB;
+
+    background: transparent;
+
+    color: #6B7280;
+
+    font-size: 0;
+
+    text-align: left;
+
+    cursor: pointer;
+
+    white-space: nowrap;
+
+    transition:
+        background 0.2s ease,
+        color 0.2s ease;
+}
+
+
+/* Logout icon */
+
+.logout-btn::before {
+    content: "↪";
+
+    width: 71px;
+
+    min-width: 71px;
+
+    height: 54px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    font-size: 21px;
+
+    color: #6B7280;
+}
+
+
+/* Show text */
+
+.sidebar:hover .logout-btn {
+    font-size: 15px;
+}
+
+
+/* Logout hover */
+
+.logout-btn:hover {
+    background: #F3F4F6;
+
+    color: #DC2626;
+}
+
+.logout-btn:hover::before {
+    color: #DC2626;
+}
+
+
+/* ============================================================
+   6. MAIN CONTENT
+   ============================================================ */
+
+.main {
+    margin-left: 75px;
+
+    width: calc(100% - 75px);
+
+    min-height: 100vh;
+
+    padding: 24px 32px;
+
+    transition:
+        margin-left 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+        width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+
+/* ============================================================
+   7. TOPBAR
+   ============================================================ */
+
+.topbar {
+    min-height: 52px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    margin-bottom: 24px;
+
+    border-bottom: 1px solid #E5E7EB;
+}
+
+.topbar h1 {
+    font-size: 26px;
+
+    line-height: 1.2;
+
+    font-weight: 700;
+
+    color: #111827;
+
+    letter-spacing: -0.4px;
+}
+
+
+/* ============================================================
+   8. CONTENT
+   ============================================================ */
+
+.content {
+    width: 100%;
+
+    max-width: 1500px;
+
+    margin: 0 auto;
+}
+
+
+/* ============================================================
+   9. PAGE
+   ============================================================ */
+
+.page {
+    width: 100%;
+}
+
+.page.active {
+    display: block;
+}
+
+
+/* ============================================================
+   10. DASHBOARD STATISTICS
+   ============================================================ */
+
+.stat-row {
+    width: 100%;
+
+    display: grid;
+
+    grid-template-columns: repeat(3, 1fr);
+
+    gap: 16px;
+
+    margin-bottom: 20px;
+}
+
+.stat-card {
+    min-height: 145px;
+
+    background: #FFFFFF;
+
+    border-radius: 14px;
+
+    padding: 22px;
+
+    border: 1px solid #F0F1F1;
+
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.03);
+
+    position: relative;
+
+    overflow: hidden;
+
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+
+    box-shadow:
+        0 8px 20px rgba(0, 0, 0, 0.06);
+}
+
+
+/* Top color line */
+
+.stat-card::before {
+    content: "";
+
+    position: absolute;
+
+    top: 0;
+    left: 0;
+
+    width: 100%;
+    height: 3px;
+
+    background: #1F6E4A;
+}
+
+
+/* Completed */
+
+.stat-card:nth-child(1)::before {
+    background: #1F6E4A;
+}
+
+
+/* Pending */
+
+.stat-card:nth-child(2)::before {
+    background: #D97706;
+}
+
+
+/* Overdue */
+
+.stat-card:nth-child(3)::before {
+    background: #DC2626;
+}
+
+
+/* Number */
+
+.stat-card .num {
+    font-size: 32px;
+
+    line-height: 1;
+
+    font-weight: 700;
+
+    color: #111827;
+
+    margin-bottom: 12px;
+}
+
+
+/* Label */
+
+.stat-card .label {
+    font-size: 12px;
+
+    font-weight: 600;
+
+    color: #6B7280;
+
+    letter-spacing: 0.5px;
+}
+
+
+/* ============================================================
+   11. DASHBOARD CHART
+   ============================================================ */
+
+.dash-lower {
+    width: 100%;
+}
+
+.chart-panel {
+    width: 100%;
+
+    min-height: 400px;
+
+    background: #FFFFFF;
+
+    border-radius: 14px;
+
+    padding: 22px;
+
+    border: 1px solid #F0F1F1;
+
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.chart-panel h3 {
+    font-size: 15px;
+
+    font-weight: 600;
+
+    color: #111827;
+
+    margin-bottom: 20px;
+}
+
+.chart-panel canvas {
+    max-width: 100%;
+}
+
+
+/* ============================================================
+   12. TASK PAGE
+   ============================================================ */
+
+.section-title {
+    font-size: 24px;
+
+    font-weight: 700;
+
+    color: #111827;
+
+    margin-bottom: 18px;
+}
+
+.green-table-panel {
+    width: 100%;
+
+    background: #FFFFFF;
+
+    border-radius: 14px;
+
+    padding: 22px;
+
+    overflow-x: auto;
+
+    border: 1px solid #F0F1F1;
+
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+
+/* ============================================================
+   13. TABLE
+   ============================================================ */
+
+.green-table {
+    width: 100%;
+
+    border-collapse: collapse;
+
+    font-size: 13px;
+}
+
+.green-table thead th {
+    text-align: left;
+
+    padding: 13px 12px;
+
+    color: #374151;
+
+    font-size: 11px;
+
+    font-weight: 600;
+
+    text-transform: uppercase;
+
+    letter-spacing: 0.4px;
+
+    border-bottom: 1px solid #E5E7EB;
+}
+
+.green-table tbody td {
+    padding: 14px 12px;
+
+    color: #4B5563;
+
+    border-bottom: 1px solid #F3F4F6;
+
+    font-size: 13px;
+}
+
+.green-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.green-table tbody tr:hover {
+    background: #FAFAFA;
+}
+
+
+/* ============================================================
+   14. EMPLOYEE PAGE
+   ============================================================ */
+
+.employee-layout {
+    display: grid;
+
+    grid-template-columns: 300px 1fr;
+
+    gap: 20px;
+}
+
+.employee-list {
+    background: #FFFFFF;
+
+    border-radius: 14px;
+
+    padding: 22px;
+
+    min-height: 300px;
+
+    border: 1px solid #F0F1F1;
+
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.employee-list h4 {
+    font-size: 14px;
+
+    font-weight: 600;
+
+    color: #374151;
+
+    margin-bottom: 16px;
+}
+
+.employee-detail {
+    background: #FFFFFF;
+
+    border-radius: 14px;
+
+    padding: 24px;
+
+    min-height: 300px;
+
+    border: 1px solid #F0F1F1;
+
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+
+/* ============================================================
+   15. LOGISTIC
+   ============================================================ */
+
+.assign {
+    display: inline-flex;
+
+    margin-right: 8px;
+
+    margin-bottom: 18px;
+}
+
+.assign button {
+    border: 1px solid #D1D5DB;
+
+    background: #FFFFFF;
+
+    color: #374151;
+
+    padding: 9px 16px;
+
+    border-radius: 8px;
+
+    font-size: 13px;
+
+    font-weight: 500;
+
+    cursor: pointer;
+
+    transition:
+        background 0.2s ease,
+        border-color 0.2s ease,
+        color 0.2s ease;
+}
+
+.assign button:hover {
+    background: #1F6E4A;
+
+    border-color: #1F6E4A;
+
+    color: #FFFFFF;
+}
+
+.assign button a {
+    color: inherit;
+}
+
+
+/* ============================================================
+   GREEN STAT CARD
+   ============================================================ */
+
+.stat-card.green {
+    background: #FFFFFF;
+}
+
+.stat-card.green .num {
+    color: #111827;
+}
+
+.stat-card.green .label {
+    color: #6B7280;
+}
+
+.stat-card.green .sub {
+    margin-top: 6px;
+
+    font-size: 11px;
+
+    color: #9CA3AF;
+}
+
+
+/* ============================================================
+   16. LOGISTIC INFO
+   ============================================================ */
+
+.bottom-row {
+    width: 100%;
+
+    display: grid;
+
+    grid-template-columns: 1fr 1fr;
+
+    gap: 20px;
+}
+
+.info-panel {
+    background: #FFFFFF;
+
+    border-radius: 14px;
+
+    padding: 22px;
+
+    border: 1px solid #F0F1F1;
+
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.info-panel h4 {
+    font-size: 14px;
+
+    font-weight: 600;
+
+    color: #111827;
+
+    margin-bottom: 18px;
+}
+
+.info-row {
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    padding: 11px 0;
+
+    border-bottom: 1px solid #F3F4F6;
+
+    font-size: 13px;
+
+    color: #6B7280;
+}
+
+.info-row:last-child {
+    border-bottom: none;
+}
+
+.info-row span:last-child {
+    color: #111827;
+
+    font-weight: 600;
+}
+
+
+/* ============================================================
+   17. PROGRESS BAR
+   ============================================================ */
+
+.progress-track {
+    width: 100%;
+
+    height: 8px;
+
+    margin-top: 5px;
+
+    background: #F3F4F6;
+
+    border-radius: 999px;
+
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+
+    background: #1F6E4A;
+
+    border-radius: 999px;
+}
+
+
+/* ============================================================
+   18. GENERAL CARD
+   ============================================================ */
+
+.card {
+    background: #FFFFFF;
+
+    border-radius: 14px;
+
+    padding: 22px;
+
+    border: 1px solid #F0F1F1;
+
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+
+/* ============================================================
+   19. SCROLLBAR
+   ============================================================ */
+
+::-webkit-scrollbar {
+    width: 7px;
+
+    height: 7px;
+}
+
+::-webkit-scrollbar-track {
+    background: #F1F3F2;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #C9CECB;
+
+    border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #AEB5B1;
+}
+
+
+/* ============================================================
+   20. RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 1100px) {
+
+    .stat-row {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .employee-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .bottom-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+/* ============================================================
+   TABLET / MOBILE
+   ============================================================ */
+
+@media (max-width: 768px) {
+
+    .sidebar {
+        width: 0;
+
+        padding: 24px 0;
+
+        border: none;
+    }
+
+    .sidebar:hover {
+        width: 240px;
+    }
+
+    .main {
+        margin-left: 0;
+
+        width: 100%;
+
+        padding: 18px;
+    }
+
+    .topbar h1 {
+        font-size: 22px;
+    }
+
+    .stat-row {
+        grid-template-columns: 1fr;
+    }
+
+    .chart-panel {
+        min-height: 350px;
+
+        padding: 18px;
+    }
+
+    .green-table-panel {
+        padding: 15px;
+    }
+
+    .green-table {
+        min-width: 650px;
+    }
+
+    .employee-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .bottom-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+/* ============================================================
+   SMALL MOBILE
+   ============================================================ */
+
+@media (max-width: 480px) {
+
+    .main {
+        padding: 14px;
+    }
+
+    .topbar {
+        margin-bottom: 18px;
+    }
+
+    .topbar h1 {
+        font-size: 20px;
+    }
+
+    .stat-card {
+        min-height: 125px;
+
+        padding: 18px;
+    }
+
+    .stat-card .num {
+        font-size: 28px;
+    }
+
+    .chart-panel {
+        padding: 16px;
+    }
+
+    .assign {
+        display: flex;
+
+        width: 100%;
+
+        margin-right: 0;
+    }
+
+    .assign button {
+        width: 100%;
+    }
+}
+
+
+/* ============================================================
+   21. FOCUS
+   ============================================================ */
+
+button:focus-visible,
+a:focus-visible {
+    outline: 2px solid #1F6E4A;
+
+    outline-offset: 2px;
+}
+
+
+/* ============================================================
+   END OF SUPERVISOR CSS
+   ============================================================ */

@@ -1,0 +1,291 @@
+:root {
+    --ink: #1f2a24;
+    --paper: #faf8f4;
+    --line: #d9d3c7;
+    --moss: #3c5a45;
+    --moss-light: #7a9a84;
+    --gold: #b8863f;
+    --muted: #8a8375;
+    --err: #b3413c;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+}
+
+/* ---------- HEADER / STEP BAR ---------- */
+.header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--paper);
+    border-bottom: 1px solid var(--line);
+    padding: 22px 16px 18px;
+}
+
+.steps {
+    max-width: 640px;
+    margin: 0 auto;
+    display: flex;
+    align-items: flex-start;
+}
+
+.step {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    position: relative;
+}
+
+.step .circle {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 2px solid var(--line);
+    background: #fff;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    transition: all .35s ease;
+    z-index: 2;
+}
+
+.step.active .circle,
+.step.done .circle {
+    border-color: var(--moss);
+    background: var(--moss);
+    color: #fff;
+}
+
+.step .label {
+    margin-top: 8px;
+    font-size: 12px;
+    letter-spacing: .03em;
+    color: var(--muted);
+    transition: color .35s ease;
+}
+
+.step.active .label,
+.step.done .label {
+    color: var(--moss);
+    font-weight: 600;
+}
+
+.step .connector {
+    position: absolute;
+    top: 17px;
+    left: calc(-50% + 17px);
+    width: calc(100% - 34px);
+    height: 2px;
+    background: var(--line);
+    z-index: 1;
+}
+
+.step:first-child .connector {
+    display: none;
+}
+
+.step .connector .fill {
+    height: 100%;
+    width: 0%;
+    background: var(--moss);
+    transition: width .5s ease;
+}
+
+.step.done .connector .fill,
+.step.active .connector .fill {
+    width: 100%;
+}
+
+/* ---------- FORM ---------- */
+.application-form {
+    max-width: 640px;
+    margin: 28px auto 60px;
+    padding: 0 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+}
+
+.card {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 22px 22px 26px;
+}
+
+.card>p.section-title {
+    margin: 0 0 18px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--moss);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.card>p.section-title::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--gold);
+    display: inline-block;
+}
+
+fieldset {
+    border: none;
+    margin: 0 0 16px;
+    padding: 0;
+}
+
+fieldset legend {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin-bottom: 8px;
+    padding: 0;
+}
+
+.field-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+}
+
+label {
+    display: block;
+    font-size: 13px;
+    color: var(--ink);
+    margin-bottom: 4px;
+}
+
+input,
+select {
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    background: #fff;
+    color: var(--ink);
+    transition: border-color .2s ease;
+}
+
+input:focus,
+select:focus {
+    outline: none;
+    border-color: var(--moss);
+}
+
+.field {
+    margin-bottom: 12px;
+}
+
+.single-field {
+    max-width: 320px;
+}
+
+.hint {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 3px;
+}
+
+/* ---------- RESUME / SUBMIT ---------- */
+.resume-field {
+    margin-top: 16px;
+}
+
+.resume-upload {
+    border: 1.5px dashed var(--line);
+    border-radius: 8px;
+    padding: 16px;
+    background: #fbfaf7;
+}
+
+.resume-upload input[type="file"] {
+    border: none;
+    padding: 4px 0;
+    font-size: 13px;
+}
+
+.file-name {
+    font-size: 12px;
+    color: var(--moss);
+    margin-top: 6px;
+    font-weight: 600;
+}
+
+.submit-row {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.submit-btn {
+    width: 100%;
+    padding: 13px 10px;
+    background: var(--moss);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: .03em;
+    cursor: pointer;
+    transition: background .2s ease;
+}
+
+.submit-btn:hover {
+    background: #2e4636;
+}
+
+.submit-status {
+    font-size: 13px;
+    display: none;
+}
+
+.submit-status.show {
+    display: block;
+}
+
+.submit-status.success {
+    color: var(--moss);
+    font-weight: 600;
+}
+
+.api-error {
+    color: var(--err);
+    font-size: 12px;
+    margin-top: 4px;
+    display: none;
+}
+.field.has-error .api-error {
+    display: block;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
