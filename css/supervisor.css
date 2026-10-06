@@ -1,0 +1,2505 @@
+/* ============================================================
+   TASKTRACK — SUPERVISOR CSS
+
+   FULL CSS
+
+   CSS ONLY — NO PHP / JS CHANGES
+
+   ============================================================ */
+
+
+/* ============================================================
+   1. RESET & BASE
+   ============================================================ */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family: "Inter", "Segoe UI", Arial, sans-serif;
+    background: #F1F3F2;
+    color: #1E1E1E;
+    min-height: 100vh;
+}
+
+a {
+    text-decoration: none;
+    color: inherit;
+}
+
+button,
+input,
+select,
+textarea {
+    font-family: inherit;
+}
+
+
+/* ============================================================
+   2. SIDEBAR
+   ============================================================ */
+
+.sidebar {
+    width: 75px;
+    height: 100vh;
+    position: fixed;
+    top: 0;
+    left: 0;
+    background: #FFFFFF;
+    border-right: 1px solid #E5E7EB;
+    display: flex;
+    flex-direction: column;
+    padding: 24px 0;
+    overflow: hidden;
+    z-index: 1000;
+    transition:
+        width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+        box-shadow 0.35s ease;
+}
+
+
+/* Expand sidebar */
+
+.sidebar:hover {
+    width: 240px;
+    box-shadow:
+        6px 0 24px rgba(0, 0, 0, 0.08);
+}
+
+
+/* ============================================================
+   3. SIDEBAR HEADER
+   ============================================================ */
+
+.sidebar-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 17px 20px;
+    border-bottom: 1px solid #E5E7EB;
+    margin-bottom: 20px;
+    white-space: nowrap;
+}
+
+
+/* ============================================================
+   TASKTRACK LOGO
+   ============================================================ */
+
+.sidebar-header .avatar {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    background: #1F6E4A;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+    font-size: 0;
+}
+
+
+/* Main T logo */
+
+.sidebar-header .avatar::before {
+    content: "T";
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #FFFFFF;
+    border-radius: 6px;
+    color: #FFFFFF;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+
+/* Logo small detail */
+
+.sidebar-header .avatar::after {
+    content: "";
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    right: 7px;
+    bottom: 7px;
+    background: #FFFFFF;
+    border-radius: 2px;
+    opacity: 0.9;
+}
+
+
+/* ============================================================
+   SIDEBAR TEXT
+   ============================================================ */
+
+.sidebar-header .name {
+    font-size: 15px;
+    line-height: 20px;
+    font-weight: 700;
+    color: #111827;
+    opacity: 0;
+    transform: translateX(-10px);
+    transition:
+        opacity 0.25s ease,
+        transform 0.25s ease;
+}
+
+.sidebar-header .sub {
+    max-width: 160px;
+    font-size: 12px;
+    line-height: 17px;
+    color: #6B7280;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0;
+    transform: translateX(-10px);
+    transition:
+        opacity 0.25s ease,
+        transform 0.25s ease;
+}
+
+.sidebar-header .sub span {
+    color: #6B7280;
+}
+
+
+/* Show information */
+
+.sidebar:hover .sidebar-header .name,
+.sidebar:hover .sidebar-header .sub {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+
+/* ============================================================
+   4. SIDEBAR NAVIGATION
+   ============================================================ */
+
+.sidebar-nav {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+
+/* ============================================================
+   NAV BUTTON
+   ============================================================ */
+
+.side-btn {
+    width: 100%;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    position: relative;
+    padding: 0;
+    border: none;
+    border-left: 4px solid transparent;
+    background: transparent;
+    color: #6B7280;
+    font-size: 0;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    white-space: nowrap;
+    transition:
+        background 0.2s ease,
+        color 0.2s ease,
+        border-color 0.2s ease;
+}
+
+
+/* ============================================================
+   NAV ICON
+   ============================================================ */
+
+.side-btn::before {
+    width: 71px;
+    min-width: 71px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #6B7280;
+    font-size: 18px;
+    font-weight: 400;
+    flex-shrink: 0;
+    transition:
+        color 0.2s ease,
+        transform 0.2s ease;
+}
+
+
+/* ============================================================
+   DASHBOARD ICON
+   ============================================================ */
+
+#navDashboard::before {
+    content: "▦";
+}
+
+
+/* ============================================================
+   EMPLOYEE ICON
+   ============================================================ */
+
+#navTask::before {
+    content: "♙";
+    font-size: 20px;
+}
+
+
+/* ============================================================
+   PRODUCTION ICON
+   ============================================================ */
+
+.sidebar-nav .side-btn:nth-child(3)::before {
+    content: "▤";
+    font-size: 18px;
+}
+
+
+/* ============================================================
+   LOGISTIC ICON
+   ============================================================ */
+
+.sidebar-nav .side-btn:nth-child(4)::before {
+    content: "▰";
+    font-size: 15px;
+}
+
+
+/* ============================================================
+   NAV TEXT
+   ============================================================ */
+
+.side-btn {
+    position: relative;
+}
+
+
+/*
+   Hide original text visually.
+   This lets us replace TASK with EMPLOYEE
+   without touching PHP.
+*/
+
+#navTask {
+    font-size: 0;
+}
+
+#navTask::after {
+    content: "EMPLOYEE";
+    font-size: 15px;
+    font-weight: 500;
+    color: inherit;
+    opacity: 0;
+    transform: translateX(-10px);
+    transition:
+        opacity 0.25s ease,
+        transform 0.25s ease;
+}
+
+
+/* Dashboard text */
+
+#navDashboard {
+    font-size: 0;
+}
+
+#navDashboard::after {
+    content: "DASHBOARD";
+    font-size: 15px;
+    font-weight: 500;
+    color: inherit;
+    opacity: 0;
+    transform: translateX(-10px);
+    transition:
+        opacity 0.25s ease,
+        transform 0.25s ease;
+}
+
+
+/* Production text */
+
+.sidebar-nav .side-btn:nth-child(3) {
+    font-size: 0;
+}
+
+.sidebar-nav .side-btn:nth-child(3)::after {
+    content: "PRODUCTION";
+    font-size: 15px;
+    font-weight: 500;
+    color: inherit;
+    opacity: 0;
+    transform: translateX(-10px);
+    transition:
+        opacity 0.25s ease,
+        transform 0.25s ease;
+}
+
+
+/* Logistic text */
+
+.sidebar-nav .side-btn:nth-child(4) {
+    font-size: 0;
+}
+
+.sidebar-nav .side-btn:nth-child(4)::after {
+    content: "LOGISTIC";
+    font-size: 15px;
+    font-weight: 500;
+    color: inherit;
+    opacity: 0;
+    transform: translateX(-10px);
+    transition:
+        opacity 0.25s ease,
+        transform 0.25s ease;
+}
+
+
+/* ============================================================
+   SHOW NAV LABELS ON HOVER
+   ============================================================ */
+
+.sidebar:hover #navDashboard::after,
+.sidebar:hover #navTask::after,
+.sidebar:hover .sidebar-nav .side-btn:nth-child(3)::after,
+.sidebar:hover .sidebar-nav .side-btn:nth-child(4)::after {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+
+/* ============================================================
+   NAV LINKS
+   ============================================================ */
+
+.side-btn a {
+    position: absolute;
+    left: 75px;
+    top: 0;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    width: 160px;
+    font-size: 15px;
+    font-weight: 500;
+    color: inherit;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition:
+        opacity 0.25s ease;
+}
+
+
+/* Show Production / Logistic link */
+
+.sidebar:hover .side-btn a {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+
+/* Hide pseudo text for buttons that have real links */
+
+.sidebar-nav .side-btn:nth-child(3)::after,
+.sidebar-nav .side-btn:nth-child(4)::after {
+    display: none;
+}
+
+
+/* ============================================================
+   NAV HOVER
+   ============================================================ */
+
+.side-btn:hover {
+    background: #F3F4F6;
+    color: #111827;
+}
+
+.side-btn:hover::before {
+    color: #1F6E4A;
+}
+
+
+/* ============================================================
+   ACTIVE NAV
+   ============================================================ */
+
+.side-btn.active {
+    background: #F3F4F6;
+    color: #111827;
+    font-weight: 600;
+    border-left-color: #1F6E4A;
+}
+
+.side-btn.active::before {
+    color: #1F6E4A;
+}
+
+
+/* ============================================================
+   5. LOGOUT
+   ============================================================ */
+
+.sidebar > a {
+    width: 100%;
+    display: block;
+    margin-top: auto;
+    flex-shrink: 0;
+}
+
+
+/* Logout button */
+
+.logout-btn {
+    width: 100%;
+    height: 54px;
+    display: flex;
+    align-items: center;
+    padding: 0;
+    border: none;
+    border-top: 1px solid #E5E7EB;
+    background: transparent;
+    color: #6B7280;
+    font-size: 0;
+    text-align: left;
+    cursor: pointer;
+    white-space: nowrap;
+    transition:
+        background 0.2s ease,
+        color 0.2s ease;
+}
+
+
+/* Logout icon */
+
+.logout-btn::before {
+    content: "↪";
+    width: 71px;
+    min-width: 71px;
+    height: 54px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 21px;
+    color: #6B7280;
+}
+
+
+/* Show text */
+
+.sidebar:hover .logout-btn {
+    font-size: 15px;
+}
+
+
+/* Logout hover */
+
+.logout-btn:hover {
+    background: #F3F4F6;
+    color: #DC2626;
+}
+
+.logout-btn:hover::before {
+    color: #DC2626;
+}
+
+
+/* ============================================================
+   6. MAIN CONTENT
+   ============================================================ */
+
+.main {
+    margin-left: 75px;
+    width: calc(100% - 75px);
+    min-height: 100vh;
+    padding: 24px 32px;
+    transition:
+        margin-left 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+        width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+
+/* ============================================================
+   7. TOPBAR
+   ============================================================ */
+
+.topbar {
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    border-bottom: 1px solid #E5E7EB;
+}
+
+.topbar h1 {
+    font-size: 26px;
+    line-height: 1.2;
+    font-weight: 700;
+    color: #111827;
+    letter-spacing: -0.4px;
+}
+
+
+/* ============================================================
+   8. CONTENT
+   ============================================================ */
+
+.content {
+    width: 100%;
+    max-width: 1500px;
+    margin: 0 auto;
+}
+
+
+/* ============================================================
+   9. PAGE
+   ============================================================ */
+
+.page {
+    width: 100%;
+}
+
+.page.active {
+    display: block;
+}
+
+
+/* ============================================================
+   10. DASHBOARD STATISTICS
+   ============================================================ */
+
+.stat-row {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.stat-card {
+    min-height: 145px;
+    background: #FFFFFF;
+    border-radius: 14px;
+    padding: 22px;
+    border: 1px solid #F0F1F1;
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.03);
+    position: relative;
+    overflow: hidden;
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow:
+        0 8px 20px rgba(0, 0, 0, 0.06);
+}
+
+
+/* Top color line */
+
+.stat-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: #1F6E4A;
+}
+
+
+/* Completed */
+
+.stat-card:nth-child(1)::before {
+    background: #1F6E4A;
+}
+
+
+/* Pending */
+
+.stat-card:nth-child(2)::before {
+    background: #D97706;
+}
+
+
+/* Overdue */
+
+.stat-card:nth-child(3)::before {
+    background: #DC2626;
+}
+
+
+/* Number */
+
+.stat-card .num {
+    font-size: 32px;
+    line-height: 1;
+    font-weight: 700;
+    color: #111827;
+    margin-bottom: 12px;
+}
+
+
+/* Label */
+
+.stat-card .label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #6B7280;
+    letter-spacing: 0.5px;
+}
+
+
+/* ============================================================
+   11. DASHBOARD CHART
+   ============================================================ */
+
+.dash-lower {
+    width: 100%;
+}
+
+.chart-panel {
+    width: 100%;
+    min-height: 420px;
+    background: #FFFFFF;
+    border-radius: 14px;
+    padding: 22px;
+    border: 1px solid #F0F1F1;
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.03);
+    display: flex;
+    flex-direction: column;
+}
+
+.chart-panel h3 {
+    font-size: 15px;
+    font-weight: 600;
+    color: #111827;
+    margin-bottom: 20px;
+}
+
+.chart-panel canvas {
+    width: 100% !important;
+    height: 320px !important;
+    max-width: 100%;
+    display: block;
+}
+
+
+/* ============================================================
+   12. TASK PAGE
+   ============================================================ */
+
+.section-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: #111827;
+    margin-bottom: 18px;
+}
+
+
+/* Main task table panel */
+
+.green-table-panel {
+    width: 100%;
+    background: #FFFFFF;
+    border-radius: 14px;
+    padding: 22px;
+    overflow-x: auto;
+    border: 1px solid #DDE9E2;
+    border-top: 4px solid #1F6E4A;
+    box-shadow:
+        0 3px 10px rgba(31, 110, 74, 0.06);
+}
+
+
+/* ============================================================
+   TASK PAGE HEADER ACCENT
+   ============================================================ */
+
+#page-task .section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#page-task .section-title::before {
+    content: "";
+    width: 5px;
+    height: 24px;
+    border-radius: 999px;
+    background: #1F6E4A;
+    display: inline-block;
+}
+
+
+/* ============================================================
+   13. TABLE
+   ============================================================ */
+
+.green-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 13px;
+    overflow: hidden;
+}
+
+
+/* Table header */
+
+.green-table thead th {
+    text-align: left;
+    padding: 14px 12px;
+    color: #FFFFFF;
+    background: #1F6E4A;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    border-bottom: 1px solid #17603F;
+}
+
+.green-table thead th:first-child {
+    border-top-left-radius: 8px;
+}
+
+.green-table thead th:last-child {
+    border-top-right-radius: 8px;
+}
+
+
+/* Table body */
+
+.green-table tbody td {
+    padding: 15px 12px;
+    color: #4B5563;
+    background: #FFFFFF;
+    border-bottom: 1px solid #EAF0EC;
+    font-size: 13px;
+    vertical-align: middle;
+}
+
+
+/* Last row */
+
+.green-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+
+/* Row hover */
+
+.green-table tbody tr:hover td {
+    background: #F4FAF6;
+}
+
+
+/* ============================================================
+   TASK COLUMN STYLING
+   ============================================================ */
+
+/* Employee */
+
+.green-table tbody td:nth-child(1) {
+    color: #374151;
+    font-weight: 600;
+}
+
+
+/* Task */
+
+.green-table tbody td:nth-child(2) {
+    color: #111827;
+    font-weight: 600;
+}
+
+
+/* Department */
+
+.green-table tbody td:nth-child(3) {
+    color: #1F6E4A;
+    font-weight: 600;
+}
+
+
+/* Due date */
+
+.green-table tbody td:nth-child(4) {
+    color: #6B7280;
+}
+
+
+/* Status */
+
+.green-table tbody td:nth-child(5) {
+    color: #1F6E4A;
+    font-weight: 700;
+}
+
+
+/* ============================================================
+   EMPTY TASK TABLE
+   ============================================================ */
+
+#taskBody:empty::after {
+    content: "No task records available yet.";
+    display: block;
+    padding: 30px;
+    text-align: center;
+    color: #9CA3AF;
+    font-size: 13px;
+}
+
+
+/* ============================================================
+   14. EMPLOYEE PAGE
+   ============================================================ */
+
+.employee-layout {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 20px;
+}
+
+.employee-list {
+    background: #FFFFFF;
+    border-radius: 14px;
+    padding: 22px;
+    min-height: 300px;
+    border: 1px solid #F0F1F1;
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.employee-list h4 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 16px;
+}
+
+.employee-detail {
+    background: #FFFFFF;
+    border-radius: 14px;
+    padding: 24px;
+    min-height: 300px;
+    border: 1px solid #F0F1F1;
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+
+/* ============================================================
+   15. LOGISTIC
+   ============================================================ */
+
+.assign {
+    display: inline-flex;
+    margin-right: 8px;
+    margin-bottom: 18px;
+}
+
+.assign button {
+    border: 1px solid #D1D5DB;
+    background: #FFFFFF;
+    color: #374151;
+    padding: 9px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+        background 0.2s ease,
+        border-color 0.2s ease,
+        color 0.2s ease;
+}
+
+.assign button:hover {
+    background: #1F6E4A;
+    border-color: #1F6E4A;
+    color: #FFFFFF;
+}
+
+.assign button a {
+    color: inherit;
+}
+
+
+/* ============================================================
+   GREEN STAT CARD
+   ============================================================ */
+
+.stat-card.green {
+    background: #FFFFFF;
+}
+
+.stat-card.green .num {
+    color: #111827;
+}
+
+.stat-card.green .label {
+    color: #6B7280;
+}
+
+.stat-card.green .sub {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #9CA3AF;
+}
+
+
+/* ============================================================
+   16. LOGISTIC INFO
+   ============================================================ */
+
+.bottom-row {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.info-panel {
+    background: #FFFFFF;
+    border-radius: 14px;
+    padding: 22px;
+    border: 1px solid #F0F1F1;
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.info-panel h4 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #111827;
+    margin-bottom: 18px;
+}
+
+.info-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 11px 0;
+    border-bottom: 1px solid #F3F4F6;
+    font-size: 13px;
+    color: #6B7280;
+}
+
+.info-row:last-child {
+    border-bottom: none;
+}
+
+.info-row span:last-child {
+    color: #111827;
+    font-weight: 600;
+}
+
+
+/* ============================================================
+   17. PROGRESS BAR
+   ============================================================ */
+
+.progress-track {
+    width: 100%;
+    height: 8px;
+    margin-top: 5px;
+    background: #F3F4F6;
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: #1F6E4A;
+    border-radius: 999px;
+}
+
+
+/* ============================================================
+   18. GENERAL CARD
+   ============================================================ */
+
+.card {
+    background: #FFFFFF;
+    border-radius: 14px;
+    padding: 22px;
+    border: 1px solid #F0F1F1;
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+
+/* ============================================================
+   19. SCROLLBAR
+   ============================================================ */
+
+::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+}
+
+::-webkit-scrollbar-track {
+    background: #F1F3F2;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #C9CECB;
+    border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #AEB5B1;
+}
+
+
+/* ============================================================
+   20. RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 1100px) {
+
+    .stat-row {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .employee-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .bottom-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+/* ============================================================
+   TABLET / MOBILE
+   ============================================================ */
+
+@media (max-width: 768px) {
+
+    .sidebar {
+        width: 0;
+        padding: 24px 0;
+        border: none;
+    }
+
+    .sidebar:hover {
+        width: 240px;
+    }
+
+    .main {
+        margin-left: 0;
+        width: 100%;
+        padding: 18px;
+    }
+
+    .topbar h1 {
+        font-size: 22px;
+    }
+
+    .stat-row {
+        grid-template-columns: 1fr;
+    }
+
+    .chart-panel {
+        min-height: 360px;
+        padding: 18px;
+    }
+
+    .chart-panel canvas {
+        width: 100% !important;
+        height: 280px !important;
+    }
+
+    .green-table-panel {
+        padding: 15px;
+    }
+
+    .green-table {
+        min-width: 650px;
+    }
+
+    .employee-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .bottom-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+/* ============================================================
+   SMALL MOBILE
+   ============================================================ */
+
+@media (max-width: 480px) {
+
+    .main {
+        padding: 14px;
+    }
+
+    .topbar {
+        margin-bottom: 18px;
+    }
+
+    .topbar h1 {
+        font-size: 20px;
+    }
+
+    .stat-card {
+        min-height: 125px;
+        padding: 18px;
+    }
+
+    .stat-card .num {
+        font-size: 28px;
+    }
+
+    .chart-panel {
+        padding: 16px;
+    }
+
+    .chart-panel canvas {
+        height: 260px !important;
+    }
+
+    .assign {
+        display: flex;
+        width: 100%;
+        margin-right: 0;
+    }
+
+    .assign button {
+        width: 100%;
+    }
+
+    .section-title {
+        font-size: 21px;
+    }
+}
+
+
+/* ============================================================
+   21. FOCUS
+   ============================================================ */
+
+button:focus-visible,
+a:focus-visible {
+    outline: 2px solid #1F6E4A;
+    outline-offset: 2px;
+}
+
+/* ============================================================
+   REPORTS SECTION
+   ============================================================ */
+
+.progress-report-panel {
+    width: 100%;
+    background: #FFFFFF;
+    border-radius: 14px;
+    padding: 22px;
+    margin-top: 20px;
+    border: 1px solid #F0F1F1;
+    box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.03);
+    overflow: hidden;
+}
+
+
+/* ============================================================
+   REPORT HEADER
+   ============================================================ */
+
+.progress-report-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    margin-bottom: 18px;
+}
+
+.progress-report-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: #111827;
+}
+
+.progress-report-header p {
+    margin: 4px 0 0;
+    font-size: 12px;
+    color: #6B7280;
+}
+
+
+/* ============================================================
+   LATEST REPORT TABLE WRAPPER
+   ============================================================ */
+
+.latest-report-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    border: 1px solid #E5E7EB;
+    border-radius: 10px;
+}
+
+
+/* ============================================================
+   LATEST REPORT TABLE
+   ============================================================ */
+
+.latest-report-table {
+    width: 100%;
+    min-width: 650px;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+
+/* Report table header */
+
+.latest-report-table thead th {
+    padding: 13px 14px;
+    background: #F3F7F4;
+    color: #374151;
+    border-bottom: 1px solid #DDE9E2;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    white-space: nowrap;
+}
+
+
+/* Report table body */
+
+.latest-report-table tbody td {
+    padding: 14px;
+    background: #FFFFFF;
+    color: #4B5563;
+    border-bottom: 1px solid #F0F1F1;
+    vertical-align: middle;
+}
+
+
+/* Last row */
+
+.latest-report-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+
+/* Hover */
+
+.latest-report-table tbody tr {
+    transition: background 0.15s ease;
+}
+
+.latest-report-table tbody tr:hover td {
+    background: #F7FAF8;
+}
+
+
+/* ============================================================
+   REPORT STATUS
+   ============================================================ */
+
+.latest-report-table tbody td:last-child {
+    color: #1F6E4A;
+    font-weight: 700;
+}
+
+
+/* ============================================================
+   REPORT EMPTY STATE
+   ============================================================ */
+
+.latest-report-empty {
+    width: 100%;
+    padding: 35px 20px;
+    text-align: center;
+    background: #FFFFFF;
+    color: #9CA3AF;
+    font-size: 13px;
+    border: 1px dashed #D1D5DB;
+    border-radius: 10px;
+}
+
+
+/* ============================================================
+   REPORT RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 768px) {
+
+    .progress-report-panel {
+        padding: 16px;
+        margin-top: 16px;
+    }
+
+    .progress-report-header {
+        align-items: flex-start;
+        flex-direction: column;
+        margin-bottom: 14px;
+    }
+
+    .latest-report-table-wrap {
+        border-radius: 8px;
+    }
+
+    .latest-report-table {
+        min-width: 600px;
+    }
+
+    .latest-report-table thead th {
+        padding: 11px 12px;
+    }
+
+    .latest-report-table tbody td {
+        padding: 12px;
+    }
+}
+
+
+@media (max-width: 480px) {
+
+    .progress-report-panel {
+        padding: 14px;
+    }
+
+    .progress-report-header h3 {
+        font-size: 15px;
+    }
+
+    .progress-report-header p {
+        font-size: 11px;
+    }
+
+    .latest-report-table {
+        min-width: 560px;
+    }
+}
+/* ============================================================
+   TASKTRACK — TASK + PROGRESS REPORT CSS
+   ============================================================ */
+
+
+/* ============================================================
+   TASK PAGE
+   ============================================================ */
+
+#page-task {
+    width: 100%;
+    padding-bottom: 30px;
+}
+
+
+/* TASK TITLE */
+
+.section-title {
+    position: relative;
+
+    margin: 0 0 20px 0;
+
+    padding-left: 14px;
+
+    font-size: 22px;
+    font-weight: 800;
+
+    color: #2b2b28;
+
+    letter-spacing: 0.4px;
+}
+
+
+/* GREEN LINE BESIDE TASK TITLE */
+
+.section-title::before {
+    content: "";
+
+    position: absolute;
+
+    left: 0;
+    top: 3px;
+
+    width: 5px;
+    height: 22px;
+
+    background: #8fab8a;
+
+    border-radius: 4px;
+}
+
+
+/* ============================================================
+   TASK TABLE PANEL
+   ============================================================ */
+
+.green-table-panel {
+
+    width: 100%;
+
+    background: #ffffff;
+
+    border: 1px solid #d9d9d3;
+
+    border-top: 4px solid #8fab8a;
+
+    border-radius: 12px;
+
+    overflow: hidden;
+
+    box-shadow:
+        0 4px 15px rgba(44, 71, 66, 0.08);
+
+}
+
+
+/* ============================================================
+   TASK TABLE
+   ============================================================ */
+
+.green-table {
+
+    width: 100%;
+
+    border-collapse: separate;
+    border-spacing: 0;
+
+    background: #ffffff;
+
+    font-size: 14px;
+
+}
+
+
+/* TABLE HEADER */
+
+.green-table thead th {
+
+    padding: 16px 20px;
+
+    background: #1f6e4a;
+
+    color: #ffffff;
+
+    font-size: 12px;
+
+    font-weight: 800;
+
+    text-align: left;
+
+    text-transform: uppercase;
+
+    letter-spacing: 0.5px;
+
+    border: none;
+
+}
+
+
+/* FIRST HEADER */
+
+.green-table thead th:first-child {
+    padding-left: 24px;
+}
+
+
+/* LAST HEADER */
+
+.green-table thead th:last-child {
+    padding-right: 24px;
+}
+
+
+/* ============================================================
+   TASK TABLE BODY
+   ============================================================ */
+
+.green-table tbody td {
+
+    padding: 16px 20px;
+
+    background: #ffffff;
+
+    color: #5a5a54;
+
+    border-bottom: 1px solid #eeeeea;
+
+    vertical-align: middle;
+
+}
+
+
+/* FIRST COLUMN — EMPLOYEE */
+
+.green-table tbody td:first-child {
+
+    padding-left: 24px;
+
+    color: #2b2b28;
+
+    font-weight: 700;
+
+}
+
+
+/* SECOND COLUMN — TASK */
+
+.green-table tbody td:nth-child(2) {
+
+    color: #2b2b28;
+
+    font-weight: 700;
+
+}
+
+
+/* THIRD COLUMN — DEPARTMENT */
+
+.green-table tbody td:nth-child(3) {
+
+    color: #4d795d;
+
+    font-weight: 700;
+
+}
+
+
+/* FOURTH COLUMN — DUE DATE */
+
+.green-table tbody td:nth-child(4) {
+
+    color: #66665f;
+
+    font-weight: 600;
+
+}
+
+
+/* FIFTH COLUMN — STATUS */
+
+.green-table tbody td:last-child {
+
+    padding-right: 24px;
+
+    color: #2f7d55;
+
+    font-weight: 800;
+
+}
+
+
+/* ============================================================
+   TASK ROW HOVER
+   ============================================================ */
+
+.green-table tbody tr {
+
+    transition:
+        background 0.15s ease,
+        transform 0.15s ease;
+
+}
+
+
+.green-table tbody tr:hover td {
+
+    background: #f5faf6;
+
+}
+
+
+/* ============================================================
+   EMPTY TASK TABLE
+   ============================================================ */
+
+#taskBody:empty::after {
+
+    content: "No tasks available yet.";
+
+    display: table-cell;
+
+    width: 100%;
+
+    padding: 45px 20px;
+
+    color: #8a8a83;
+
+    font-size: 14px;
+
+    text-align: center;
+
+}
+
+
+/* ============================================================
+   LATEST PROGRESS REPORTS
+   ============================================================ */
+
+.progress-report-panel {
+
+    width: 100%;
+
+    margin-top: 22px;
+
+    background: #ffffff;
+
+    border: 1px solid #d9d9d3;
+
+    border-top: 4px solid #8fab8a;
+
+    border-radius: 12px;
+
+    overflow: hidden;
+
+    box-shadow:
+        0 4px 15px rgba(44, 71, 66, 0.08);
+
+}
+
+
+/* ============================================================
+   REPORT HEADER
+   ============================================================ */
+
+.progress-report-header {
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    gap: 20px;
+
+    padding: 20px 24px;
+
+    background: #ffffff;
+
+    border-bottom: 1px solid #e4e7e2;
+
+}
+
+
+/* REPORT HEADING */
+
+.progress-report-heading {
+
+    min-width: 0;
+
+}
+
+
+.progress-report-heading h3 {
+
+    margin: 0;
+
+    color: #2b2b28;
+
+    font-size: 17px;
+
+    font-weight: 800;
+
+    letter-spacing: 0.3px;
+
+}
+
+
+.progress-report-heading p {
+
+    margin: 6px 0 0;
+
+    color: #777770;
+
+    font-size: 12px;
+
+    line-height: 1.5;
+
+}
+
+
+/* REPORT COUNT */
+
+.progress-report-count {
+
+    flex-shrink: 0;
+
+    padding: 7px 12px;
+
+    background: #edf5ef;
+
+    color: #2f7d55;
+
+    border: 1px solid #cfe1d2;
+
+    border-radius: 20px;
+
+    font-size: 11px;
+
+    font-weight: 800;
+
+    letter-spacing: 0.5px;
+
+}
+
+
+/* ============================================================
+   REPORT LIST
+   ============================================================ */
+
+.progress-report-list {
+
+    width: 100%;
+
+    padding: 4px 0;
+
+    background: #ffffff;
+
+}
+
+
+/* ============================================================
+   INDIVIDUAL REPORT
+   ============================================================ */
+
+.progress-report-item {
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 16px;
+
+    width: 100%;
+
+    padding: 17px 24px;
+
+    background: #ffffff;
+
+    border-bottom: 1px solid #eeeeea;
+
+    transition:
+        background 0.15s ease,
+        padding-left 0.15s ease;
+
+}
+
+
+.progress-report-item:last-child {
+
+    border-bottom: none;
+
+}
+
+
+.progress-report-item:hover {
+
+    background: #f7faf8;
+
+    padding-left: 28px;
+
+}
+
+
+/* ============================================================
+   REPORT ICON
+   ============================================================ */
+
+.report-icon {
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    flex-shrink: 0;
+
+    width: 44px;
+    height: 44px;
+
+    background: #eef5ef;
+
+    border: 1px solid #d6e5d8;
+
+    border-radius: 12px;
+
+    font-size: 21px;
+
+}
+
+
+/* PRODUCTION REPORT */
+
+.progress-report-item.completed .report-icon {
+
+    background: #edf7ef;
+
+    border-color: #cce3d1;
+
+}
+
+
+/* PENDING REPORT */
+
+.progress-report-item.pending .report-icon {
+
+    background: #fff7e8;
+
+    border-color: #f1dfb7;
+
+}
+
+
+/* LOGISTICS / DELIVERED REPORT */
+
+.progress-report-item.delivered .report-icon {
+
+    background: #edf7ef;
+
+    border-color: #cce3d1;
+
+}
+
+
+/* ============================================================
+   REPORT CONTENT
+   ============================================================ */
+
+.report-content {
+
+    flex: 1;
+
+    min-width: 0;
+
+}
+
+
+/* REPORT TITLE */
+
+.report-title {
+
+    margin-bottom: 6px;
+
+    color: #2b2b28;
+
+    font-size: 14px;
+
+    font-weight: 750;
+
+    line-height: 1.4;
+
+    overflow: hidden;
+
+    text-overflow: ellipsis;
+
+    white-space: nowrap;
+
+}
+
+
+/* ============================================================
+   REPORT META
+   ============================================================ */
+
+.report-meta {
+
+    display: flex;
+
+    align-items: center;
+
+    flex-wrap: wrap;
+
+    gap: 7px;
+
+    color: #777770;
+
+    font-size: 11px;
+
+    font-weight: 600;
+
+}
+
+
+/* SOURCE */
+
+.report-source {
+
+    display: inline-flex;
+
+    align-items: center;
+
+    gap: 4px;
+
+    color: #56745e;
+
+    font-weight: 800;
+
+}
+
+
+.report-source-icon {
+
+    font-size: 12px;
+
+}
+
+
+/* DOT */
+
+.report-dot {
+
+    color: #b5b5af;
+
+}
+
+
+/* STATUS */
+
+.report-status {
+
+    font-weight: 800;
+
+}
+
+
+/* COMPLETED STATUS */
+
+.report-status.completed {
+
+    color: #2f7d55;
+
+}
+
+
+/* PENDING STATUS */
+
+.report-status.pending {
+
+    color: #d17b00;
+
+}
+
+
+/* DELIVERED STATUS */
+
+.report-status.delivered {
+
+    color: #2f7d55;
+
+}
+
+
+/* ============================================================
+   REPORT PROGRESS BAR
+   ============================================================ */
+
+.report-progress {
+
+    width: 100%;
+
+    height: 5px;
+
+    margin-top: 11px;
+
+    background: #edf0ec;
+
+    border-radius: 10px;
+
+    overflow: hidden;
+
+}
+
+
+/* DEFAULT PROGRESS */
+
+.report-progress-fill {
+
+    width: 45%;
+
+    height: 100%;
+
+    border-radius: 10px;
+
+    transition: width 0.3s ease;
+
+}
+
+
+/* COMPLETED */
+
+.report-progress-fill.completed {
+
+    width: 100%;
+
+    background: #4f9b68;
+
+}
+
+
+/* PENDING */
+
+.report-progress-fill.pending {
+
+    width: 55%;
+
+    background: #e0a03a;
+
+}
+
+
+/* DELIVERED */
+
+.report-progress-fill.delivered {
+
+    width: 100%;
+
+    background: #4f9b68;
+
+}
+
+
+/* ============================================================
+   EMPTY REPORT
+   ============================================================ */
+
+.progress-report-empty {
+
+    display: flex;
+
+    flex-direction: column;
+
+    align-items: center;
+
+    justify-content: center;
+
+    min-height: 180px;
+
+    padding: 30px 20px;
+
+    text-align: center;
+
+    background: #ffffff;
+
+}
+
+
+/* EMPTY ICON */
+
+.empty-report-icon {
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    width: 48px;
+    height: 48px;
+
+    margin-bottom: 10px;
+
+    background: #f0f4f0;
+
+    border: 1px solid #dce6dc;
+
+    border-radius: 50%;
+
+    font-size: 20px;
+
+}
+
+
+/* EMPTY TITLE */
+
+.empty-report-title {
+
+    margin-bottom: 5px;
+
+    color: #3b3b36;
+
+    font-size: 14px;
+
+    font-weight: 800;
+
+}
+
+
+/* EMPTY TEXT */
+
+.empty-report-text {
+
+    max-width: 360px;
+
+    color: #8a8a83;
+
+    font-size: 12px;
+
+    line-height: 1.5;
+
+}
+
+
+/* ============================================================
+   FOCUS / ACCESSIBILITY
+   ============================================================ */
+
+.green-table button:focus,
+.progress-report-panel button:focus {
+
+    outline: 2px solid #8fab8a;
+
+    outline-offset: 2px;
+
+}
+
+
+/* ============================================================
+   RESPONSIVE — TABLET
+   ============================================================ */
+
+@media (max-width: 900px) {
+
+    .green-table {
+
+        min-width: 650px;
+
+    }
+
+    .green-table-panel {
+
+        overflow-x: auto;
+
+    }
+
+    .progress-report-header {
+
+        padding: 18px 20px;
+
+    }
+
+    .progress-report-item {
+
+        padding: 16px 20px;
+
+    }
+
+}
+
+
+/* ============================================================
+   RESPONSIVE — MOBILE
+   ============================================================ */
+
+@media (max-width: 600px) {
+
+    .section-title {
+
+        font-size: 19px;
+
+        margin-bottom: 16px;
+
+    }
+
+
+    .progress-report-header {
+
+        align-items: flex-start;
+
+        flex-direction: column;
+
+        gap: 10px;
+
+        padding: 17px;
+
+    }
+
+
+    .progress-report-count {
+
+        align-self: flex-start;
+
+    }
+
+
+    .progress-report-item {
+
+        gap: 12px;
+
+        padding: 15px 17px;
+
+    }
+
+
+    .progress-report-item:hover {
+
+        padding-left: 17px;
+
+    }
+
+
+    .report-icon {
+
+        width: 40px;
+        height: 40px;
+
+        border-radius: 10px;
+
+        font-size: 18px;
+
+    }
+
+
+    .report-title {
+
+        font-size: 13px;
+
+    }
+
+
+    .green-table {
+
+        min-width: 650px;
+
+    }
+
+}
+
+
+/* ============================================================
+   VERY SMALL SCREEN
+   ============================================================ */
+
+@media (max-width: 420px) {
+
+    .progress-report-heading h3 {
+
+        font-size: 15px;
+
+    }
+
+
+    .progress-report-heading p {
+
+        font-size: 11px;
+
+    }
+
+
+    .progress-report-item {
+
+        align-items: flex-start;
+
+    }
+
+
+    .report-icon {
+
+        width: 38px;
+        height: 38px;
+
+        font-size: 17px;
+
+    }
+
+
+    .report-meta {
+
+        font-size: 10px;
+
+    }
+
+}
+/* ============================================================
+   LATEST PROGRESS REPORTS TABLE ONLY
+   ============================================================ */
+
+.progress-report-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #ffffff;
+    font-size: 13px;
+}
+
+/* TABLE HEADER */
+
+.progress-report-table thead th {
+    padding: 14px 18px;
+    background: #f3f7f4;
+    color: #3d5658;
+    font-size: 11px;
+    font-weight: 800;
+    text-align: left;
+    border-bottom: 2px solid #d9e5dc;
+    white-space: nowrap;
+}
+
+/* TABLE BODY */
+
+.progress-report-table tbody td {
+    padding: 15px 18px;
+    background: #ffffff;
+    color: #5a5a54;
+    border-bottom: 1px solid #eeeeea;
+    text-align: left;
+}
+
+/* PRODUCT NAME */
+
+.progress-report-table tbody td:first-child {
+    color: #2b2b28;
+    font-weight: 700;
+}
+
+/* TARGET PCS */
+
+.progress-report-table tbody td:nth-child(2) {
+    font-weight: 600;
+}
+
+/* STOCK NUMBER */
+
+.progress-report-table tbody td:nth-child(3) {
+    font-weight: 600;
+}
+
+/* QUANTITY */
+
+.progress-report-table tbody td:nth-child(4) {
+    font-weight: 600;
+}
+
+/* STATUS */
+
+.progress-report-table tbody td:nth-child(5) {
+    font-weight: 700;
+}
+
+/* HOVER */
+
+.progress-report-table tbody tr:hover td {
+    background: #f7faf8;
+}
+
+/* LAST ROW */
+
+.progress-report-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* STATUS BADGE */
+
+.report-table-status {
+    display: inline-block;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+/* COMPLETED */
+
+.report-table-status.completed {
+    background: #e8f4eb;
+    color: #2f7d55;
+    border: 1px solid #c9dfcf;
+}
+
+/* PENDING */
+
+.report-table-status.pending {
+    background: #fff4df;
+    color: #c47700;
+    border: 1px solid #efd9ae;
+}
+
+/* DELIVERED */
+
+.report-table-status.delivered {
+    background: #e8f4eb;
+    color: #2f7d55;
+    border: 1px solid #c9dfcf;
+}
+/* ============================================================
+   LATEST PROGRESS REPORTS — SCROLLABLE
+   ============================================================ */
+
+.progress-report-panel {
+    width: 100%;
+    overflow: hidden;
+}
+
+.progress-report-header {
+    width: 100%;
+}
+
+/* Ito ang mismong area na mag-scroll */
+.progress-report-list {
+    width: 100%;
+    max-height: 400px;
+    overflow-y: auto;
+    overflow-x: auto;
+    padding-right: 8px;
+}
+
+/* Smooth scrollbar */
+.progress-report-list::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.progress-report-list::-webkit-scrollbar-track {
+    background: #eeeeea;
+    border-radius: 10px;
+}
+
+.progress-report-list::-webkit-scrollbar-thumb {
+    background: var(--sage);
+    border-radius: 10px;
+}
+
+.progress-report-list::-webkit-scrollbar-thumb:hover {
+    background: var(--sage-dark);
+}
+
+/* Firefox */
+.progress-report-list {
+    scrollbar-width: thin;
+    scrollbar-color: var(--sage) #eeeeea;
+}
+/* ============================================================
+   END OF SUPERVISOR CSS
+   ============================================================ */

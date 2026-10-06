@@ -1,0 +1,499 @@
+/* ============================================================
+   REGISTER / APPLICANT UI
+============================================================ */
+
+.register-toolbar {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.register-tabs {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: #E8ECEA;
+    padding: 4px;
+    border-radius: 9px;
+}
+
+.register-tab {
+    height: 38px;
+    padding: 0 17px;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: #6B7280;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.2s ease;
+}
+
+.register-tab:hover {
+    color: #1F6E4A;
+}
+
+.register-tab.active {
+    background: #FFFFFF;
+    color: #1F6E4A;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.register-search {
+    flex: 1;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 13px;
+    background: #FFFFFF;
+    border: 1px solid #E5E7EB;
+    border-radius: 9px;
+}
+
+.register-search span {
+    color: #9CA3AF;
+    font-size: 19px;
+}
+
+.register-search input {
+    width: 100%;
+    height: 100%;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: #111827;
+    font-size: 12px;
+}
+
+.register-search input::placeholder {
+    color: #9CA3AF;
+}
+
+.register-search:focus-within {
+    border-color: #1F6E4A;
+    box-shadow: 0 0 0 3px rgba(31,110,74,0.07);
+}
+
+.register-reset {
+    height: 42px;
+    padding: 0 17px;
+    border: 1px solid #D9DEDB;
+    border-radius: 9px;
+    background: #FFFFFF;
+    color: #6B7280;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.2s ease;
+}
+
+.register-reset:hover {
+    color: #1F6E4A;
+    border-color: #1F6E4A;
+}
+
+
+/* ============================================================
+   APPLICANT LAYOUT
+============================================================ */
+
+.applicant-layout {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1.65fr) minmax(320px, 0.9fr);
+    gap: 18px;
+    align-items: stretch;
+}
+
+
+/* ============================================================
+   APPLICANT LIST PANEL
+============================================================ */
+
+.applicant-list-panel {
+    min-width: 0;
+    background: #FFFFFF;
+    border: 1px solid #F0F1F1;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+}
+
+.applicant-list-header {
+    height: 50px;
+    display: grid;
+    grid-template-columns: 1.25fr 1fr 110px;
+    align-items: center;
+    padding: 0 18px;
+    background: #F7F8F7;
+    border-bottom: 1px solid #E5E7EB;
+}
+
+.applicant-list-header span {
+    color: #6B7280;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.applicant-list {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.applicant-row {
+    width: 100%;
+    min-height: 58px;
+    display: grid;
+    grid-template-columns: 1.25fr 1fr 110px;
+    align-items: center;
+    padding: 0 18px;
+    border: none;
+    border-bottom: 1px solid #F0F1F1;
+    background: #FFFFFF;
+    color: #374151;
+    text-align: left;
+    cursor: pointer;
+    font-family: inherit;
+    transition: 0.18s ease;
+}
+
+.applicant-row:hover {
+    background: #F5F9F6;
+}
+
+.applicant-row.selected {
+    background: #EAF4EE;
+    box-shadow: inset 3px 0 0 #1F6E4A;
+}
+
+.applicant-email {
+    min-width: 0;
+    padding-right: 15px;
+    color: #374151;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.applicant-name {
+    min-width: 0;
+    padding-right: 15px;
+    color: #111827;
+    font-size: 12px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.applicant-id {
+    color: #6B7280;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.applicant-empty {
+    padding: 50px 20px;
+    text-align: center;
+    color: #9CA3AF;
+    font-size: 13px;
+}
+
+
+/* ============================================================
+   ACCOUNT REGISTRATION PANEL
+============================================================ */
+
+.account-registration-panel {
+    min-width: 0;
+    background: #FFFFFF;
+    border: 1px solid #F0F1F1;
+    border-radius: 14px;
+    padding: 23px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+}
+
+.account-registration-header {
+    padding-bottom: 17px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid #F0F1F1;
+}
+
+.account-registration-header h2 {
+    margin: 0;
+    color: #111827;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+}
+
+.account-registration-header p {
+    margin-top: 5px;
+    color: #9CA3AF;
+    font-size: 11px;
+    line-height: 17px;
+}
+
+
+/* ============================================================
+   ACCOUNT FORM
+============================================================ */
+
+.account-form-group {
+    margin-bottom: 15px;
+}
+
+.account-form-group label {
+    display: block;
+    margin-bottom: 7px;
+    color: #4B5563;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.account-input {
+    width: 100%;
+    height: 40px;
+    padding: 0 11px;
+    border: 1px solid #DDE2DF;
+    border-radius: 7px;
+    outline: none;
+    background: #FFFFFF;
+    color: #374151;
+    font-family: inherit;
+    font-size: 12px;
+    transition: 0.2s ease;
+}
+
+.account-input::placeholder {
+    color: #A1A7A4;
+}
+
+.account-input:focus {
+    border-color: #1F6E4A;
+    box-shadow: 0 0 0 3px rgba(31,110,74,0.07);
+}
+
+.account-input[readonly] {
+    background: #F5F6F5;
+    color: #6B7280;
+}
+
+.account-input.input-error {
+    border-color: #DC2626;
+}
+
+.register-error {
+    display: block;
+    margin-top: 5px;
+    color: #DC2626;
+    font-size: 10px;
+}
+
+
+/* ============================================================
+   CREATE BUTTON
+============================================================ */
+
+.account-create-btn {
+    width: 100%;
+    height: 42px;
+    margin-top: 7px;
+    border: none;
+    border-radius: 8px;
+    background: #1F6E4A;
+    color: #FFFFFF;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+    transition: 0.2s ease;
+}
+
+.account-create-btn:hover {
+    background: #18583B;
+    transform: translateY(-1px);
+}
+
+.account-create-btn:active {
+    transform: translateY(0);
+}
+
+
+/* ============================================================
+   REGISTERED ACCOUNTS
+============================================================ */
+
+.registered-section {
+    width: 100%;
+    margin-top: 20px;
+    background: #FFFFFF;
+    border: 1px solid #F0F1F1;
+    border-radius: 14px;
+    padding: 22px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+}
+
+.registered-table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    border: 1px solid #E5E7EB;
+    border-radius: 10px;
+}
+
+.registered-table {
+    width: 100%;
+    min-width: 650px;
+    border-collapse: collapse;
+}
+
+.registered-table th {
+    padding: 13px 15px;
+    background: #F7F8F7;
+    border-bottom: 1px solid #E5E7EB;
+    color: #6B7280;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.registered-table td {
+    padding: 13px 15px;
+    border-bottom: 1px solid #F0F1F1;
+    color: #374151;
+    font-size: 12px;
+}
+
+.registered-table tbody tr:hover {
+    background: #F8FAF9;
+}
+
+.registered-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.role-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 9px;
+    border-radius: 999px;
+    background: #EAF4EE;
+    color: #1F6E4A;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.account-delete-btn {
+    border: 1px solid #FECACA;
+    border-radius: 6px;
+    padding: 6px 11px;
+    background: #FFFFFF;
+    color: #DC2626;
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.2s ease;
+}
+
+.account-delete-btn:hover {
+    background: #FEF2F2;
+}
+
+
+/* ============================================================
+   RESPONSIVE
+============================================================ */
+
+@media (max-width: 1000px) {
+
+    .applicant-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .account-registration-panel {
+        max-width: none;
+    }
+
+}
+
+
+@media (max-width: 768px) {
+
+    .register-toolbar {
+        flex-wrap: wrap;
+    }
+
+    .register-tabs {
+        order: 1;
+    }
+
+    .register-search {
+        order: 3;
+        flex-basis: 100%;
+    }
+
+    .register-reset {
+        order: 2;
+    }
+
+    .applicant-list-header,
+    .applicant-row {
+        grid-template-columns: 1.2fr 1fr 80px;
+    }
+
+}
+
+
+@media (max-width: 520px) {
+
+    .register-toolbar {
+        gap: 8px;
+    }
+
+    .register-tabs {
+        width: 100%;
+    }
+
+    .register-tab {
+        flex: 1;
+    }
+
+    .register-reset {
+        flex: 1;
+    }
+
+    .applicant-list-header {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .applicant-row {
+        grid-template-columns: 1fr 1fr;
+        padding: 12px 14px;
+        gap: 5px;
+    }
+
+    .applicant-id {
+        grid-column: 1 / -1;
+        font-size: 10px;
+    }
+
+    .applicant-list-header div:nth-child(3) {
+        display: none;
+    }
+
+    .account-registration-panel,
+    .registered-section {
+        padding: 17px;
+    }
+
+}

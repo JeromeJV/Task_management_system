@@ -1,0 +1,257 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+    min-height: 100vh;
+    width: 100vw;
+    overflow-x: hidden;
+}
+
+/* FULL SCREEN CONTAINER */
+.main-container {
+    width: 100vw;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+
+    /* Background image & gradient overlay */
+    background: linear-gradient(135deg, rgba(38, 70, 75, 0.88) 0%, rgba(38, 70, 75, 0.75) 50%, rgba(20, 35, 40, 0.70) 100%),
+                url('https://i.pinimg.com/1200x/fc/02/64/fc026433a20db53bc4447d4e41f8f830.jpg');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    color: #ffffff;
+}
+
+/* HEADER & NAVIGATION */
+header {
+    display: flex;
+    align-items: center;
+    padding: 40px 80px;
+    width: 100%;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-weight: 800;
+    font-size: 1.6rem;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+
+.brand i {
+    font-size: 2.2rem;
+}
+
+nav {
+    margin-left: 80px;
+    display: flex;
+    gap: 35px;
+}
+
+nav a {
+    color: #d1d5db;
+    text-decoration: none;
+    font-size: 1.1rem;
+    font-weight: 500;
+    transition: color 0.2s;
+}
+
+nav a.active, nav a:hover {
+    color: #29b6f6;
+}
+
+/* CONTENT LAYOUT */
+.content {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 100px 60px 100px;
+}
+
+/* FORM SECTION */
+.login-section {
+    width: 45%;
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.login-section h1 {
+    font-size: 3rem;
+    font-weight: 800;
+    letter-spacing: 2px;
+    margin-bottom: 30px;
+    text-transform: uppercase;
+}
+
+.form-group {
+    margin-bottom: 24px;
+    width: 100%;
+}
+
+.form-group label {
+    display: block;
+    font-size: 1.05rem;
+    margin-bottom: 8px;
+    color: #f3f4f6;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 14px 18px;
+    background-color: rgba(18, 48, 53, 0.85);
+    border: 1px solid #1a4950;
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 1rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.form-group input::placeholder {
+    color: #7a9da3;
+}
+
+.form-group input:focus {
+    border-color: #29b6f6;
+}
+
+.form-group input.is-invalid {
+    border-color: #ff5252;
+}
+
+.invalid-feedback {
+    color: #ff5252;
+    font-size: 0.85rem;
+    margin-top: 6px;
+}
+
+.alert-danger {
+    background-color: rgba(211, 47, 47, 0.3);
+    border: 1px solid #d32f2f;
+    color: #ff8a80;
+    padding: 12px 16px;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    margin-bottom: 20px;
+    width: 100%;
+}
+
+.forgot-link {
+    font-size: 1rem;
+    color: #d1d5db;
+    margin-bottom: 30px;
+}
+
+.forgot-link a {
+    color: #29b6f6;
+    text-decoration: none;
+}
+
+.forgot-link a:hover {
+    text-decoration: underline;
+}
+
+.btn-submit {
+    background-color: #1e4d54;
+    color: #ffffff;
+    border: 1px solid #2e6972;
+    padding: 14px 175px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 1.05rem;
+    letter-spacing: 1px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: background 0.2s;
+}
+
+.btn-submit:hover {
+    background-color: #27626b;
+}
+
+/* WELCOME TEXT SECTION */
+.welcome-section {
+    width: 50%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-end;
+    text-align: right;
+}
+
+.welcome-section h2 {
+    font-size: 3.2rem;
+    font-weight: 700;
+    margin-bottom: 18px;
+    line-height: 1.2;
+}
+
+.welcome-section p {
+    font-size: 1.1rem;
+    color: #e0e0e0;
+    line-height: 1.7;
+    max-width: 480px;
+}
+
+/* GEAR LOGO WATERMARK */
+.gear-watermark {
+    
+    position: absolute;
+    bottom: -20px;
+    right: 40px;
+    font-size: 4.5rem;
+    color: rgba(255, 255, 255, 0.9);
+    pointer-events: none;
+}
+.gear-watermark img {
+    width: 100px;
+    height: 100px;
+    opacity: 0.9;
+}
+
+/* brand icon */
+.gear-brand {
+    
+    width:90px;
+    height:90px;
+    border-radius:10%;
+    margin-left: 25px;
+}
+
+
+/* RESPONSIVE DESIGN FOR MOBILE & TABLETS */
+@media (max-width: 992px) {
+    header {
+        padding: 30px 40px;
+    }
+    
+    .content {
+        flex-direction: column-reverse;
+        justify-content: center;
+        gap: 40px;
+        padding: 20px 40px 60px 40px;
+    }
+
+    .welcome-section, .login-section {
+        width: 100%;
+        max-width: 100%;
+        text-align: left;
+        align-items: flex-start;
+    }
+
+    .gear-watermark {
+        display: none;
+    }
+}

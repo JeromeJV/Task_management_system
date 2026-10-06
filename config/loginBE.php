@@ -56,16 +56,29 @@ if (isset($_POST['Submit'])) {
                     // I-save sa session at i-redirect
                     $_SESSION['id'] = $row1['id'];
                     $_SESSION['email'] = $row1['email'];
+                    $_SESSION['name'] = $row1['name'];
                     $_SESSION['role'] = $row1['role']; 
                     $_SESSION['last_activity'] = time();
 
                     switch ($row1['role']) {
-                        case 'HR': header('Location: HR.php'); break;
-                        case 'payroll': header('Location: payroll.php'); break;
-                        case 'pro': header('Location: production.php'); break;
-                        case 'log': header('Location: logistic.php'); break;
-                        case 'super': header('Location: supervisor.php'); break;
-                        default: header('Location: user.php'); break;
+                        case 'HR': 
+                            header('Location: HR.php'); 
+                            break;
+                        case 'payroll': 
+                            header('Location: payroll.php'); 
+                            break;
+                        case 'pro': 
+                            header('Location: production.php'); 
+                            break;
+                        case 'log': 
+                            header('Location: logistic.php'); 
+                            break;
+                        case 'super': 
+                            header('Location: supervisor.php'); 
+                            break;
+                        default: 
+                            header('Location: user.php'); 
+                            break;
                     }
                     exit(); 
                 } 
