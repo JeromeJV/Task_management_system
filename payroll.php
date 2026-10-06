@@ -28,7 +28,7 @@ $employees_list = $conn->query("SELECT * FROM employee ORDER BY username ASC");
 
 // Fetch Payroll Records with Employee Details
 $payrolls = $conn->query("
-    SELECT p.*, e.employee_id, e.tin_no, e.sss_no, e.hdmf_no, e.position, e.department, e.username 
+    SELECT p.*, e.employee_id, e.tin_no, e.sss_no, e.hdmf_no, e.position, e.department, e.username, e.username 
     FROM payroll p 
     JOIN employee e ON p.employee_id = e.employee_id 
     ORDER BY p.payroll_id DESC
@@ -498,7 +498,7 @@ while ($r = $payrolls->fetch_assoc()) {
         let empId = document.getElementById('calc_employee_id').value;
         let period = document.getElementById('calc_pay_period').value;
         let payDate = document.querySelector('input[name="pay_date"]').value;
-
+                      
         if (!empId) {
             document.getElementById('days_worked').value = 0;
             calculateRegularPay();

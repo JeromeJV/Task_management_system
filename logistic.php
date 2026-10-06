@@ -481,6 +481,118 @@ foreach ($history_records as $hrec) {
 
         .btn-confirm-delivery:hover { background: var(--primary-hover); }
 
+        .delivery-sequence-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: rgba(15, 23, 42, 0.84);
+        }
+
+        .delivery-sequence-overlay.active {
+            display: flex;
+        }
+
+        .delivery-sequence-card {
+            width: 100%;
+            max-width: 450px;
+            padding: 2rem;
+            border-radius: 16px;
+            background: #1e293b;
+            color: #f8fafc;
+            text-align: center;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .delivery-sequence-card h2 {
+            margin-bottom: 1rem;
+            font-size: 1.4rem;
+        }
+
+        .delivery-sequence-card p {
+            margin-bottom: 1.5rem;
+            color: #94a3b8;
+            font-size: 0.95rem;
+        }
+
+        .delivery-sequence-stage {
+            position: relative;
+            height: 120px;
+            overflow: hidden;
+            border-bottom: 3px solid #475569;
+        }
+
+        .delivery-sequence-status {
+            position: absolute;
+            top: 0;
+            right: 0;
+            left: 0;
+            color: #38bdf8;
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .delivery-sequence-svg {
+            position: absolute;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 90px;
+        }
+
+        @keyframes deliveryTruckIdle {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-2px); }
+        }
+
+        @keyframes unloadDeliveryBox1 {
+            0% { transform: translate(0, 0); opacity: 1; }
+            50% { transform: translate(-30px, -15px); opacity: 1; }
+            100% { transform: translate(-45px, 20px); opacity: 1; }
+        }
+
+        @keyframes unloadDeliveryBox2 {
+            0% { transform: translate(0, 0); opacity: 1; }
+            50% { transform: translate(-55px, -15px); opacity: 1; }
+            100% { transform: translate(-90px, 20px); opacity: 1; }
+        }
+
+        @keyframes deliveryTruckDriveAway {
+            to { transform: translateX(350px); }
+        }
+
+        @keyframes deliveryWheelSpin {
+            to { transform: rotate(360deg); }
+        }
+
+        .delivery-sequence-overlay.unloading .delivery-truck-body {
+            animation: deliveryTruckIdle 0.4s infinite ease-in-out;
+        }
+
+        .delivery-sequence-overlay.unloading .delivery-box-1 {
+            animation: unloadDeliveryBox1 0.7s ease-in-out forwards;
+        }
+
+        .delivery-sequence-overlay.unloading .delivery-box-2 {
+            animation: unloadDeliveryBox2 0.7s ease-in-out 0.4s forwards;
+        }
+
+        .delivery-sequence-overlay.driving .delivery-truck-group {
+            animation: deliveryTruckDriveAway 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+
+        .delivery-sequence-overlay.driving .delivery-wheel {
+            transform-origin: center;
+            transform-box: fill-box;
+            animation: deliveryWheelSpin 0.3s linear infinite;
+        }
+
         .btn-close-modal {
             background: none;
             border: none;
@@ -828,6 +940,59 @@ foreach ($history_records as $hrec) {
     </div>
 </div>
 
+<div
+    class="delivery-sequence-overlay"
+    id="deliverySequence"
+    role="status"
+    aria-live="polite"
+    aria-hidden="true"
+>
+    <div class="delivery-sequence-card">
+        <h2>Delivery Arrival &amp; Drop-off</h2>
+        <p>Please wait while the packages are unloaded and the delivery is completed.</p>
+        <div class="delivery-sequence-stage">
+            <div class="delivery-sequence-status" id="deliverySequenceStatus">Truck arrived...</div>
+            <svg class="delivery-sequence-svg" viewBox="0 0 300 80" aria-hidden="true">
+                <defs>
+                    <symbol id="deliveryPackageArt" viewBox="0 0 20 20">
+                        <rect x="0.5" y="0.5" width="19" height="19" rx="2" fill="currentColor" stroke="#78350f" stroke-width="1" />
+                        <path d="M8 1H12V19H8Z" fill="#fde68a" opacity="0.9" />
+                        <path d="M1 6.5H19" stroke="#b45309" stroke-width="0.8" opacity="0.8" />
+                        <rect x="11.5" y="8" width="6.5" height="7" rx="0.6" fill="#fff7ed" />
+                        <path d="M12.5 10H17M12.5 11.5H17M12.5 13H15.5" stroke="#475569" stroke-width="0.7" />
+                        <path d="M2 3L5 2" stroke="#fff7ed" stroke-width="0.7" opacity="0.75" />
+                    </symbol>
+                </defs>
+                <g aria-hidden="true">
+                    <use id="deliveryDroppedBox1" href="#deliveryPackageArt" x="95" y="45" width="20" height="20" class="delivery-dropped-box-1" color="#f59e0b" opacity="0" />
+                    <use id="deliveryDroppedBox2" href="#deliveryPackageArt" x="120" y="45" width="20" height="20" class="delivery-dropped-box-2" color="#d97706" opacity="0" />
+                </g>
+                <g class="delivery-truck-group" id="deliveryTruckGroup">
+                    <g class="delivery-truck-body">
+                        <path d="M 140 30 L 230 30 L 230 65 L 140 65 Z" fill="#334155" />
+                        <g>
+                            <use href="#deliveryPackageArt" x="150" y="45" width="20" height="20" class="delivery-box-1" color="#f59e0b" />
+                            <use href="#deliveryPackageArt" x="175" y="45" width="20" height="20" class="delivery-box-2" color="#d97706" />
+                        </g>
+                        <path d="M 135 25 L 235 25 L 235 65 L 135 65 Z" fill="none" stroke="#64748b" stroke-width="3" />
+                        <path d="M 235 35 L 265 35 L 280 50 L 280 65 L 235 65 Z" fill="#3b82f6" />
+                        <path d="M 250 38 L 263 38 L 273 48 L 250 48 Z" fill="#93c5fd" />
+                        <rect x="280" y="60" width="6" height="5" fill="#94a3b8" />
+                    </g>
+                    <g class="delivery-wheel">
+                        <circle cx="165" cy="65" r="10" fill="#1e293b" stroke="#94a3b8" stroke-width="2" />
+                        <circle cx="165" cy="65" r="4" fill="#f8fafc" />
+                    </g>
+                    <g class="delivery-wheel">
+                        <circle cx="255" cy="65" r="10" fill="#1e293b" stroke="#94a3b8" stroke-width="2" />
+                        <circle cx="255" cy="65" r="4" fill="#f8fafc" />
+                    </g>
+                </g>
+            </svg>
+        </div>
+    </div>
+</div>
+
 <script>
     // Tab Switcher
     function switchTab(tabName) {
@@ -896,11 +1061,15 @@ foreach ($history_records as $hrec) {
 
     // INAYOS NA CONFIRM / SUBMIT FUNCTION
     function submitDelivery() {
+        const form = document.getElementById('deliveryForm');
+        if (form.dataset.deliverySubmitting === 'true') {
+            return;
+        }
+
+        form.dataset.deliverySubmitting = 'true';
         closeModal('confirmModal');
         closeModal('detailModal');
-        
-        const form = document.getElementById('deliveryForm');
-        
+
         let existingInput = document.getElementById('markDeliveredInput');
         if (existingInput) {
             existingInput.remove();
@@ -913,8 +1082,42 @@ foreach ($history_records as $hrec) {
         hiddenInput.value = '1';
         
         form.appendChild(hiddenInput);
-        
-        HTMLFormElement.prototype.submit.call(form);
+
+        const confirmButton = document.querySelector('#confirmModal .btn-confirm-delivery');
+        confirmButton.disabled = true;
+        confirmButton.textContent = 'Processing...';
+
+        const sequence = document.getElementById('deliverySequence');
+        const droppedBox1 = document.getElementById('deliveryDroppedBox1');
+        const droppedBox2 = document.getElementById('deliveryDroppedBox2');
+        const truckBox1 = document.querySelector('.delivery-box-1');
+        const truckBox2 = document.querySelector('.delivery-box-2');
+        const status = document.getElementById('deliverySequenceStatus');
+
+        droppedBox1.style.opacity = '0';
+        droppedBox2.style.opacity = '0';
+        truckBox1.style.opacity = '1';
+        truckBox2.style.opacity = '1';
+        sequence.classList.remove('driving');
+        sequence.classList.add('active', 'unloading');
+        sequence.setAttribute('aria-hidden', 'false');
+
+        window.requestAnimationFrame(() => {
+            window.setTimeout(() => {
+                truckBox1.style.opacity = '0';
+                truckBox2.style.opacity = '0';
+                droppedBox1.style.opacity = '1';
+                droppedBox2.style.opacity = '1';
+                status.textContent = 'Delivered! Departure in progress...';
+                sequence.classList.remove('unloading');
+                sequence.classList.add('driving');
+            }, 1500);
+
+            window.setTimeout(() => {
+                status.textContent = 'Order completed successfully!';
+                HTMLFormElement.prototype.submit.call(form);
+            }, 2800);
+        });
     }
 
     // Filter Logic para sa Active Cards

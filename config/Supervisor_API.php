@@ -288,6 +288,149 @@ if ($module === 'delivery') {
 // -----------------------------------------------------
 elseif ($module === 'factory') {
 
+    $assignment_table_sql = "CREATE TABLE IF NOT EXISTS production_assignments (
+                                production_id VARCHAR(64) NOT NULL,
+                                employee_id INT NOT NULL,
+                                work_type ENUM('Cooking', 'Packaging') NOT NULL,
+                                assigned_by INT DEFAULT NULL,
+                                assigned_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                                PRIMARY KEY (production_id),
+                                KEY idx_production_assignments_employee (employee_id)
+                             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    if (!mysqli_query($conn, $assignment_table_sql)) {
+        throw new RuntimeException("Unable to initialize production task assignments.");
+    }
+
+    $is_production_worker = (($_SESSION['role'] ?? '') === 'pro');
+    $current_employee_id = null;
+
+    if ($is_production_worker) {
+        $current_user_id = (int) ($_SESSION['id'] ?? $_SESSION['user_id'] ?? 0);
+        $employee_stmt = $conn->prepare(
+            "SELECT e.employee_id
+             FROM users u
+             INNER JOIN employee e ON (e.username = u.name OR (e.email IS NOT NULL AND e.email = u.email))
+             WHERE u.id = ?
+             ORDER BY (e.email = u.email) DESC, e.employee_id ASC
+             LIMIT 1"
+        );
+        $employee_stmt->bind_param("i", $current_user_id);
+        $employee_stmt->execute();
+        $employee_result = $employee_stmt->get_result();
+        if ($employee_row = $employee_result->fetch_assoc()) {
+            $current_employee_id = (int) $employee_row['employee_id'];
+        }
+        $employee_stmt->close();
+    }
+
+    $present_production_employees = [];
+    $present_employees_sql = "SELECT DISTINCT e.employee_id, e.username, e.position
+                              FROM employee e
+                              INNER JOIN users u
+                                  ON (u.name = e.username
+                                      OR (e.email IS NOT NULL AND e.email != '' AND u.email = e.email)
+                                      OR EXISTS (
+                                          SELECT 1
+                                          FROM attendance employee_user_link
+                                          WHERE employee_user_link.employee_id = e.employee_id
+                                            AND employee_user_link.user_id = u.id
+                                      ))
+                              INNER JOIN attendance a
+                                  ON (a.user_id = u.id OR (a.user_id IS NULL AND a.employee_id = e.employee_id))
+                              WHERE u.role = 'pro'
+                                AND DATE(a.attendance_date) = CURDATE()
+                                AND LOWER(a.status) = 'present'
+                              ORDER BY e.position, e.username";
+    $present_employees_result = mysqli_query($conn, $present_employees_sql);
+    if (!$present_employees_result) {
+        throw new RuntimeException("Unable to load production accounts with active attendance.");
+    }
+    while ($employee = mysqli_fetch_assoc($present_employees_result)) {
+        $present_production_employees[] = $employee;
+    }
+
+    // --- REASSIGN PRODUCTION TASK ---
+    if (isset($_POST['submit']) && $action === 'reassign') {
+        $production_id = trim($_POST['production_id'] ?? '');
+        $assignment_parts = explode('|', $_POST['assignment_target'] ?? '', 2);
+        $employee_id = filter_var($assignment_parts[0] ?? '', FILTER_VALIDATE_INT);
+        $work_type = trim($assignment_parts[1] ?? '');
+
+        if ($production_id === '') {
+            $errors['assignment'] = "Please select a production task.";
+        }
+        if (!$employee_id || !in_array($work_type, ['Cooking', 'Packaging'], true)) {
+            $errors['assignment_target'] = "Please select a present employee and work area.";
+        } else {
+            $check_employee = $conn->prepare(
+                "SELECT e.employee_id
+                 FROM employee e
+                 INNER JOIN users u
+                     ON (u.name = e.username
+                         OR (e.email IS NOT NULL AND e.email != '' AND u.email = e.email)
+                         OR EXISTS (
+                             SELECT 1
+                             FROM attendance employee_user_link
+                             WHERE employee_user_link.employee_id = e.employee_id
+                               AND employee_user_link.user_id = u.id
+                         ))
+                 INNER JOIN attendance a
+                     ON (a.user_id = u.id OR (a.user_id IS NULL AND a.employee_id = e.employee_id))
+                 WHERE e.employee_id = ?
+                   AND u.role = 'pro'
+                   AND DATE(a.attendance_date) = CURDATE()
+                   AND LOWER(a.status) = 'present'
+                 LIMIT 1"
+            );
+            $check_employee->bind_param("i", $employee_id);
+            $check_employee->execute();
+            $employee_is_eligible = ($check_employee->get_result()->num_rows > 0);
+            $check_employee->close();
+
+            if (!$employee_is_eligible) {
+                $errors['assignment_target'] = "Only production user accounts with an active Present attendance record can be assigned.";
+            }
+        }
+
+        if (empty($errors)) {
+            $check_task = $conn->prepare(
+                "SELECT p.production_id
+                 FROM production p
+                 WHERE p.production_id = ?
+                   AND (p.product_status != 'product done' OR p.product_status IS NULL)
+                 LIMIT 1"
+            );
+            $check_task->bind_param("s", $production_id);
+            $check_task->execute();
+            $task_is_pending = ($check_task->get_result()->num_rows > 0);
+            $check_task->close();
+
+            if (!$task_is_pending) {
+                $errors['assignment'] = "The selected task is unavailable or already completed.";
+            }
+        }
+
+        if (empty($errors)) {
+            $assigned_by = (int) ($_SESSION['id'] ?? $_SESSION['user_id'] ?? 0);
+            $stmt = $conn->prepare(
+                "INSERT INTO production_assignments (production_id, employee_id, work_type, assigned_by)
+                 VALUES (?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE
+                    employee_id = VALUES(employee_id),
+                    work_type = VALUES(work_type),
+                    assigned_by = VALUES(assigned_by),
+                    assigned_at = CURRENT_TIMESTAMP"
+            );
+            $stmt->bind_param("sisi", $production_id, $employee_id, $work_type, $assigned_by);
+            if ($stmt->execute()) {
+                $message = "Production task reassigned successfully.";
+            } else {
+                $errors['assignment'] = "Unable to reassign the selected production task.";
+            }
+            $stmt->close();
+        }
+    }
+
     // --- INSERT PRODUCTION ---
     if (isset($_POST['submit']) && $action === 'insert') {
         $product_name = trim($_POST['product_name'] ?? '');
@@ -295,6 +438,9 @@ elseif ($module === 'factory') {
         $due_date     = trim($_POST['due_date'] ?? '');
         $Stock_number = trim($_POST['Stock_number'] ?? '');
         $quantity     = trim($_POST['quantity'] ?? '');
+        $assignment_parts = explode('|', $_POST['assignment_target'] ?? '', 2);
+        $employee_id = filter_var($assignment_parts[0] ?? '', FILTER_VALIDATE_INT);
+        $work_type = trim($assignment_parts[1] ?? '');
 
         if (!in_array($product_name, $allowed_products)) {
             $errors['product_name'] = "Please select a valid product from the list.";
@@ -312,14 +458,70 @@ elseif ($module === 'factory') {
             $errors['Stock_number'] = "Your Stock Number must be exactly 4 characters long.";
         }
 
-        if (empty($errors)) {
-            $stmt = $conn->prepare("INSERT INTO production (product_name, target_pcs, due_date, Stock_number, quantity) VALUES (?, ?, ?, ?, ?)");
-            $stmt->bind_param("sssss", $product_name, $target_pcs, $due_date, $Stock_number, $quantity);
-            
-            if ($stmt->execute()) {
-                $message = "New Production Task sent successfully.";
+        if (!$employee_id || !in_array($work_type, ['Cooking', 'Packaging'], true)) {
+            $errors['assignment_target'] = "Please select a present employee and Cooking or Packaging work area.";
+        } else {
+            $check_employee = $conn->prepare(
+                "SELECT e.employee_id
+                 FROM employee e
+                 INNER JOIN users u
+                     ON (u.name = e.username
+                         OR (e.email IS NOT NULL AND e.email != '' AND u.email = e.email)
+                         OR EXISTS (
+                             SELECT 1
+                             FROM attendance employee_user_link
+                             WHERE employee_user_link.employee_id = e.employee_id
+                               AND employee_user_link.user_id = u.id
+                         ))
+                 INNER JOIN attendance a
+                     ON (a.user_id = u.id OR (a.user_id IS NULL AND a.employee_id = e.employee_id))
+                 WHERE e.employee_id = ?
+                   AND u.role = 'pro'
+                   AND DATE(a.attendance_date) = CURDATE()
+                   AND LOWER(a.status) = 'present'
+                 LIMIT 1"
+            );
+            $check_employee->bind_param("i", $employee_id);
+            $check_employee->execute();
+            $employee_is_eligible = ($check_employee->get_result()->num_rows > 0);
+            $check_employee->close();
+
+            if (!$employee_is_eligible) {
+                $errors['assignment_target'] = "Only production user accounts with an active Present attendance record can be assigned.";
             }
-            $stmt->close();
+        }
+
+        if (empty($errors)) {
+            $assigned_by = (int) ($_SESSION['id'] ?? $_SESSION['user_id'] ?? 0);
+            $conn->begin_transaction();
+
+            $production_stmt = $conn->prepare(
+                "INSERT INTO production (product_name, target_pcs, due_date, Stock_number, quantity)
+                 VALUES (?, ?, ?, ?, ?)"
+            );
+            $production_stmt->bind_param("sssss", $product_name, $target_pcs, $due_date, $Stock_number, $quantity);
+
+            if ($production_stmt->execute()) {
+                $production_id = (string) $conn->insert_id;
+                $assignment_stmt = $conn->prepare(
+                    "INSERT INTO production_assignments (production_id, employee_id, work_type, assigned_by)
+                     VALUES (?, ?, ?, ?)"
+                );
+                $assignment_stmt->bind_param("sisi", $production_id, $employee_id, $work_type, $assigned_by);
+
+                if ($assignment_stmt->execute()) {
+                    $conn->commit();
+                    $message = "New Production Task created and assigned successfully.";
+                } else {
+                    $conn->rollback();
+                    $errors['assignment_target'] = "The production task could not be assigned. No task was created.";
+                }
+                $assignment_stmt->close();
+            } else {
+                $conn->rollback();
+                $errors['product_name'] = "Unable to create the production task.";
+            }
+            $production_stmt->close();
         }
     }
 
@@ -327,6 +529,11 @@ elseif ($module === 'factory') {
     $passid = $_POST['idno'] ?? null;
 
     if (isset($_POST['del']) && $passid) {
+        $delete_assignment = $conn->prepare("DELETE FROM production_assignments WHERE production_id = ?");
+        $delete_assignment->bind_param("s", $passid);
+        $delete_assignment->execute();
+        $delete_assignment->close();
+
         $stmt = $conn->prepare("DELETE FROM production WHERE production_id = ?");
         $stmt->bind_param("s", $passid);
         $stmt->execute();
@@ -372,12 +579,35 @@ elseif ($module === 'factory') {
     // --- UPDATE STATUS TO DONE ---
     if (isset($_POST['mark_done'])) {
         $production_id = $_POST['idno'] ?? '';
+        $can_mark_done = !$is_production_worker;
 
-        if (!empty($production_id)) {
-            $stmt = $conn->prepare("UPDATE production SET product_status = 'product done' WHERE production_id = ?");
+        if ($is_production_worker && $current_employee_id !== null && !empty($production_id)) {
+            $assignment_check = $conn->prepare(
+                "SELECT production_id
+                 FROM production_assignments
+                 WHERE production_id = ? AND employee_id = ?
+                 LIMIT 1"
+            );
+            $assignment_check->bind_param("si", $production_id, $current_employee_id);
+            $assignment_check->execute();
+            $can_mark_done = ($assignment_check->get_result()->num_rows > 0);
+            $assignment_check->close();
+        }
+
+        if (!empty($production_id) && $can_mark_done) {
+            $stmt = $conn->prepare(
+                "UPDATE production
+                 SET product_status = 'product done'
+                 WHERE production_id = ?
+                   AND (product_status != 'product done' OR product_status IS NULL)"
+            );
             $stmt->bind_param("s", $production_id);
-            $stmt->execute();
+            if (!$stmt->execute() || $stmt->affected_rows !== 1) {
+                $_SESSION['production_error'] = "This task could not be completed. It may already be done or unavailable.";
+            }
             $stmt->close();
+        } elseif ($is_production_worker) {
+            $_SESSION['production_error'] = "This task is not assigned to your account.";
         }
         
         $redirect_page = ($_SESSION['role'] === 'pro') ? 'production.php' : 'factory_main.php';
@@ -386,27 +616,41 @@ elseif ($module === 'factory') {
     }
 
     // --- FETCH PRODUCTION RECORDS ---
-    $sql_pending = "SELECT production_id, product_name, target_pcs, Stock_number, quantity, due_date, product_status 
-                    FROM production 
-                    WHERE product_status != 'product done' OR product_status IS NULL
-                    GROUP BY production_id
-                    ORDER BY production_id DESC";
+    $assignment_filter = $is_production_worker
+        ? ($current_employee_id === null ? null : " AND pa.employee_id = " . $current_employee_id)
+        : "";
 
-    $res_pending = mysqli_query($conn, $sql_pending);
-    if ($res_pending && mysqli_num_rows($res_pending) > 0) {
+    if ($assignment_filter !== null) {
+        $sql_pending = "SELECT p.production_id, p.product_name, p.target_pcs, p.Stock_number, p.quantity, p.due_date, p.product_status,
+                               pa.employee_id AS assigned_employee_id, e.username AS assigned_employee_name,
+                               e.position AS assigned_position, pa.work_type AS assigned_work_type
+                        FROM production p
+                        LEFT JOIN production_assignments pa ON pa.production_id = CAST(p.production_id AS CHAR)
+                        LEFT JOIN employee e ON e.employee_id = pa.employee_id
+                        WHERE (p.product_status != 'product done' OR p.product_status IS NULL)" . $assignment_filter . "
+                        ORDER BY p.production_id DESC";
+
+        $res_pending = mysqli_query($conn, $sql_pending);
+        if (!$res_pending) {
+            throw new RuntimeException("Unable to load production tasks.");
+        }
         while ($row = mysqli_fetch_assoc($res_pending)) {
             $pending_records[] = $row;
         }
-    }
 
-    $sql_history = "SELECT production_id, product_name, target_pcs, Stock_number, quantity, due_date, product_status 
-                    FROM production 
-                    WHERE product_status = 'product done'
-                    GROUP BY production_id 
-                    ORDER BY production_id DESC";
+        $sql_history = "SELECT p.production_id, p.product_name, p.target_pcs, p.Stock_number, p.quantity, p.due_date, p.product_status,
+                               pa.employee_id AS assigned_employee_id, e.username AS assigned_employee_name,
+                               e.position AS assigned_position, pa.work_type AS assigned_work_type
+                        FROM production p
+                        LEFT JOIN production_assignments pa ON pa.production_id = CAST(p.production_id AS CHAR)
+                        LEFT JOIN employee e ON e.employee_id = pa.employee_id
+                        WHERE p.product_status = 'product done'" . $assignment_filter . "
+                        ORDER BY p.production_id DESC";
 
-    $res_history = mysqli_query($conn, $sql_history);
-    if ($res_history && mysqli_num_rows($res_history) > 0) {
+        $res_history = mysqli_query($conn, $sql_history);
+        if (!$res_history) {
+            throw new RuntimeException("Unable to load production task history.");
+        }
         while ($row = mysqli_fetch_assoc($res_history)) {
             $history_records[] = $row;
         }

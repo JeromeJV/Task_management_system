@@ -5,6 +5,7 @@ session_start();
 $msg = '';          
 $email_err = '';    
 $password_err = ''; 
+$is_ajax_login = $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_login']);
 
 // Dto na pupunta ung auto logout pag inactive
 if (isset($_GET['error']) && $_GET['error'] === 'session_expired') {
@@ -62,23 +63,33 @@ if (isset($_POST['Submit'])) {
 
                     switch ($row1['role']) {
                         case 'HR': 
-                            header('Location: HR.php'); 
+                            $redirect_url = 'HR.php';
                             break;
                         case 'payroll': 
-                            header('Location: payroll.php'); 
+                            $redirect_url = 'payroll.php';
                             break;
                         case 'pro': 
-                            header('Location: production.php'); 
+                            $redirect_url = 'production.php';
                             break;
                         case 'log': 
-                            header('Location: logistic.php'); 
+                            $redirect_url = 'logistic.php';
                             break;
                         case 'super': 
-                            header('Location: supervisor.php'); 
+                            $redirect_url = 'supervisor.php';
                             break;
                         default: 
-                            header('Location: user.php'); 
+                            $redirect_url = 'user.php';
                             break;
+                    }
+
+                    if ($is_ajax_login) {
+                        header('Content-Type: application/json; charset=utf-8');
+                        echo json_encode([
+                            'success' => true,
+                            'redirect' => $redirect_url,
+                        ]);
+                    } else {
+                        header('Location: ' . $redirect_url);
                     }
                     exit(); 
                 } 
@@ -103,5 +114,16 @@ if (isset($_POST['Submit'])) {
             $msg = "Incorrect email or password!";
         }
     }
+}
+
+if ($is_ajax_login) {
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode([
+        'success' => false,
+        'message' => $msg,
+        'email_error' => $email_err,
+        'password_error' => $password_err,
+    ]);
+    exit();
 }
 ?>

@@ -334,6 +334,208 @@ $active_tab = $_GET['tab'] ?? 'main';
             font-weight: 600;
         }
 
+        .tea-loading-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            background: rgba(15, 23, 42, 0.82);
+            perspective: 1000px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .tea-loading-screen.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .tea-loading-card {
+            display: flex;
+            width: min(360px, 100%);
+            min-height: 230px;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 24px;
+            border-radius: 14px;
+            background: #1e293b;
+            color: #f8fafc;
+            text-align: center;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+        }
+        .tea-box-wrapper {
+            position: relative;
+            width: 140px;
+            height: 110px;
+            transform-style: preserve-3d;
+            transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .tea-box-body {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 85px;
+            border: 2px solid #a36a2e;
+            border-radius: 6px;
+            background: #c58a4b;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+        }
+        .tea-box-label {
+            position: absolute;
+            top: 48px;
+            left: 13px;
+            z-index: 2;
+            width: 48px;
+            padding: 4px 3px;
+            border: 1px solid #ead6b8;
+            border-radius: 2px;
+            background: #fff8e9;
+            color: #684522;
+            text-align: center;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+        }
+        .tea-box-label-title {
+            display: block;
+            font-size: 5px;
+            font-weight: 800;
+            letter-spacing: 0.35px;
+        }
+        .tea-box-label-code {
+            display: block;
+            margin-top: 2px;
+            padding-top: 2px;
+            border-top: 1px dashed #c7a77f;
+            font-size: 4px;
+            letter-spacing: 0.4px;
+        }
+        .tea-box-stamp {
+            position: absolute;
+            top: 49px;
+            right: 13px;
+            z-index: 2;
+            display: flex;
+            width: 25px;
+            height: 25px;
+            justify-content: center;
+            align-items: center;
+            border: 1px solid rgba(104, 69, 34, 0.7);
+            border-radius: 50%;
+            color: #684522;
+            font-size: 13px;
+            font-weight: 700;
+            transform: rotate(-12deg);
+        }
+        .tea-box-lid-left,
+        .tea-box-lid-right {
+            position: absolute;
+            top: 25px;
+            z-index: 3;
+            width: 50%;
+            height: 25px;
+            background: #a36a2e;
+            transition: transform 0.4s ease;
+        }
+        .tea-box-lid-left {
+            left: 0;
+            transform-origin: left top;
+            border-radius: 4px 0 0;
+        }
+        .tea-box-lid-right {
+            right: 0;
+            transform-origin: right top;
+            border-radius: 0 4px 0 0;
+        }
+        .tea-loading-screen.step-open .tea-box-lid-left {
+            transform: rotateZ(-110deg);
+        }
+        .tea-loading-screen.step-open .tea-box-lid-right {
+            transform: rotateZ(110deg);
+        }
+        .tea-loading-screen.step-close .tea-box-lid-left,
+        .tea-loading-screen.step-close .tea-box-lid-right {
+            transform: rotateZ(0deg);
+        }
+        .tea-box-tape {
+            position: absolute;
+            top: 25px;
+            left: 50%;
+            z-index: 4;
+            width: 0;
+            height: 85px;
+            border-radius: 1px;
+            background: #1a1a1a;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            opacity: 0.9;
+            transform: translateX(-50%);
+            transition: width 0.4s ease-in-out;
+        }
+        .tea-loading-screen.step-tape .tea-box-tape {
+            width: 24px;
+        }
+        .tea-loading-screen.step-zoom .tea-box-wrapper {
+            transform: scale(4.5);
+        }
+        .tea-success-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transform: translate(-50%, -50%) scale(0);
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .tea-check-circle {
+            position: relative;
+            display: flex;
+            width: 70px;
+            height: 70px;
+            justify-content: center;
+            align-items: center;
+            border-radius: 50%;
+            background: #10b981;
+            box-shadow: 0 0 30px rgba(16, 185, 129, 0.7);
+            color: #fff;
+            font-size: 36px;
+        }
+        .tea-check-circle::after {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border: 2px solid #34d399;
+            border-radius: 50%;
+            content: '';
+            animation: teaLoadingRipple 1.2s infinite ease-out;
+        }
+        @keyframes teaLoadingRipple {
+            0% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(2.2); opacity: 0; }
+        }
+        .tea-loading-screen.step-success .tea-success-overlay {
+            transform: translate(-50%, -50%) scale(1);
+        }
+        .tea-loading-text {
+            margin-top: 24px;
+            color: #38bdf8;
+            font-size: 18px;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            transition: opacity 0.3s ease;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .tea-loading-screen *,
+            .tea-loading-screen *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
         /* Search input for History Page */
         .search-box {
             padding: 8px 12px;
@@ -399,6 +601,13 @@ $active_tab = $_GET['tab'] ?? 'main';
         <p>Productivity is the foundation of being successful | User: <strong><?= htmlspecialchars($_SESSION['name'] ?? 'Production Worker'); ?></strong></p>
     </div>
 
+    <?php if (!empty($_SESSION['production_error'])): ?>
+        <div role="alert" style="margin: 0 24px 16px; padding: 12px; border-radius: 8px; color: #842029; background: #f8d7da;">
+            <?= htmlspecialchars($_SESSION['production_error']); ?>
+        </div>
+        <?php unset($_SESSION['production_error']); ?>
+    <?php endif; ?>
+
     <?php if ($active_tab === 'main'): ?>
         <!-- MAIN PRODUCTION VIEW -->
         <div class="main-layout">
@@ -421,6 +630,7 @@ $active_tab = $_GET['tab'] ?? 'main';
                                 <th>Quantity</th>
                                 <th>Stock No.</th>
                                 <th>Deadline</th>
+                                <th>Work Area</th>
                                 <th>Status</th>
                             </tr>
                         </thead>
@@ -437,6 +647,7 @@ $active_tab = $_GET['tab'] ?? 'main';
                                     data-qty="<?= htmlspecialchars($row['quantity']); ?>"
                                     data-target="<?= htmlspecialchars($row['target_pcs']); ?>"
                                     data-due="<?= htmlspecialchars($row['due_date']); ?>"
+                                    data-work-type="<?= htmlspecialchars($row['assigned_work_type'] ?? ''); ?>"
                                     data-status="<?= $is_done ? 'done' : 'pending'; ?>">
                                     <td>
                                         <div class="prod-name-cell">
@@ -451,6 +662,7 @@ $active_tab = $_GET['tab'] ?? 'main';
                                     <td><?= htmlspecialchars($row['quantity']); ?></td>
                                     <td><?= htmlspecialchars($row['Stock_number']); ?></td>
                                     <td><?= htmlspecialchars($row['due_date']); ?></td>
+                                    <td><?= htmlspecialchars($row['assigned_work_type'] ?? ''); ?></td>
                                     <td>
                                         <?php if ($is_done): ?>
                                             <span class="badge badge-done">Done</span>
@@ -500,6 +712,10 @@ $active_tab = $_GET['tab'] ?? 'main';
                             <label>Target PCS</label>
                             <span id="detailBoxTarget"><?= htmlspecialchars($first_item['target_pcs']); ?></span>
                         </div>
+                        <div class="detail-box">
+                            <label>Work Area</label>
+                            <span id="detailBoxWorkType"><?= htmlspecialchars($first_item['assigned_work_type'] ?? ''); ?></span>
+                        </div>
                         <div class="detail-box" style="grid-column: span 2;">
                             <label>Deadline</label>
                             <span id="detailBoxDue"><?= htmlspecialchars($first_item['due_date']); ?></span>
@@ -521,7 +737,7 @@ $active_tab = $_GET['tab'] ?? 'main';
                             <h3 style="font-size: 16px; margin-bottom: 8px;">Are you sure you want to continue?</h3>
                             <p style="font-size: 12px; color: #666;">This will mark the selected item as completed in the production flow.</p>
                             
-                            <form action="production.php" method="post">
+                            <form id="productionCompletionForm" action="production.php" method="post">
                                 <input type="hidden" name="idno" id="modalInputId" value="<?= htmlspecialchars($first_item['production_id']); ?>">
                                 <div class="modal-actions">
                                     <button type="button" class="btn-modal-cancel" onclick="closeModal()">Cancel</button>
@@ -555,6 +771,7 @@ $active_tab = $_GET['tab'] ?? 'main';
                                 <th>QUANTITY</th>
                                 <th>STOCK NO.</th>
                                 <th>DEADLINE</th>
+                                <th>WORK AREA</th>
                                 <th>STATUS</th>
                                 <th>ACTION</th>
                             </tr>
@@ -567,6 +784,7 @@ $active_tab = $_GET['tab'] ?? 'main';
                                     <td><?= htmlspecialchars($row['quantity'] ?? ''); ?> units</td>
                                     <td><?= htmlspecialchars($row['Stock_number'] ?? ''); ?></td>
                                     <td><?= htmlspecialchars($row['due_date'] ?? ''); ?></td>
+                                    <td><?= htmlspecialchars($row['assigned_work_type'] ?? ''); ?></td>
                                     <td><span class="badge badge-done">• Completed</span></td>
                                     <td>
                                         <form action="factory_task.php" method="post" style="display:inline;">
@@ -586,6 +804,32 @@ $active_tab = $_GET['tab'] ?? 'main';
     <?php endif; ?>
 </div>
 
+<div
+    id="teaLoadingPage"
+    class="tea-loading-screen"
+    role="status"
+    aria-live="polite"
+    aria-hidden="true"
+>
+    <div class="tea-loading-card">
+        <div class="tea-box-wrapper" aria-hidden="true">
+            <div class="tea-box-lid-left"></div>
+            <div class="tea-box-lid-right"></div>
+            <div class="tea-box-body"></div>
+            <div class="tea-box-label">
+                <span class="tea-box-label-title">PRODUCTION</span>
+                <span class="tea-box-label-code">PACKED WITH CARE</span>
+            </div>
+            <div class="tea-box-stamp">✓</div>
+            <div class="tea-box-tape"></div>
+        </div>
+        <div id="teaLoadingText" class="tea-loading-text">Preparing production package...</div>
+    </div>
+    <div class="tea-success-overlay" aria-hidden="true">
+        <div class="tea-check-circle">✓</div>
+    </div>
+</div>
+
 <script>
 // 1. Dynamic Row Selection (Pag-pindot ng Item)
 function selectTask(rowElement) {
@@ -602,6 +846,7 @@ function selectTask(rowElement) {
     const qty = rowElement.getAttribute('data-qty');
     const target = rowElement.getAttribute('data-target');
     const due = rowElement.getAttribute('data-due');
+    const workType = rowElement.getAttribute('data-work-type');
     const status = rowElement.getAttribute('data-status');
 
     // i-Update ang Task Details Panel sa Kanan
@@ -612,6 +857,7 @@ function selectTask(rowElement) {
     document.getElementById('detailBoxQty').innerText = qty;
     document.getElementById('detailBoxTarget').innerText = target;
     document.getElementById('detailBoxDue').innerText = due;
+    document.getElementById('detailBoxWorkType').innerText = workType;
 
     // i-Update ang hidden ID sa Modal
     document.getElementById('modalInputId').value = id;
@@ -631,6 +877,62 @@ function openModal() {
 }
 function closeModal() {
     document.getElementById('confirmModal').style.display = 'none';
+}
+
+const productionCompletionForm = document.getElementById('productionCompletionForm');
+if (productionCompletionForm) {
+    productionCompletionForm.addEventListener('submit', function (event) {
+        if (productionCompletionForm.dataset.submitting === 'true') {
+            if (productionCompletionForm.dataset.readyToSubmit === 'true') {
+                return;
+            }
+
+            event.preventDefault();
+            return;
+        }
+
+        event.preventDefault();
+        productionCompletionForm.dataset.submitting = 'true';
+        const submitter = event.submitter;
+        const loader = document.getElementById('teaLoadingPage');
+        const statusText = document.getElementById('teaLoadingText');
+
+        loader.className = 'tea-loading-screen active step-open';
+        loader.setAttribute('aria-hidden', 'false');
+        statusText.textContent = 'Preparing production package...';
+        statusText.style.opacity = '1';
+
+        window.setTimeout(function () {
+            loader.classList.add('step-close');
+            statusText.textContent = 'Closing tea box flaps...';
+        }, 900);
+
+        window.setTimeout(function () {
+            loader.classList.add('step-tape');
+            statusText.textContent = 'Taping tea package securely...';
+        }, 1400);
+
+        window.setTimeout(function () {
+            loader.classList.add('step-zoom');
+            statusText.style.opacity = '0';
+        }, 1900);
+
+        window.setTimeout(function () {
+            loader.classList.add('step-success');
+        }, 2300);
+
+        window.setTimeout(function () {
+            loader.classList.remove('active');
+            loader.setAttribute('aria-hidden', 'true');
+            productionCompletionForm.dataset.readyToSubmit = 'true';
+
+            if (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement) {
+                productionCompletionForm.requestSubmit(submitter);
+                return;
+            }
+            productionCompletionForm.requestSubmit();
+        }, 3500);
+    });
 }
 
 // 3. Dynamic Real-time Search Filter para sa History Page

@@ -242,4 +242,4 @@ echo json_encode([
     'status' => 'error',
     'message' => 'Invalid API Action or Method.'
 ]);
-exit();
+exit();     
