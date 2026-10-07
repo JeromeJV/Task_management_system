@@ -537,7 +537,7 @@ $quantity_err =
 
     <link
         rel="stylesheet"
-        href="css/supervisor.css"
+        href="./css/supervisor.css"
     >
 
     <script
@@ -1452,7 +1452,7 @@ window.supervisorProgressReports =
      JAVASCRIPT
 ===================================================== -->
 
-<script src="js/supervisor.js"></script>
+<script src="./js/supervisor.js"></script>
 
 
 </body>
