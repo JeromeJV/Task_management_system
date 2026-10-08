@@ -108,6 +108,169 @@ while ($r = $payrolls->fetch_assoc()) {
       width: 4px;
       background-color: #16a34a;
     }
+
+    .payroll-loading-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      background: rgba(43, 62, 66, 0.78);
+      backdrop-filter: blur(5px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+    .payroll-loading-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .payroll-loading-card {
+      width: min(400px, 100%);
+      padding: 32px 28px;
+      border-radius: 14px;
+      background: #3a5358;
+      color: #fff;
+      text-align: center;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+    }
+    .payroll-loading-card h2 {
+      margin-bottom: 8px;
+      font-size: 1.25rem;
+    }
+    .payroll-loading-card p {
+      margin-bottom: 18px;
+      color: #cbd5e1;
+      font-size: 0.9rem;
+    }
+    .receipt-container {
+      position: relative;
+      display: flex;
+      width: 190px;
+      height: 190px;
+      justify-content: center;
+      margin: 0 auto;
+      perspective: 600px;
+    }
+    .printer-slot {
+      position: absolute;
+      top: 0;
+      z-index: 3;
+      width: 190px;
+      height: 12px;
+      border-radius: 6px;
+      background: #1e293b;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    }
+    .receipt-feed {
+      position: absolute;
+      top: 6px;
+      z-index: 2;
+      width: 160px;
+      height: 155px;
+      overflow: hidden;
+    }
+    .receipt-paper {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 160px;
+      padding: 12px 10px;
+      border-radius: 2px 2px 0 0;
+      background: #fff;
+      color: #1e293b;
+      box-shadow: 0 10px 15px rgba(0, 0, 0, 0.2);
+      opacity: 0;
+      transform: translate3d(0, -100%, 0);
+      will-change: transform, opacity;
+      transition:
+        transform 1.8s cubic-bezier(0.22, 0.75, 0.25, 1),
+        opacity 0.55s ease-out;
+    }
+    .receipt-paper::after {
+      position: absolute;
+      bottom: -8px;
+      left: 0;
+      width: 100%;
+      height: 8px;
+      background:
+        linear-gradient(-135deg, #fff 4px, transparent 0),
+        linear-gradient(135deg, #fff 4px, transparent 0);
+      background-size: 8px 8px;
+      content: "";
+    }
+    .receipt-header {
+      margin-bottom: 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px dashed #94a3b8;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      text-align: center;
+    }
+    .receipt-line {
+      height: 5px;
+      margin-bottom: 6px;
+      border-radius: 2px;
+      background: #e2e8f0;
+    }
+    .receipt-line.short { width: 60%; }
+    .receipt-line.medium { width: 80%; }
+    .receipt-total {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 10px;
+      padding-top: 6px;
+      border-top: 1px dashed #94a3b8;
+      color: #16a34a;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .payroll-success-badge {
+      position: absolute;
+      right: 8px;
+      bottom: 17px;
+      display: flex;
+      width: 32px;
+      height: 32px;
+      justify-content: center;
+      align-items: center;
+      border-radius: 50%;
+      background: #22c55e;
+      color: #fff;
+      font-size: 18px;
+      font-weight: 700;
+      box-shadow: 0 4px 10px rgba(34, 197, 94, 0.5);
+      transform: scale(0);
+      transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .payroll-loading-overlay.step-print .receipt-paper {
+      opacity: 1;
+      transform: translate3d(0, 8px, 0);
+    }
+    .payroll-loading-overlay.step-success .payroll-success-badge {
+      transform: scale(1);
+    }
+    .payroll-loading-status {
+      margin-top: 22px;
+      color: #e2e8f0;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+    .payroll-loading-overlay.step-success .payroll-loading-status {
+      color: #86efac;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .payroll-loading-overlay,
+      .receipt-paper,
+      .payroll-success-badge {
+        transition-duration: 0.01ms;
+      }
+    }
   </style>
 </head>
 <body class="font-sans antialiased text-slate-800">
@@ -435,8 +598,79 @@ while ($r = $payrolls->fetch_assoc()) {
     </div>
   </div>
 
+  <div
+    id="payrollLoadingOverlay"
+    class="payroll-loading-overlay"
+    role="status"
+    aria-live="polite"
+    aria-hidden="true"
+  >
+    <div class="payroll-loading-card">
+      <h2>Processing Payroll</h2>
+      <p>Your computation is being saved. Please wait.</p>
+      <div class="receipt-container" aria-hidden="true">
+        <div class="printer-slot"></div>
+        <div class="receipt-feed">
+          <div class="receipt-paper">
+            <div class="receipt-header">TASKTRACK PAYROLL</div>
+            <div class="receipt-line medium"></div>
+            <div class="receipt-line short"></div>
+            <div class="receipt-line"></div>
+            <div class="receipt-line medium"></div>
+            <div class="receipt-total">
+              <span>COMPUTATION:</span>
+              <span>READY</span>
+            </div>
+            <div class="payroll-success-badge">✓</div>
+          </div>
+        </div>
+      </div>
+      <div id="payrollLoadingStatus" class="payroll-loading-status">Calculating payroll data...</div>
+    </div>
+  </div>
+
   <!-- SCRIPT HANDLERS -->
   <script>
+    const payrollForm = document.getElementById('payrollForm');
+    const payrollLoadingOverlay = document.getElementById('payrollLoadingOverlay');
+    const payrollLoadingStatus = document.getElementById('payrollLoadingStatus');
+
+    payrollForm.addEventListener('submit', function (event) {
+      if (payrollForm.dataset.readyToSubmit === 'true') {
+        return;
+      }
+
+      event.preventDefault();
+      if (payrollForm.dataset.submitting === 'true') {
+        return;
+      }
+
+      payrollForm.dataset.submitting = 'true';
+      const submitter = event.submitter;
+      payrollLoadingOverlay.className = 'payroll-loading-overlay active';
+      payrollLoadingOverlay.setAttribute('aria-hidden', 'false');
+      payrollLoadingStatus.textContent = 'Generating payroll computation...';
+
+      window.setTimeout(function () {
+        payrollLoadingOverlay.classList.add('step-print');
+        payrollLoadingStatus.textContent = 'Preparing payroll computation...';
+      }, 500);
+
+      window.setTimeout(function () {
+        payrollLoadingOverlay.classList.add('step-success');
+        payrollLoadingStatus.textContent = 'Computation ready. Saving payroll...';
+      }, 2000);
+
+      window.setTimeout(function () {
+        payrollForm.dataset.readyToSubmit = 'true';
+        if (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement) {
+          payrollForm.requestSubmit(submitter);
+          return;
+        }
+        payrollForm.requestSubmit();
+      }, 3500);
+    });
+
     function switchTab(tabName) {
       document.getElementById('view-dashboard').classList.add('hidden');
       document.getElementById('view-employees').classList.add('hidden');
@@ -618,5 +852,6 @@ while ($r = $payrolls->fetch_assoc()) {
       }
     });
   </script>
+  <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

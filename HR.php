@@ -79,5 +79,6 @@
             <p>No records found.</p>
         <?php endif; ?>
     </div>
+    <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

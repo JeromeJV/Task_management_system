@@ -710,7 +710,7 @@ foreach ($history_records as $hrec) {
 
     <!-- Welcome Hero Section -->
     <div class="hero-section">
-        <h1>Hello, Welcome to the production portal</h1>
+        <h1>Hello, Welcome to the logistics portal</h1>
         <p>"Delivering faster than ever" &bull; Logged in as: <strong><?= htmlspecialchars($_SESSION['email']); ?></strong></p>
     </div>
 
@@ -1151,5 +1151,6 @@ foreach ($history_records as $hrec) {
     }
 </script>
 <!-- try -->
+<?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

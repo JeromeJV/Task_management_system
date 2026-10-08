@@ -1511,5 +1511,6 @@ window.onclick = function (event) {
 
 </script>
 
+<?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

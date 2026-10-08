@@ -1328,5 +1328,6 @@ document.querySelectorAll(".assignment-form").forEach((form) => {
 </script>
 
 
+<?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

@@ -93,6 +93,7 @@ if ($usersQuery) {
                     <option value="super" <?= (isset($_POST['role']) &&$_POST['role'] == 'super') ? 'selected' : '' ?>>Supervisor</option>
                     <option value="log" <?= (isset($_POST['role']) &&$_POST['role'] == 'log') ? 'selected' : '' ?>>Logistics</option>
                     <option value="pro" <?= (isset($_POST['role']) &&$_POST['role'] == 'pro') ? 'selected' : '' ?>>Production</option>
+                    <option value="employee" <?= (isset($_POST['role']) &&$_POST['role'] == 'employee') ? 'selected' : '' ?>>Employee</option>
                 </select>
             </div>
 

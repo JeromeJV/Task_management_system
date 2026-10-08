@@ -1,206 +1,918 @@
-// ==========================================
-// PHILIPPINE ADDRESS API (PSGC) INTEGRATION
-// ==========================================
+// -------------------------------------------------------------------------------- API for Address
 
-// Base URL para sa PSGC GitLab API
 const base_url = 'https://psgc.gitlab.io/api';
 
-// Kuhanin ang mga DOM Elements para sa dropdowns at errors
 const regionSelect = document.getElementById('addressRegion');
 const provinceSelect = document.getElementById('addressProvince');
 const citySelect = document.getElementById('addressCity');
 const barangaySelect = document.getElementById('addressBarangay');
 const apiError = document.getElementById('apiError');
 
-// Helper function: Ipakita o itago ang error message kung pumalya ang API
 function showApiError(show) {
-    if (apiError) apiError.style.display = show ? 'block' : 'none';
+    apiError.style.display = show ? 'block' : 'none';
 }
 
-// Helper function: I-clear at i-disable ang dropdown kapag binago ang parent selection
 function resetSelect(element, defaultText) {
     element.innerHTML = `<option value="">${defaultText}</option>`;
     element.disabled = true;
 }
 
-// ------------------------------------------
-// STEP 1: I-load ang listahan ng Regions kapag nag-load ang page
-// ------------------------------------------
-window.addEventListener('DOMContentLoaded', () => {
-    fetch(`${base_url}/regions.json`)
+// Load regions when the form is ready
+function loadRegions() {
+    fetch(`${base_url}/regions/`)
         .then(res => {
             if (!res.ok) throw new Error('Network response was not ok');
             return res.json();
         })
         .then(data => {
+            if (!Array.isArray(data)) {
+                throw new Error('Invalid regions response');
+            }
             showApiError(false);
-            // I-sort ang mga rehiyon mula A hanggang Z
             data.sort((a, b) => a.name.localeCompare(b.name));
-            
-            // I-populate ang Region Dropdown
             data.forEach(region => {
                 let opt = document.createElement('option');
-                opt.value = region.name;        // Pangalan ng rehiyon ang maipapadala sa PHP form submit
-                opt.dataset.code = region.code; // PSGC Code na gagamitin sa pag-fetch ng Province/City
-                opt.textContent = region.name;  // Pangalang lalabas sa dropdown UI
+                opt.value = region.code;
+                opt.textContent = region.name;
                 regionSelect.appendChild(opt);
             });
-            if (typeof updateFormState === 'function') updateFormState();
+            updateFormState();
         })
         .catch(err => {
             console.warn('Could not load regions:', err);
             showApiError(true);
         });
-});
+}
 
-// ------------------------------------------
-// STEP 2: Kapag pumili ng Region -> I-load ang Provinces (o Cities kung NCR)
-// ------------------------------------------
+if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', loadRegions, { once: true });
+} else {
+    loadRegions();
+}
+
+// Region change -> load provinces
 regionSelect.addEventListener('change', function () {
-    const selectedOption = this.options[this.selectedIndex];
-    const regionCode = selectedOption.dataset.code; // Kuhanin ang nakagagap na API code
-
-    // I-reset muna ang mga kasunod na dropdowns
     resetSelect(provinceSelect, 'Select Province');
     resetSelect(citySelect, 'Select City/Municipality');
     resetSelect(barangaySelect, 'Select Barangay');
 
-    if (!regionCode) return; // Kapag binalik sa "Select Region", huminto na rito
+    if (!this.value) {
+        updateFormState();
+        return;
+    }
 
-    // Subukang kuhanin ang mga lalawigan sa napiling rehiyon
-    fetch(`${base_url}/regions/${regionCode}/provinces.json`)
-        .then(res => res.json())
+    let endpoint = `${base_url}/regions/${this.value}/provinces/`;
+    if (this.value === '130000000') {
+        endpoint = `${base_url}/regions/${this.value}/districts/`;
+    }
+
+    fetch(endpoint)
+        .then(res => {
+            if (!res.ok) throw new Error('Failed to fetch provinces');
+            return res.json();
+        })
         .then(data => {
-            // TANDAAN: Ang NCR ay walang Province, kaya dideretso tayo sa Cities
+            showApiError(false);
+            data.sort((a, b) => a.name.localeCompare(b.name));
             if (data.length === 0) {
-                loadCitiesFromRegion(regionCode);
+                loadCities(this.value, 'regions');
             } else {
-                provinceSelect.disabled = false; // I-enable ang province dropdown
-                data.sort((a, b) => a.name.localeCompare(b.name));
-                data.forEach(province => {
+                provinceSelect.disabled = false;
+                data.forEach(prov => {
                     let opt = document.createElement('option');
-                    opt.value = province.name;
-                    opt.dataset.code = province.code;
-                    opt.textContent = province.name;
+                    opt.value = prov.code;
+                    opt.textContent = prov.name;
                     provinceSelect.appendChild(opt);
                 });
             }
+            updateFormState();
         })
-        .catch(() => showApiError(true));
+        .catch(err => {
+            console.warn('Could not load provinces:', err);
+            showApiError(true);
+            updateFormState();
+        });
 });
 
-// Special Function: Para sa mga rehiyong walang probinsya (tulad ng NCR/Metro Manila)
-function loadCitiesFromRegion(regionCode) {
-    fetch(`${base_url}/regions/${regionCode}/cities-municipalities.json`)
-        .then(res => res.json())
-        .then(data => {
-            citySelect.disabled = false;
-            data.sort((a, b) => a.name.localeCompare(b.name));
-            data.forEach(city => {
-                let opt = document.createElement('option');
-                opt.value = city.name;
-                opt.dataset.code = city.code;
-                opt.textContent = city.name;
-                citySelect.appendChild(opt);
-            });
-        })
-        .catch(() => showApiError(true));
-}
-
-// ------------------------------------------
-// STEP 3: Kapag pumili ng Province -> I-load ang Cities / Municipalities
-// ------------------------------------------
+// Province change -> load cities
 provinceSelect.addEventListener('change', function () {
-    const selectedOption = this.options[this.selectedIndex];
-    const provinceCode = selectedOption.dataset.code;
-
     resetSelect(citySelect, 'Select City/Municipality');
     resetSelect(barangaySelect, 'Select Barangay');
 
-    if (!provinceCode) return;
+    if (!this.value) {
+        updateFormState();
+        return;
+    }
 
-    fetch(`${base_url}/provinces/${provinceCode}/cities-municipalities.json`)
-        .then(res => res.json())
+    let type = regionSelect.value === '130000000' ? 'districts' : 'provinces';
+    loadCities(this.value, type);
+});
+
+function loadCities(parentCode, parentType) {
+    fetch(`${base_url}/${parentType}/${parentCode}/cities-municipalities/`)
+        .then(res => {
+            if (!res.ok) throw new Error('Failed to fetch cities');
+            return res.json();
+        })
         .then(data => {
-            citySelect.disabled = false;
+            showApiError(false);
             data.sort((a, b) => a.name.localeCompare(b.name));
+            citySelect.disabled = false;
             data.forEach(city => {
                 let opt = document.createElement('option');
-                opt.value = city.name;
-                opt.dataset.code = city.code;
+                opt.value = city.code;
                 opt.textContent = city.name;
                 citySelect.appendChild(opt);
             });
+            updateFormState();
         })
-        .catch(() => showApiError(true));
-});
+        .catch(err => {
+            console.warn('Could not load cities:', err);
+            showApiError(true);
+            updateFormState();
+        });
+}
 
-// ------------------------------------------
-// STEP 4: Kapag pumili ng City -> I-load ang Barangays
-// ------------------------------------------
+// City change -> load barangays
 citySelect.addEventListener('change', function () {
-    const selectedOption = this.options[this.selectedIndex];
-    const cityCode = selectedOption.dataset.code;
-
     resetSelect(barangaySelect, 'Select Barangay');
 
-    if (!cityCode) return;
+    if (!this.value) {
+        updateFormState();
+        return;
+    }
 
-    fetch(`${base_url}/cities-municipalities/${cityCode}/barangays.json`)
-        .then(res => res.json())
+    fetch(`${base_url}/cities-municipalities/${this.value}/barangays/`)
+        .then(res => {
+            if (!res.ok) throw new Error('Failed to fetch barangays');
+            return res.json();
+        })
         .then(data => {
-            barangaySelect.disabled = false;
+            showApiError(false);
             data.sort((a, b) => a.name.localeCompare(b.name));
-            data.forEach(barangay => {
+            barangaySelect.disabled = false;
+            data.forEach(brgy => {
                 let opt = document.createElement('option');
-                opt.value = barangay.name;
-                opt.textContent = barangay.name;
+                opt.value = brgy.code;
+                opt.textContent = brgy.name;
                 barangaySelect.appendChild(opt);
             });
+            updateFormState();
         })
-        .catch(() => showApiError(true));
+        .catch(err => {
+            console.warn('Could not load barangays:', err);
+            showApiError(true);
+            updateFormState();
+        });
 });
 
-// ------------------------------------------
-// UTILITY: Reset Function para sa Form
-// ------------------------------------------
+// -------------------------------------------------------------------------------- STEP LOCKING SYSTEM
+
+function lockStep(stepNumber) {
+    const card = document.querySelector(`.card[data-section="${stepNumber}"]`);
+    if (!card) return;
+    
+    if (!card.classList.contains('locked')) {
+        card.classList.add('locked');
+        card.style.opacity = '0.5';
+        card.style.pointerEvents = 'none';
+        card.style.userSelect = 'none';
+        
+        // Add lock message
+        let lockMessage = card.querySelector('.lock-message');
+        if (!lockMessage) {
+            lockMessage = document.createElement('div');
+            lockMessage.className = 'lock-message';
+            lockMessage.innerHTML = `
+                <p>Complete previous section to unlock</p>
+            `;
+            card.appendChild(lockMessage);
+        }
+    }
+}
+
+function unlockStep(stepNumber) {
+    const card = document.querySelector(`.card[data-section="${stepNumber}"]`);
+    if (!card) return;
+    
+    if (card.classList.contains('locked')) {
+        card.classList.remove('locked');
+        card.style.opacity = '1';
+        card.style.pointerEvents = 'auto';
+        card.style.userSelect = 'auto';
+        
+        // Remove lock message
+        const lockMessage = card.querySelector('.lock-message');
+        if (lockMessage) lockMessage.remove();
+    }
+}
+
+function updateStepLocks() {
+    // Check if step 1 is complete
+    const step1Complete = isSectionComplete(1);
+    
+    // Lock/unlock steps based on previous step completion
+    if (step1Complete) {
+        unlockStep(2);
+    } else {
+        lockStep(2);
+        lockStep(3);
+        lockStep(4);
+    }
+    
+    // Check if step 2 is complete
+    const step2Complete = isSectionComplete(2);
+    if (step2Complete && step1Complete) {
+        unlockStep(3);
+    } else {
+        lockStep(3);
+    }
+    
+    // Check if step 3 is complete
+    const step3Complete = isSectionComplete(3);
+    if (step3Complete && step2Complete && step1Complete) {
+        unlockStep(4);
+    } else {
+        lockStep(4);
+    }
+}
+
+// -------------------------------------------------------------------------------- VALIDATION FUNCTIONS
+
+function showError(field, message) {
+    const container = field.closest('.field');
+    if (!container) return;
+    
+    const existingError = container.querySelector('.field-error');
+    if (existingError) existingError.remove();
+    
+    const errorSpan = document.createElement('span');
+    errorSpan.className = 'field-error';
+    errorSpan.textContent = message;
+    container.appendChild(errorSpan);
+    field.classList.add('error');
+}
+
+function clearError(field) {
+    const container = field.closest('.field');
+    if (!container) return;
+    
+    const error = container.querySelector('.field-error');
+    if (error) error.remove();
+    field.classList.remove('error');
+}
+
+function isEmpty(field) {
+    if (!field) return true;
+    if (field.type === 'file') {
+        return !field.files || field.files.length === 0;
+    }
+    if (field.tagName === 'SELECT') {
+        return !field.value || field.value.trim() === '';
+    }
+    return !field.value || field.value.trim() === '';
+}
+
+// -------------------------------------------------------------------------------- VALIDATION RULES 
+
+function validateRequired(field) {
+    if (field.hasAttribute('data-required') && isEmpty(field)) {
+        const labelElement = field.closest('.field')?.querySelector('label');
+        const label = labelElement ? labelElement.textContent : 'This field';
+        return `${label} is required`;
+    }
+    return null;
+}
+
+function validateName(field) {
+    const value = field.value.trim();
+    if (!value) return null;
+    
+    if (value.length < 2) {
+        return 'Name must be at least 2 characters';
+    }
+    if (!/^[a-zA-Z\s-]+$/.test(value)) {
+        return 'Name contains invalid characters';
+    }
+    return null;
+}
+
+function validateSchoolName(field) {
+    const value = field.value.trim();
+    if (!value) return null;
+    
+    if (value.length < 3) {
+        return 'School name must be at least 3 characters';
+    }
+    if (value.length > 100) {
+        return 'School name must be less than 100 characters';
+    }
+    if (!/^[a-zA-Z0-9\s\-'.,&()]+$/.test(value)) {
+        return 'School name contains invalid characters';
+    }
+    return null;
+}
+
+function validatePhone(field) {
+    const value = field.value.replace(/[\s\-\(\)]/g, '');
+    if (!value) return null;
+    
+    const phoneRegex = /^(09|\+639|639)\d{9}$/;
+    if (!phoneRegex.test(value)) {
+        return 'Enter valid PH number (e.g., 09123456789)';
+    }
+    return null;
+}
+
+function validateEmail(field) {
+    const value = field.value.trim();
+    if (!value) return null;
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(value)) {
+        return 'Enter a valid email address';
+    }
+    return null;
+}
+
+function validateUrl(field) {
+    const value = field.value.trim();
+    if (!value) return null;
+    
+    try {
+        const url = new URL(value);
+        if (!url.hostname.includes('facebook.com')) {
+            return 'Enter a valid Facebook URL';
+        }
+    } catch {
+        return 'Enter a valid URL (https://...)';
+    }
+    return null;
+}
+
+function validateDate(field) {
+    const value = field.value;
+    if (!value) return null;
+    
+    const date = new Date(value);
+    if (isNaN(date.getTime())) {
+        return 'Enter a valid date';
+    }
+    
+    const labelElement = field.closest('.field')?.querySelector('label');
+    const label = labelElement ? labelElement.textContent : '';
+    
+    if (label.includes('available')) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const selectedDate = new Date(value);
+        selectedDate.setHours(0, 0, 0, 0);
+        
+        if (selectedDate < today) {
+            return 'Date must be today or in the future';
+        }
+    }
+    
+    if (label.includes('Start date') || label.includes('End date')) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const selectedDate = new Date(value);
+        selectedDate.setHours(0, 0, 0, 0);
+        
+        if (selectedDate > today) {
+            return 'Date cannot be in the future';
+        }
+    }
+    
+    return null;
+}
+
+function validateForm() {
+    let isValid = true;
+    const fields = document.querySelectorAll('.card input, .card select, .card textarea');
+    
+    fields.forEach(field => {
+        const error = validateField(field);
+        if (error) {
+            showError(field, error);
+            isValid = false;
+        } else {
+            clearError(field);
+        }
+    });
+    
+    // Validate date ranges
+    const startDate = document.getElementById('workStartDate');
+    const endDate = document.getElementById('workEndDate');
+    
+    if (startDate && endDate && startDate.value && endDate.value) {
+        if (new Date(endDate.value) < new Date(startDate.value)) {
+            showError(endDate, 'End date must be after start date');
+            isValid = false;
+        }
+    }
+    
+    return isValid;
+}
+
+function validateFile(field) {
+    if (!field.files || field.files.length === 0) return null;
+    
+    const file = field.files[0];
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png'];
+    
+    if (!allowedTypes.includes(file.type)) {
+        return 'Only PDF, JPG, or PNG files are allowed';
+    }
+    
+    if (file.size > 10 * 1024 * 1024) {
+        return 'File must be less than 10MB';
+    }
+    
+    return null;
+}
+
+function validateField(field) {
+    if (!field || field.offsetParent === null) return null;
+    
+    let error = validateRequired(field);
+    if (error) return error;
+    
+    if (isEmpty(field)) return null;
+    
+    const type = field.type;
+    const labelElement = field.closest('.field')?.querySelector('label');
+    const label = labelElement ? labelElement.textContent : '';
+    const fieldId = field.id;
+    
+    if (fieldId === 'schoolName') return validateSchoolName(field);
+    if (label.includes('Name')) return validateName(field);
+    if (type === 'tel' || label.includes('Phone')) return validatePhone(field);
+    if (type === 'email') return validateEmail(field);
+    if (type === 'url') return validateUrl(field);
+    if (type === 'date') return validateDate(field);
+    if (type === 'file') return validateFile(field);
+    return null;
+}
+
+// -------------------------------------------------------------------------------- PROGRESS LOGIC 
+
+function isFieldFilled(field) {
+    if (!field) return false;
+    if (field.tagName === 'SELECT') {
+        return field.value && field.value.trim() !== '';
+    } else if (field.type === 'file') {
+        return field.files && field.files.length > 0;
+    } else {
+        return field.value && field.value.trim() !== '';
+    }
+}
+
+function isSectionComplete(sectionNumber) {
+    const section = document.querySelector(`.card[data-section="${sectionNumber}"]`);
+    if (!section) return false;
+    
+    const requiredFields = section.querySelectorAll('[data-required]');
+    for (let field of requiredFields) {
+        if (field.disabled) continue; // Skip disabled fields
+        if (!isFieldFilled(field)) return false;
+    }
+    return true;
+}
+
+function updateProgress() {
+    const cards = document.querySelectorAll('.card');
+    const steps = document.querySelectorAll('.step');
+
+    cards.forEach((card, index) => {
+        const step = steps[index];
+        if (!step) return;
+        
+        step.classList.remove('active', 'done');
+        if (isSectionComplete(index + 1)) {
+            step.classList.add('done');
+        } else {
+            // Find the first incomplete step
+            const previousComplete = index === 0 || isSectionComplete(index);
+            if (previousComplete) {
+                step.classList.add('active');
+            }
+        }
+    });
+}
+
+// Single function to update everything without recursion
+function updateFormState() {
+    updateProgress();
+    updateStepLocks();
+}
+
+// -------------------------------------------------------------------------------- DATABASE-READY DATA COLLECTION
+
+function collectFormData() {
+    const formData = {
+        lastname: document.getElementById('lastName')?.value?.trim() || '',
+        firstname: document.getElementById('firstName')?.value?.trim() || '',
+        middlename: document.getElementById('middleName')?.value?.trim() || '',
+        contact_number: document.getElementById('phoneNumber')?.value?.replace(/\D/g, '') || '',
+        email: document.getElementById('emailAddress')?.value?.trim() || '',
+        facebook: document.getElementById('facebookUrl')?.value?.trim() || '',
+        region: getSelectedText('addressRegion'),
+        province: getSelectedText('addressProvince'),
+        city: getSelectedText('addressCity'),
+        barangay: getSelectedText('addressBarangay'),
+        street: document.getElementById('addressStreet')?.value?.trim() || '',
+        house_number: document.getElementById('addressHouseNumber')?.value?.trim() || '',
+        position_applied: document.getElementById('positionApplying')?.value?.trim() || '',
+        company_name: document.getElementById('workCompany')?.value?.trim() || '',
+        position: document.getElementById('workPosition')?.value?.trim() || '',
+        date_of_start: document.getElementById('workStartDate')?.value || '',
+        date_of_end: document.getElementById('workEndDate')?.value || '',
+        education: document.getElementById('educationLevel')?.value || '',
+        start_date: document.getElementById('availabilityDate')?.value || ''
+    };
+    
+    return formData;
+}
+
+function getSelectedText(id) {
+    const select = document.getElementById(id);
+    return select?.selectedOptions[0]?.textContent?.trim() || '';
+}
+
+// -------------------------------------------------------------------------------- DATABASE SUBMISSION 
+
+async function submitToDatabase(formData) {
+    const form = document.getElementById('applicationForm');
+    const requestData = new FormData();
+    Object.entries(formData).forEach(([name, value]) => {
+        requestData.append(name, value);
+    });
+    requestData.append('submit', 'Submit Application');
+
+    const resume = document.getElementById('resumeFile')?.files[0];
+    if (resume) {
+        requestData.append('resume', resume, resume.name);
+    }
+
+    const response = await fetch(form.action || window.location.href, {
+        method: 'POST',
+        body: requestData
+    });
+
+    const responseHtml = await response.text();
+    const responseDocument = new DOMParser().parseFromString(responseHtml, 'text/html');
+    const serverMessage = responseDocument.querySelector('.alert[role="alert"]')?.textContent?.trim() || '';
+
+    if (!response.ok) {
+        throw new Error(serverMessage || 'Hindi naisumite ang application. Pakisubukan ulit.');
+    }
+
+    if (serverMessage !== 'Your Application was successfully sent.') {
+        const fieldErrors = Array.from(responseDocument.querySelectorAll('.invalid-feedback'))
+            .map(error => error.textContent.trim())
+            .filter(Boolean);
+        throw new Error(serverMessage || fieldErrors.join(' ') || 'Hindi na-save ang application. Pakisuri ang mga inilagay na detalye.');
+    }
+
+    return { success: true };
+}
+
+// -------------------------------------------------------------------------------- POPUP CONFIRMATION
+
+function createPopupModal() {
+    if (document.getElementById('successModal')) return;
+    
+    const modal = document.createElement('div');
+    modal.id = 'successModal';
+    modal.innerHTML = `
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-icon">✓</div>
+            <h2>Application Submitted!</h2>
+            <p>Your application has been successfully submitted.</p>
+            <p class="modal-message">We will review your application and contact you soon.</p>
+            <button class="modal-close-btn" onclick="closeModal()">OK</button>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    const modalStyles = document.createElement('style');
+    modalStyles.textContent = `
+        #successModal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 9999;
+        }
+        
+        #successModal.show {
+            display: block;
+        }
+        
+        .modal-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .modal-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            text-align: center;
+            min-width: 400px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: slideUp 0.4s ease;
+        }
+        
+        .modal-icon {
+            width: 80px;
+            height: 80px;
+            background: #28a745;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            margin: 0 auto 20px;
+            animation: scaleIn 0.5s ease 0.2s both;
+        }
+        
+        .modal-content h2 {
+            color: #28a745;
+            margin: 0 0 10px;
+            font-size: 24px;
+        }
+        
+        .modal-content p {
+            color: #666;
+            margin: 5px 0;
+            font-size: 16px;
+        }
+        
+        .modal-reference {
+            font-weight: bold;
+            color: #333 !important;
+            margin: 15px 0 !important;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 6px;
+        }
+        
+        #referenceId {
+            color: #007bff;
+            font-family: monospace;
+            font-size: 18px;
+        }
+        
+        .modal-message {
+            font-style: italic;
+            margin-bottom: 20px !important;
+        }
+        
+        .modal-close-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 12px 40px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin-top: 10px;
+        }
+        
+        .modal-close-btn:hover {
+            background: #218838;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        @keyframes slideUp {
+            from { 
+                opacity: 0;
+                transform: translate(-50%, -40%);
+            }
+            to { 
+                opacity: 1;
+                transform: translate(-50%, -50%);
+            }
+        }
+        
+        @keyframes scaleIn {
+            from { 
+                transform: scale(0);
+            }
+            to { 
+                transform: scale(1);
+            }
+        }
+    `;
+    
+    document.head.appendChild(modalStyles);
+}
+
+function showModal() {
+    const modal = document.getElementById('successModal');
+    modal.classList.add('show');
+}
+
+function closeModal() {
+    const modal = document.getElementById('successModal');
+    if (modal) modal.classList.remove('show');
+}
+
+// -------------------------------------------------------------------------------- RESET FORM 
+
 function resetForm() {
     const form = document.getElementById('applicationForm');
     
-    if (form) form.reset();
+    form.reset();
     
-    // Alisin ang mga error indicators at warnings
     document.querySelectorAll('.field-error').forEach(error => error.remove());
     document.querySelectorAll('.error').forEach(field => field.classList.remove('error'));
     
     const fileName = document.getElementById('resumeFileName');
     if (fileName) fileName.textContent = '';
     
-    // I-reset pabalik sa default state ang mga dropdowns
     document.querySelectorAll('select').forEach(select => {
         select.selectedIndex = 0;
     });
     
-    // I-lock at i-clear ang mga dependent address fields
     ['addressProvince', 'addressCity', 'addressBarangay'].forEach(id => {
         const select = document.getElementById(id);
-        if (select) {
-            select.disabled = true;
-            select.innerHTML = `<option value="">Select ${id.replace('address', '')}</option>`;
-        }
+        if (select) select.disabled = true;
     });
     
-    if (typeof updateFormState === 'function') updateFormState();
+    // Reset step locks
+    updateFormState();
     
-    // I-reset ang submit button
     const submitBtn = document.getElementById('submitBtn');
-    if (submitBtn) {
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Submit Application';
-    }
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Submit Application';
     
     const submitStatus = document.getElementById('submitStatus');
-    if (submitStatus) submitStatus.textContent = '';
+    submitStatus.textContent = '';
     
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+
+// -------------------------------------------------------------------------------- FORM SUBMISSION HANDLER
+
+async function handleFormSubmit(e) {
+    e.preventDefault();
+    
+    const submitBtn = document.getElementById('submitBtn');
+    const submitStatus = document.getElementById('submitStatus');
+    
+    // Validate entire form
+    if (!validateForm()) {
+        submitStatus.textContent = 'Please fix the errors above';
+        submitStatus.style.color = '#dc3545';
+        
+        const firstError = document.querySelector('.error');
+        if (firstError) {
+            firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        return;
+    }
+    
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submitting...';
+    submitStatus.textContent = '';
+    
+    try {
+        const formData = collectFormData();
+        const result = await submitToDatabase(formData);
+        
+        createPopupModal();
+        showModal();
+        
+        setTimeout(() => {
+            resetForm();
+        }, 500);
+        
+        console.log('Application saved successfully:', result);
+        
+    } catch (error) {
+        console.error('Submission failed:', error);
+        submitStatus.textContent = error instanceof Error ? error.message : 'Failed to submit. Please try again.';
+        submitStatus.style.color = '#dc3545';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Application';
+    }
+}
+
+// -------------------------------------------------------------------------------- EVENT LISTENERS
+
+document.querySelectorAll('input, select, textarea').forEach(field => {
+    field.addEventListener('blur', function() {
+        const error = validateField(this);
+        if (error) {
+            showError(this, error);
+        } else {
+            clearError(this);
+        }
+    });
+    
+    field.addEventListener('input', function() {
+        clearError(this);
+        updateFormState();
+    });
+    
+    field.addEventListener('change', function() {
+        clearError(this);
+        updateFormState();
+    });
+});
+
+document.getElementById('applicationForm').addEventListener('submit', handleFormSubmit);
+
+document.getElementById('resumeFile')?.addEventListener('change', function() {
+    const fileName = document.getElementById('resumeFileName');
+    if (this.files && this.files[0]) {
+        const size = (this.files[0].size / (1024 * 1024)).toFixed(2);
+        fileName.textContent = `Selected: ${this.files[0].name} (${size} MB)`;
+    } else {
+        fileName.textContent = '';
+    }
+    updateFormState();
+});
+
+// Add error styles and lock styles
+const style = document.createElement('style');
+style.textContent = `
+    .field-error {
+        display: block;
+        color: #dc3545;
+        font-size: 0.85rem;
+        margin-top: 4px;
+    }
+    
+    input.error, select.error {
+        border: 2px solid #dc3545 !important;
+        background-color: #fff5f5 !important;
+    }
+    
+    .submit-status {
+        margin-left: 15px;
+        font-weight: 500;
+    }
+    
+    .card.locked {
+        position: relative;
+        pointer-events: none;
+        user-select: none;
+        opacity: 0.5;
+        transition: opacity 0.3s ease;
+    }
+    
+    .lock-message {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(255, 255, 255, 0.95);
+        padding: 20px;
+        border-radius: 8px;
+        text-align: center;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        z-index: 10;
+        pointer-events: auto;
+    }
+    
+    .lock-icon {
+        font-size: 32px;
+        margin-bottom: 10px;
+    }
+    
+    .lock-message p {
+        margin: 0;
+        color: #666;
+        font-size: 14px;
+        font-weight: 500;
+    }
+`;
+
+document.head.appendChild(style);
+
+// Initialize
+createPopupModal();
+updateFormState();

@@ -963,5 +963,6 @@ function filterHistoryTable() {
 }
 </script>
 
+<?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

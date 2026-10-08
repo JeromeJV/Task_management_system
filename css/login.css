@@ -7,17 +7,18 @@
 
 body {
     min-height: 100vh;
-    width: 100vw;
+    min-height: 100svh;
+    width: 100%;
     overflow-x: hidden;
 }
 
 /* FULL SCREEN CONTAINER */
 .main-container {
-    width: 100vw;
+    width: 100%;
     min-height: 100vh;
+    min-height: 100svh;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
     position: relative;
 
     /* Background image & gradient overlay */
@@ -31,13 +32,16 @@ body {
 
 /* HEADER & NAVIGATION */
 header {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
-    padding: 40px 80px;
+    gap: 20px;
+    padding: 28px clamp(24px, 5.5vw, 80px);
     width: 100%;
 }
 
 .brand {
+    grid-column: 1;
     display: flex;
     align-items: center;
     gap: 14px;
@@ -45,6 +49,7 @@ header {
     font-size: 1.6rem;
     letter-spacing: 1.5px;
     text-transform: uppercase;
+    flex-shrink: 0;
 }
 
 .brand i {
@@ -52,15 +57,21 @@ header {
 }
 
 nav {
-    margin-left: 80px;
+    grid-column: 2;
     display: flex;
-    gap: 35px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    justify-self: center;
+    max-width: 100%;
+    margin: 0;
+    gap: 12px clamp(16px, 2.4vw, 35px);
 }
 
 nav a {
     color: #d1d5db;
     text-decoration: none;
-    font-size: 1.1rem;
+    font-size: clamp(0.9rem, 1.1vw, 1.1rem);
     font-weight: 500;
     transition: color 0.2s;
 }
@@ -75,20 +86,21 @@ nav a.active, nav a:hover {
     flex: 1;
     align-items: center;
     justify-content: space-between;
-    padding: 0 100px 60px 100px;
+    gap: clamp(40px, 8vw, 120px);
+    padding: 24px clamp(28px, 7vw, 100px) 64px;
 }
 
 /* FORM SECTION */
 .login-section {
-    width: 45%;
-    max-width: 420px;
+    width: min(45%, 440px);
+    min-width: 0;
     display: flex;
     flex-direction: column;
     justify-content: center;
 }
 
 .login-section h1 {
-    font-size: 3rem;
+    font-size: clamp(2.25rem, 4vw, 3rem);
     font-weight: 800;
     letter-spacing: 2px;
     margin-bottom: 30px;
@@ -164,10 +176,11 @@ nav a.active, nav a:hover {
 }
 
 .btn-submit {
+    width: 100%;
     background-color: #1e4d54;
     color: #ffffff;
     border: 1px solid #2e6972;
-    padding: 14px 175px;
+    padding: 14px 24px;
     border-radius: 8px;
     font-weight: 700;
     font-size: 1.05rem;
@@ -183,7 +196,8 @@ nav a.active, nav a:hover {
 
 /* WELCOME TEXT SECTION */
 .welcome-section {
-    width: 50%;
+    width: min(50%, 620px);
+    min-width: 0;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -192,14 +206,14 @@ nav a.active, nav a:hover {
 }
 
 .welcome-section h2 {
-    font-size: 3.2rem;
+    font-size: clamp(2.25rem, 4.4vw, 3.2rem);
     font-weight: 700;
     margin-bottom: 18px;
     line-height: 1.2;
 }
 
 .welcome-section p {
-    font-size: 1.1rem;
+    font-size: clamp(1rem, 1.35vw, 1.1rem);
     color: #e0e0e0;
     line-height: 1.7;
     max-width: 480px;
@@ -207,10 +221,9 @@ nav a.active, nav a:hover {
 
 /* GEAR LOGO WATERMARK */
 .gear-watermark {
-    
     position: absolute;
-    bottom: -20px;
-    right: 40px;
+    bottom: 0;
+    right: clamp(20px, 3vw, 40px);
     font-size: 4.5rem;
     color: rgba(255, 255, 255, 0.9);
     pointer-events: none;
@@ -223,35 +236,128 @@ nav a.active, nav a:hover {
 
 /* brand icon */
 .gear-brand {
-    
-    width:90px;
-    height:90px;
+    width: clamp(54px, 6vw, 90px);
+    height: clamp(54px, 6vw, 90px);
     border-radius:10%;
-    margin-left: 25px;
+    margin-left: 0;
 }
 
 
 /* RESPONSIVE DESIGN FOR MOBILE & TABLETS */
 @media (max-width: 992px) {
     header {
-        padding: 30px 40px;
+        grid-template-columns: minmax(0, 1fr);
+        align-items: flex-start;
+        padding: 24px clamp(24px, 5vw, 48px);
+    }
+
+    .brand,
+    nav {
+        grid-column: 1;
+        width: 100%;
+        max-width: 100%;
+        justify-content: center;
+        gap: 10px 20px;
     }
     
     .content {
-        flex-direction: column-reverse;
+        flex-direction: column;
+        align-items: stretch;
         justify-content: center;
-        gap: 40px;
-        padding: 20px 40px 60px 40px;
+        gap: 44px;
+        padding: 28px clamp(24px, 8vw, 80px) 72px;
     }
 
     .welcome-section, .login-section {
         width: 100%;
         max-width: 100%;
+    }
+
+    .welcome-section {
         text-align: left;
         align-items: flex-start;
+        order: 0;
+    }
+
+    .login-section {
+        order: 1;
     }
 
     .gear-watermark {
         display: none;
+    }
+}
+
+@media (max-width: 600px) {
+    header {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 14px;
+        padding: 18px 20px 12px;
+    }
+
+    .brand {
+        width: auto;
+        gap: 10px;
+        font-size: 1.25rem;
+    }
+
+    .gear-brand {
+        width: 48px;
+        height: 48px;
+    }
+
+    nav {
+        justify-content: center;
+        gap: 8px 18px;
+    }
+
+    nav a {
+        font-size: 0.9rem;
+    }
+
+    .content {
+        gap: 30px;
+        padding: 24px 20px 40px;
+    }
+
+    .login-section h1 {
+        margin-bottom: 22px;
+        font-size: 2.15rem;
+    }
+
+    .welcome-section h2 {
+        font-size: clamp(1.9rem, 8vw, 2.4rem);
+    }
+
+    .welcome-section p {
+        font-size: 1rem;
+        line-height: 1.6;
+    }
+
+    .form-group {
+        margin-bottom: 18px;
+    }
+
+    .form-group input,
+    .btn-submit {
+        min-height: 48px;
+    }
+}
+
+@media (max-width: 360px) {
+    header,
+    .content {
+        padding-right: 16px;
+        padding-left: 16px;
+    }
+
+    nav {
+        column-gap: 13px;
+    }
+
+    nav a {
+        font-size: 0.82rem;
     }
 }

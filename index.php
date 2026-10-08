@@ -12,7 +12,7 @@ include 'config/loginBE.php';
     <!-- Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Separate CSS File -->
-    <link rel="stylesheet" href="css/login.css">
+    <link rel="stylesheet" href="css/login.css?v=20261007-centered-nav">
     <style>
         .login-overlay {
             position: fixed;
@@ -22,6 +22,8 @@ include 'config/loginBE.php';
             flex-direction: column;
             justify-content: center;
             align-items: center;
+            overflow: hidden;
+            padding: 24px;
             background: rgba(43, 62, 66, 0.94);
             backdrop-filter: blur(4px);
             opacity: 0;
@@ -34,8 +36,8 @@ include 'config/loginBE.php';
         }
         .gear-spin-container {
             position: relative;
-            width: 90px;
-            height: 90px;
+            width: clamp(64px, 20vw, 90px);
+            height: clamp(64px, 20vw, 90px);
             margin-bottom: 20px;
         }
         .gear-main {
@@ -61,10 +63,11 @@ include 'config/loginBE.php';
         .welcome-word {
             position: absolute;
             left: 50%;
+            max-width: calc(100vw - 32px);
             color: #fff;
-            font-size: clamp(32px, 8vw, 64px);
+            font-size: clamp(28px, 8vw, 64px);
             font-weight: 800;
-            letter-spacing: 8px;
+            letter-spacing: clamp(2px, 1.2vw, 8px);
             white-space: nowrap;
             opacity: 0;
             transform: translate(-50%, 8px) scale(0.8);
@@ -92,8 +95,9 @@ include 'config/loginBE.php';
             to { opacity: 1; transform: translateY(0) scale(1); }
         }
         .overlay-status {
+            max-width: calc(100vw - 40px);
             color: #e2e8f0;
-            font-size: 15px;
+            font-size: clamp(13px, 3.5vw, 15px);
             font-weight: 600;
             letter-spacing: 0.5px;
             text-align: center;

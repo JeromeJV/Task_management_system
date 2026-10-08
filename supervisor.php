@@ -42,6 +42,68 @@ $total_completed = ($prod_data['completed'] ?? 0) + ($del_data['completed'] ?? 0
 $total_pending   = ($prod_data['pending'] ?? 0) + ($del_data['pending'] ?? 0);
 $total_overdue   = ($prod_data['overdue'] ?? 0) + ($del_data['overdue'] ?? 0);
 
+// Ensure production assignment storage exists before loading the dashboard task list.
+$assignment_table_sql = "CREATE TABLE IF NOT EXISTS production_assignments (
+                            production_id VARCHAR(64) NOT NULL,
+                            employee_id INT NOT NULL,
+                            work_type ENUM('Cooking', 'Packaging') NOT NULL,
+                            assigned_by INT DEFAULT NULL,
+                            assigned_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                            PRIMARY KEY (production_id),
+                            KEY idx_production_assignments_employee (employee_id)
+                         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+if (!mysqli_query($conn, $assignment_table_sql)) {
+    throw new RuntimeException('Unable to initialize production task assignments: ' . mysqli_error($conn));
+}
+
+// Active assigned production tasks
+$active_tasks = [];
+$production_tasks_query = mysqli_query($conn, "
+    SELECT p.product_name AS task_name,
+           e.username AS assigned_to,
+           p.due_date AS due_date,
+           COALESCE(NULLIF(p.product_status, ''), 'Pending') AS task_status,
+           'Production' AS department
+    FROM production p
+    INNER JOIN production_assignments pa
+        ON pa.production_id = CAST(p.production_id AS CHAR)
+    INNER JOIN employee e ON e.employee_id = pa.employee_id
+    WHERE (p.product_status != 'product done' OR p.product_status IS NULL)
+    ORDER BY p.due_date ASC, p.production_id DESC
+");
+if (!$production_tasks_query) {
+    throw new RuntimeException('Unable to load active production assignments: ' . mysqli_error($conn));
+}
+while ($task = mysqli_fetch_assoc($production_tasks_query)) {
+    $active_tasks[] = $task;
+}
+
+// Active assigned logistics tasks
+$logistics_tasks_query = mysqli_query($conn, "
+    SELECT CONCAT(COALESCE(NULLIF(p.product_name, ''), CONCAT('Production #', d.production_id)),
+                  ' - ', d.route) AS task_name,
+           u.name AS assigned_to,
+           d.delivery_date AS due_date,
+           COALESCE(NULLIF(d.status, ''), 'Pending') AS task_status,
+           'Logistics' AS department
+    FROM delivery d
+    INNER JOIN users u ON u.id = d.driver_id
+    LEFT JOIN production p ON p.production_id = d.production_id
+    WHERE d.driver_id IS NOT NULL
+      AND (d.status != 'Delivered' OR d.status IS NULL)
+    ORDER BY d.delivery_date ASC, d.delivery_id DESC
+");
+if (!$logistics_tasks_query) {
+    throw new RuntimeException('Unable to load active logistics assignments: ' . mysqli_error($conn));
+}
+while ($task = mysqli_fetch_assoc($logistics_tasks_query)) {
+    $active_tasks[] = $task;
+}
+
+usort($active_tasks, static function ($first, $second) {
+    return strcmp((string) $first['due_date'], (string) $second['due_date']);
+});
+
 // Sinisiguro ang iba pang variables
 $message = $message ?? '';
 $route_err = $route_err ?? '';
@@ -64,8 +126,7 @@ $quantity_err = $quantity_err ?? '';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Supervisor Form</title>
-    <link rel="stylesheet" href="css/supervisor.css">
-    <!-- Chart.js Library sa HEAD -->
+    <link rel="stylesheet" href="css/supervisor.css?v=20261007-active-tasks">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
@@ -114,13 +175,53 @@ $quantity_err = $quantity_err ?? '';
       </div>
       <div class="dash-lower">
         <div class="chart-panel">
-          <h3>PRODUCT PROGRESS</h3>
-
+          <div class="dashboard-panel-heading">
+            <div>
+              <h3>COMPLETED PRODUCT PROGRESS</h3>
+              <p>Monthly production completion overview</p>
+            </div>
+            <span class="dashboard-panel-icon" aria-hidden="true">↗</span>
+          </div>
           <div style="position: relative; height: 300px; width: 100%;">
             <canvas id="myChart"></canvas>
           </div>
-          
           <script src="js/supervisor.js"></script>
+        </div>
+
+        <div class="active-task-panel">
+          <div class="active-task-heading">
+            <div>
+              <h3>ACTIVE TASKS</h3>
+              <p>Currently assigned tasks for Production and Logistics</p>
+            </div>
+            <span class="active-task-count"><?= count($active_tasks); ?> active</span>
+          </div>
+
+          <?php if ($active_tasks): ?>
+            <div class="active-task-list">
+              <?php foreach ($active_tasks as $task): ?>
+                <?php $department_class = strtolower($task['department']) === 'logistics' ? 'is-logistics' : 'is-production'; ?>
+                <article class="active-task-card <?= $department_class; ?>">
+                  <div class="active-task-card-main">
+                    <span class="active-task-card-mark" aria-hidden="true">
+                      <?= $department_class === 'is-logistics' ? '↗' : '✓'; ?>
+                    </span>
+                    <div class="active-task-card-copy">
+                      <h4><?= htmlspecialchars($task['task_name'] ?? 'N/A'); ?></h4>
+                      <p>Assigned to <strong><?= htmlspecialchars($task['assigned_to'] ?? 'N/A'); ?></strong></p>
+                    </div>
+                  </div>
+                  <div class="active-task-card-meta">
+                    <span class="active-task-department <?= $department_class; ?>"><?= htmlspecialchars($task['department']); ?></span>
+                    <span class="active-task-date">Due <?= htmlspecialchars($task['due_date'] ?? 'N/A'); ?></span>
+                    <span class="active-task-status"><?= htmlspecialchars($task['task_status'] ?? 'Pending'); ?></span>
+                  </div>
+                </article>
+              <?php endforeach; ?>
+            </div>
+          <?php else: ?>
+            <p class="active-task-empty">Walang kasalukuyang naka-assign na task sa Production o Logistics.</p>
+          <?php endif; ?>
         </div>
       </div>
     </div>
@@ -183,5 +284,6 @@ $quantity_err = $quantity_err ?? '';
 
   </div>
 </div>
+<?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

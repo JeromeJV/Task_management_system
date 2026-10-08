@@ -77,8 +77,11 @@ if (isset($_POST['Submit'])) {
                         case 'super': 
                             $redirect_url = 'supervisor.php';
                             break;
+                        case 'employee':
+                            $redirect_url = 'employee.php';
+                            break;
                         default: 
-                            $redirect_url = 'user.php';
+                            $redirect_url = 'employee.php';
                             break;
                     }
 
