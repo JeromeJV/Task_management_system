@@ -377,7 +377,7 @@
           </article>
         </div>
 
-        <a href="application_form.php" class="btn-apply-lg">Apply Now</a>
+        <a href="appli_form.php" class="btn-apply-lg">Apply Now</a>
       </div>
     </section>
   </main>

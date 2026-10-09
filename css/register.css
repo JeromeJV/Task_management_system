@@ -1,0 +1,774 @@
+* {
+    box-sizing: border-box;
+}
+
+:root {
+    color-scheme: light;
+    font-family: "Inter", "Segoe UI", Arial, sans-serif;
+    color: #17251D;
+    background: #F0F2F1;
+    font-synthesis: none;
+}
+
+body {
+    min-width: 320px;
+    min-height: 100vh;
+    margin: 0;
+    background: #F0F2F1;
+}
+
+button,
+input,
+select {
+    font: inherit;
+}
+
+a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.registration-shell {
+    min-height: 100vh;
+}
+
+.registration-sidebar {
+    position: fixed;
+    z-index: 10;
+    inset: 0 auto 0 0;
+    display: flex;
+    width: 72px;
+    flex-direction: column;
+    align-items: stretch;
+    overflow: hidden;
+    border-right: 1px solid #E1E5E2;
+    background: #FFFFFF;
+    transition: width 180ms ease, box-shadow 180ms ease;
+}
+
+.registration-sidebar:hover,
+.registration-sidebar:focus-within {
+    width: 226px;
+    box-shadow: 8px 0 24px rgba(31, 41, 55, 0.09);
+}
+
+.registration-brand {
+    display: flex;
+    min-height: 68px;
+    align-items: center;
+    gap: 12px;
+    padding: 0 16px;
+    border-bottom: 1px solid #EEF0EF;
+    white-space: nowrap;
+}
+
+.registration-brand-mark {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    place-items: center;
+    border-radius: 9px;
+    background: #1F6E4A;
+    color: #FFFFFF;
+    font-size: 17px;
+    font-weight: 800;
+}
+
+.registration-brand-name,
+.registration-nav-link span:last-child {
+    overflow: hidden;
+    opacity: 0;
+    transform: translateX(-6px);
+    transition: opacity 150ms ease, transform 150ms ease;
+}
+
+.registration-sidebar:hover .registration-brand-name,
+.registration-sidebar:focus-within .registration-brand-name,
+.registration-sidebar:hover .registration-nav-link span:last-child,
+.registration-sidebar:focus-within .registration-nav-link span:last-child {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.registration-brand-name {
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+}
+
+.registration-nav {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 6px;
+    padding: 20px 9px;
+}
+
+.registration-nav-link {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    gap: 14px;
+    padding: 0 13px;
+    border-radius: 9px;
+    color: #647168;
+    font-size: 12px;
+    font-weight: 650;
+    white-space: nowrap;
+    transition: background 150ms ease, color 150ms ease;
+}
+
+.registration-nav-link:hover,
+.registration-nav-link.is-active {
+    background: #EAF4ED;
+    color: #1F6E4A;
+}
+
+.registration-nav-link.is-active {
+    box-shadow: inset 3px 0 #1F6E4A;
+}
+
+.registration-nav-link span:first-child {
+    display: grid;
+    width: 20px;
+    flex: 0 0 20px;
+    place-items: center;
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.registration-logout {
+    margin: 10px;
+    margin-bottom: 16px;
+}
+
+.registration-logout:hover {
+    background: #FFF0EF;
+    color: #B42318;
+}
+
+.registration-main {
+    width: min(100% - 72px, 1700px);
+    min-height: 100vh;
+    margin-left: 72px;
+    padding: 28px clamp(18px, 2vw, 34px) 32px;
+}
+
+.registration-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.registration-header h1 {
+    margin: 0;
+    color: #17251D;
+    font-size: clamp(21px, 2.4vw, 29px);
+    letter-spacing: -0.04em;
+}
+
+.registration-header > div > p:last-child {
+    margin: 5px 0 0;
+    color: #778179;
+    font-size: 12px;
+}
+
+.registration-eyebrow {
+    margin: 0 0 5px;
+    color: #1F6E4A;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.13em;
+}
+
+.back-to-hr {
+    flex: 0 0 auto;
+    padding: 8px 12px;
+    border: 1px solid #DCE5DE;
+    border-radius: 8px;
+    background: #FFFFFF;
+    color: #526057;
+    font-size: 11px;
+    font-weight: 650;
+}
+
+.back-to-hr:hover {
+    border-color: #1F6E4A;
+    color: #1F6E4A;
+}
+
+.registration-alert {
+    margin-bottom: 14px;
+    padding: 10px 13px;
+    border: 1px solid #CDE8D5;
+    border-radius: 9px;
+    background: #ECF8EF;
+    color: #176B3B;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.registration-alert.is-error {
+    border-color: #F2C9C7;
+    background: #FFF2F1;
+    color: #A4261D;
+}
+
+.registration-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+.registration-stat-card {
+    position: relative;
+    display: flex;
+    min-height: 82px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    overflow: hidden;
+    padding: 13px 48px 13px 16px;
+    border: 1px solid #E1E7E2;
+    border-radius: 11px;
+    background: #FFFFFF;
+    box-shadow: 0 3px 10px rgba(31, 41, 55, 0.04);
+}
+
+.registration-stat-label {
+    color: #69766D;
+    font-size: 9px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.registration-stat-value {
+    color: #17251D;
+    font-size: 22px;
+    font-weight: 750;
+    line-height: 1;
+}
+
+.registration-stat-icon {
+    position: absolute;
+    top: 50%;
+    right: 12px;
+    display: grid;
+    width: 28px;
+    height: 28px;
+    place-items: center;
+    border-radius: 8px;
+    background: #EEF4FF;
+    color: #3673DA;
+    font-size: 15px;
+    transform: translateY(-50%);
+}
+
+.is-create .registration-stat-icon {
+    background: #E9F8F0;
+    color: #2B9B68;
+}
+
+.is-users .registration-stat-icon {
+    background: #F2EDFF;
+    color: #8A63E8;
+}
+
+.registration-tabs {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 18px;
+    padding: 5px 8px;
+    border: 1px solid #E0E6E2;
+    border-radius: 10px;
+    background: #FFFFFF;
+    box-shadow: 0 2px 8px rgba(31, 41, 55, 0.035);
+}
+
+.registration-list-search {
+    display: flex;
+    min-width: 100px;
+    flex: 1;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px;
+    color: #477450;
+}
+
+.registration-list-search > span:first-child {
+    font-size: 18px;
+    line-height: 1;
+}
+
+.registration-list-search input {
+    width: 100%;
+    min-width: 0;
+    height: 30px;
+    border: 0;
+    outline: 0;
+    color: #344238;
+    font-size: 10px;
+}
+
+.registration-list-search input::placeholder {
+    color: #94A097;
+}
+
+.registration-filter {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 6px;
+    padding-left: 10px;
+    border-left: 1px solid #E7EBE8;
+    color: #69766D;
+    font-size: 9px;
+    white-space: nowrap;
+}
+
+.registration-filter select {
+    max-width: 115px;
+    height: 29px;
+    padding: 0 7px;
+    border: 1px solid #E0E6E2;
+    border-radius: 7px;
+    background: #FFFFFF;
+    color: #526057;
+    font-size: 9px;
+}
+
+.registration-reset {
+    flex: 0 0 auto;
+    min-height: 29px;
+    padding: 0 10px;
+    border: 1px solid #DDE7E0;
+    border-radius: 7px;
+    background: #F8FBF9;
+    color: #1F6E4A;
+    font-size: 9px;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+.registration-reset:hover {
+    background: #EAF4ED;
+}
+
+.registration-workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1.85fr) minmax(270px, 0.9fr);
+    align-items: start;
+    gap: 16px;
+}
+
+.accounts-panel,
+.account-form-panel {
+    min-width: 0;
+    border: 1px solid #E1E5E2;
+    border-radius: 12px;
+    background: #FFFFFF;
+    box-shadow: 0 4px 12px rgba(31, 41, 55, 0.055);
+}
+
+.accounts-panel {
+    overflow: hidden;
+}
+
+.accounts-panel-heading {
+    display: flex;
+    min-height: 54px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 11px 15px;
+    border-bottom: 1px solid #D7DAD8;
+    background: #E2E4E3;
+}
+
+.accounts-panel-heading .registration-eyebrow {
+    margin-bottom: 3px;
+    font-size: 8px;
+}
+
+.accounts-panel-heading h2,
+.account-form-panel h2 {
+    margin: 0;
+    color: #26352C;
+    font-size: 15px;
+    letter-spacing: -0.02em;
+}
+
+.account-count {
+    padding: 5px 8px;
+    border: 1px solid rgba(31, 110, 74, 0.12);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.74);
+    color: #526057;
+    font-size: 9px;
+    font-weight: 650;
+    white-space: nowrap;
+}
+
+.accounts-table-wrap {
+    max-height: min(56vh, 540px);
+    overflow: auto;
+    padding: 0 12px;
+    scrollbar-color: #AAB5AC transparent;
+    scrollbar-width: thin;
+}
+
+.accounts-table {
+    width: 100%;
+    border-collapse: collapse;
+    color: #26352C;
+    font-size: 10px;
+    text-align: left;
+}
+
+.accounts-table th {
+    position: sticky;
+    z-index: 1;
+    top: 0;
+    padding: 12px 6px;
+    border-bottom: 1px solid #D5DAD6;
+    background: #FFFFFF;
+    color: #69766D;
+    font-size: 9px;
+    font-weight: 700;
+}
+
+.accounts-table td {
+    height: 42px;
+    padding: 8px 6px;
+    border-bottom: 1px solid #E4E7E5;
+    overflow-wrap: anywhere;
+}
+
+.accounts-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.accounts-table tbody tr[hidden] {
+    display: none;
+}
+
+.accounts-table td a {
+    color: #344238;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.role-pill {
+    display: inline-flex;
+    padding: 4px 7px;
+    border-radius: 999px;
+    background: #EFF5F0;
+    color: #477450;
+    font-size: 8px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.accounts-table td:last-child {
+    width: 34px;
+    text-align: right;
+}
+
+.accounts-table td:last-child form {
+    margin: 0;
+}
+
+.account-delete {
+    width: 24px;
+    height: 24px;
+    border: 1px solid #F0D7D5;
+    border-radius: 7px;
+    background: #FFF7F6;
+    color: #A4261D;
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.account-delete:hover {
+    background: #A4261D;
+    color: #FFFFFF;
+}
+
+.accounts-empty-filter,
+.accounts-empty {
+    margin: 12px;
+    padding: 26px 14px;
+    border: 1px dashed #D7DFD9;
+    border-radius: 9px;
+    color: #778179;
+    font-size: 11px;
+    text-align: center;
+}
+
+.accounts-empty-filter[hidden] {
+    display: none;
+}
+
+.accounts-empty > span {
+    color: #1F6E4A;
+    font-size: 23px;
+}
+
+.accounts-empty h3 {
+    margin: 8px 0 5px;
+    color: #344238;
+    font-size: 13px;
+}
+
+.accounts-empty p {
+    margin: 0;
+}
+
+.account-form-panel {
+    padding: 18px;
+}
+
+.account-form-panel h2 {
+    font-size: 15px;
+    text-transform: uppercase;
+}
+
+.account-form-intro {
+    margin: 6px 0 16px;
+    color: #7A867D;
+    font-size: 10px;
+    line-height: 1.5;
+}
+
+.account-registration-form {
+    display: grid;
+    gap: 11px;
+}
+
+.registration-field {
+    display: grid;
+    gap: 5px;
+}
+
+.registration-field label {
+    color: #47544B;
+    font-size: 10px;
+    font-weight: 650;
+}
+
+.registration-field input,
+.registration-field select {
+    width: 100%;
+    min-height: 37px;
+    padding: 8px 10px;
+    border: 1px solid #DDE4DE;
+    border-radius: 8px;
+    outline: 0;
+    background: #FFFFFF;
+    color: #26352C;
+    font-size: 11px;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.registration-field input:focus,
+.registration-field select:focus {
+    border-color: #6AA37B;
+    box-shadow: 0 0 0 3px rgba(31, 110, 74, 0.11);
+}
+
+.registration-field input[readonly] {
+    background: #F2F5F3;
+    color: #5D6B62;
+}
+
+.registration-field .is-invalid {
+    border-color: #C0392B;
+}
+
+.field-error {
+    color: #A4261D;
+    font-size: 10px;
+}
+
+.field-hint {
+    color: #7A867D;
+    font-size: 10px;
+}
+
+.create-account-button {
+    min-height: 39px;
+    margin-top: 3px;
+    border: 1px solid #1F6E4A;
+    border-radius: 9px;
+    background: #1F6E4A;
+    color: #FFFFFF;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 150ms ease, transform 150ms ease;
+}
+
+.create-account-button:hover:not(:disabled) {
+    background: #18583B;
+    transform: translateY(-1px);
+}
+
+.create-account-button:disabled {
+    border-color: #CAD3CC;
+    background: #CAD3CC;
+    cursor: not-allowed;
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    clip-path: inset(50%);
+}
+
+@media (max-width: 1000px) {
+    .registration-workspace {
+        grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.9fr);
+    }
+
+    .registration-stat-grid {
+        gap: 9px;
+    }
+
+}
+
+@media (max-width: 760px) {
+    .registration-workspace {
+        grid-template-columns: 1fr;
+    }
+
+    .account-form-panel {
+        order: -1;
+    }
+
+    .accounts-table-wrap {
+        max-height: 380px;
+    }
+}
+
+@media (max-width: 600px) {
+    .registration-sidebar {
+        position: sticky;
+        inset: 0 0 auto;
+        width: 100%;
+        height: auto;
+        flex-direction: row;
+        align-items: center;
+        overflow-x: auto;
+        border-right: 0;
+        border-bottom: 1px solid #E1E5E2;
+        box-shadow: 0 2px 10px rgba(31, 41, 55, 0.04);
+    }
+
+    .registration-sidebar:hover,
+    .registration-sidebar:focus-within {
+        width: 100%;
+    }
+
+    .registration-brand {
+        min-height: 56px;
+        padding: 0 9px;
+        border: 0;
+    }
+
+    .registration-brand-mark {
+        width: 33px;
+        height: 33px;
+        flex-basis: 33px;
+    }
+
+    .registration-brand-name {
+        display: none;
+    }
+
+    .registration-nav {
+        flex: 0 0 auto;
+        flex-direction: row;
+        gap: 2px;
+        padding: 6px 3px;
+    }
+
+    .registration-nav-link {
+        min-height: 39px;
+        justify-content: center;
+        gap: 0;
+        padding: 0 9px;
+    }
+
+    .registration-nav-link span:last-child,
+    .registration-sidebar:hover .registration-nav-link span:last-child,
+    .registration-sidebar:focus-within .registration-nav-link span:last-child {
+        display: none;
+    }
+
+    .registration-logout {
+        flex: 0 0 auto;
+        margin: 0 8px 0 0;
+    }
+
+    .registration-main {
+        width: 100%;
+        margin-left: 0;
+        padding: 21px 14px 30px;
+    }
+
+    .registration-header {
+        align-items: flex-start;
+    }
+
+    .registration-header h1 {
+        font-size: 22px;
+    }
+
+    .registration-stat-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 9px;
+    }
+
+    .registration-stat-card {
+        min-height: 72px;
+    }
+
+    .registration-filter {
+        gap: 4px;
+        padding-left: 7px;
+    }
+
+    .registration-filter select {
+        max-width: 92px;
+    }
+
+    .registration-tabs {
+        gap: 3px;
+        padding: 5px;
+    }
+
+    .registration-list-search {
+        gap: 4px;
+        padding: 0 4px;
+    }
+
+    .accounts-table-wrap {
+        padding: 0 7px;
+    }
+
+    .accounts-table {
+        min-width: 460px;
+    }
+}

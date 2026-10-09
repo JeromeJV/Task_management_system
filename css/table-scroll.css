@@ -1,0 +1,13 @@
+.table-scroll {
+    max-height: min(65vh, 640px);
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+}
+
+.table-scroll thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: inherit;
+}

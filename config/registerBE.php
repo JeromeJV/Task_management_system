@@ -141,6 +141,7 @@ if (isset($_POST['submit']) && !isset($_POST['is_update'])) {
 $msg = '';
 $name_err = '';$email_err = '';
 $password_err = '';$cpassword_err = '';
+$role_err = '';
 
 if (isset($_POST['register_user'])) {
     $employee_id =$_POST['employee_id'] ?? '';
@@ -149,6 +150,10 @@ if (isset($_POST['register_user'])) {
     $role        =$_POST['role'] ?? 'user';
 
     $isValid = true;
+    if (!in_array($role, ['HR', 'payroll', 'log', 'super', 'pro', 'employee'], true)) {
+        $role_err = 'Please select a valid system role.';
+        $isValid = false;
+    }
 
     if (empty($employee_id)) {$name_err = "Please select an employee.";
         $isValid = false;

@@ -48,6 +48,7 @@ foreach ($history_records as $hrec) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Logistic Portal - Driver Dashboard</title>
+    <link rel="stylesheet" href="css/table-scroll.css?v=<?= filemtime(__DIR__ . '/css/table-scroll.css'); ?>">
     <style>
         :root {
             --bg-color: #f4f6f5;
@@ -799,7 +800,7 @@ foreach ($history_records as $hrec) {
             </div>
         </div>
 
-        <div class="table-container">
+        <div class="table-container table-scroll">
             <?php if (!empty($history_records)): ?>
                 <table class="custom-table" id="historyTable">
                     <thead>

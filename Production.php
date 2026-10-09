@@ -26,6 +26,7 @@ $active_tab = $_GET['tab'] ?? 'main';
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Production Portal</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/table-scroll.css?v=<?= filemtime(__DIR__ . '/css/table-scroll.css'); ?>">
     <style>
         * {
             box-sizing: border-box;
@@ -622,6 +623,7 @@ $active_tab = $_GET['tab'] ?? 'main';
                 </div>
 
                 <?php if (!empty($pending_records)): ?>
+                    <div class="table-scroll">
                     <table id="mainProductionTable">
                         <thead>
                             <tr>
@@ -674,6 +676,7 @@ $active_tab = $_GET['tab'] ?? 'main';
                             <?php endforeach; ?>
                         </tbody>
                     </table>
+                    </div>
                 <?php else: ?>
                     <p style="padding: 20px 0; color: #888;">No active production records found.</p>
                 <?php endif; ?>
@@ -763,6 +766,7 @@ $active_tab = $_GET['tab'] ?? 'main';
                 </div>
 
                 <?php if (!empty($history_records)): ?>
+                    <div class="table-scroll">
                     <table id="historyTable">
                         <thead>
                             <tr>
@@ -796,6 +800,7 @@ $active_tab = $_GET['tab'] ?? 'main';
                             <?php endforeach; ?>
                         </tbody>
                     </table>
+                    </div>
                 <?php else: ?>
                     <p style="padding: 20px 0; color: #888;">No completed production records found.</p>
                 <?php endif; ?>

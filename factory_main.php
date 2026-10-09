@@ -22,6 +22,54 @@ $pending_records = $pending_records ?? [];
 $history_records = $history_records ?? [];
 $message = $message ?? '';
 
+$production_users = [];
+$production_team_result = mysqli_query($conn, "
+    SELECT DISTINCT
+           u.id,
+           u.name,
+           CASE
+               WHEN EXISTS (
+                   SELECT 1
+                   FROM attendance a
+                   WHERE DATE(a.attendance_date) = CURDATE()
+                     AND LOWER(TRIM(a.status)) IN ('present', 'early', 'late', 'overtime', 'undertime', 'half day')
+                     AND (
+                         a.user_id = u.id
+                         OR EXISTS (
+                             SELECT 1
+                             FROM employee e
+                             WHERE e.employee_id = a.employee_id
+                               AND (
+                                   e.username = u.name
+                                   OR (e.email IS NOT NULL AND e.email <> '' AND e.email = u.email)
+                                   OR EXISTS (
+                                       SELECT 1
+                                       FROM attendance employee_user_link
+                                       WHERE employee_user_link.employee_id = e.employee_id
+                                         AND employee_user_link.user_id = u.id
+                                   )
+                               )
+                         )
+                     )
+               ) THEN 'Present'
+               ELSE 'Absent'
+           END AS attendance_status
+    FROM users u
+    WHERE u.role = 'pro'
+    ORDER BY u.name
+");
+if (!$production_team_result) {
+    throw new RuntimeException('Unable to load production users: ' . mysqli_error($conn));
+}
+while ($production_user = mysqli_fetch_assoc($production_team_result)) {
+    $production_users[] = $production_user;
+}
+$present_production_count = count(array_filter(
+    $production_users,
+    static fn ($production_user) => $production_user['attendance_status'] === 'Present'
+));
+$absent_production_count = count($production_users) - $present_production_count;
+
 ?>
 
 <!DOCTYPE html>
@@ -33,6 +81,7 @@ $message = $message ?? '';
 
     <title>Production Management - TASKTRACK</title>
   <link rel="stylesheet" href="css/Factory_main1.css">
+  <link rel="stylesheet" href="css/table-scroll.css?v=<?= filemtime(__DIR__ . '/css/table-scroll.css'); ?>">
     
 
     <style>
@@ -285,6 +334,7 @@ $message = $message ?? '';
             }
         }
     </style>
+    <link rel="stylesheet" href="css/tasktrack_sidebar.css?v=<?= filemtime(__DIR__ . '/css/tasktrack_sidebar.css'); ?>">
 </head>
 
 
@@ -296,71 +346,7 @@ $message = $message ?? '';
          SIDEBAR
     ========================================================= -->
 
-    <aside class="sidebar" id="sidebar">
-
-        <div class="sidebar-header">
-
-            <div class="avatar">
-                🚚
-            </div>
-
-            <div class="titles">
-
-                <div class="name">
-                    TASKTRACK
-                </div>
-
-                <div class="sub">
-                    Supervisor :
-                    <span>
-                        <?= htmlspecialchars($_SESSION['name'] ?? ''); ?>
-                    </span>
-                </div>
-
-                <div class="sub">
-                    <span>
-                        <?= isset($_SESSION['email'])
-                            ? htmlspecialchars($_SESSION['email'])
-                            : ''; ?>
-                    </span>
-                </div>
-
-            </div>
-
-        </div>
-
-
-        <nav class="sidebar-nav">
-
-            <a href="supervisor.php" class="side-btn">
-                DASHBOARD
-            </a>
-
-            <a href="task.php" class="side-btn">
-                TASK
-            </a>
-
-            <a href="employee.php" class="side-btn">
-                EMPLOYEE
-            </a>
-
-            <a href="factory_main.php" class="side-btn active">
-                PRODUCTION
-            </a>
-
-            <a href="delivery_main.php" class="side-btn">
-                LOGISTIC
-            </a>
-
-            <a href="logout.php" style="text-decoration: none;">
-                <button class="logout-btn">
-                    LOG OUT
-                </button>
-            </a>
-
-        </nav>
-
-    </aside>
+    <?php $tasktrackActive = 'production'; include __DIR__ . '/config/tasktrack_sidebar.php'; ?>
 
 
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
@@ -432,6 +418,69 @@ $message = $message ?? '';
 
         <div class="content">
 
+            <section class="production-team-panel" aria-labelledby="productionUsersTitle">
+                <div class="production-team-heading">
+                    <div>
+                        <p class="production-team-eyebrow">TEAM OVERVIEW</p>
+                        <h2 id="productionUsersTitle" class="section-title">Production Staff</h2>
+                        <p>Staff roster and attendance for <?= htmlspecialchars(date('F j, Y')); ?>.</p>
+                    </div>
+                    <div class="production-team-actions">
+                        <button
+                            type="button"
+                            class="production-staff-toggle"
+                            id="productionStaffToggle"
+                            aria-expanded="false"
+                            aria-controls="productionStaffRoster"
+                            onclick="toggleProductionStaff()"
+                        >
+                            View Staff
+                        </button>
+                        <div class="production-team-summary" aria-label="Production team attendance summary">
+                            <div class="production-team-stat is-total">
+                                <span class="production-team-stat-value"><?= count($production_users); ?></span>
+                                <span class="production-team-stat-label">Total staff</span>
+                            </div>
+                            <div class="production-team-stat is-present">
+                                <span class="production-team-stat-value"><?= $present_production_count; ?></span>
+                                <span class="production-team-stat-label">Present</span>
+                            </div>
+                            <div class="production-team-stat is-absent">
+                                <span class="production-team-stat-value"><?= $absent_production_count; ?></span>
+                                <span class="production-team-stat-label">Absent</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="productionStaffRoster" hidden>
+                    <?php if (!empty($production_users)): ?>
+                        <div class="production-user-list">
+                            <?php foreach ($production_users as $production_user): ?>
+                                <?php $is_present = $production_user['attendance_status'] === 'Present'; ?>
+                                <article class="production-user-item">
+                                    <span class="production-user-avatar" aria-hidden="true">
+                                        <?= htmlspecialchars(strtoupper(substr($production_user['name'] ?? 'U', 0, 1))); ?>
+                                    </span>
+                                    <span class="production-user-details">
+                                        <span class="production-user-name">
+                                            <?= htmlspecialchars($production_user['name'] ?? 'Unnamed production user'); ?>
+                                        </span>
+                                        <span class="production-user-role">Production team member</span>
+                                    </span>
+                                    <span class="production-attendance <?= $is_present ? 'is-present' : 'is-absent'; ?>">
+                                        <span class="production-attendance-dot" aria-hidden="true"></span>
+                                        <?= htmlspecialchars($production_user['attendance_status']); ?>
+                                    </span>
+                                </article>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php else: ?>
+                        <p class="empty-message">No production users found.</p>
+                    <?php endif; ?>
+                </div>
+            </section>
+
 
             <!-- =================================================
                  PRODUCTION TABS
@@ -476,7 +525,7 @@ $message = $message ?? '';
 
                 <?php if (!empty($pending_records)): ?>
 
-                    <div class="table-wrap">
+                    <div class="table-wrap table-scroll">
 
                         <table>
 
@@ -653,7 +702,7 @@ $message = $message ?? '';
 
                 <?php if (!empty($history_records)): ?>
 
-                    <div class="table-wrap table-wrap-history">
+                    <div class="table-wrap table-wrap-history table-scroll">
 
                         <table>
 
@@ -1403,6 +1452,17 @@ function showProductionSection(section) {
         pendingTab.classList.add('active');
     }
 }
+
+function toggleProductionStaff() {
+    const roster = document.getElementById('productionStaffRoster');
+    const toggle = document.getElementById('productionStaffToggle');
+    const isExpanded = toggle.getAttribute('aria-expanded') === 'true';
+
+    roster.hidden = isExpanded;
+    toggle.setAttribute('aria-expanded', String(!isExpanded));
+    toggle.textContent = isExpanded ? 'View Staff' : 'Hide Staff';
+}
+
 /* =============================================================
    ADD PRODUCT MODAL
 ============================================================= */

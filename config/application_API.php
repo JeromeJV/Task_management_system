@@ -2,7 +2,7 @@
 // -----------------------------------------------------
 //                      Insert Applicant
 // -----------------------------------------------------
-include('config/connection.php');
+require_once __DIR__ . '/connection.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
@@ -10,6 +10,62 @@ use PHPMailer\PHPMailer\Exception;
 require_once 'config/PHPMailer/Exception.php';
 require_once 'config/PHPMailer/PHPMailer.php';
 require_once 'config/PHPMailer/SMTP.php';
+
+$sendApplicantStatusEmail = static function (string $email, string $applicantName, string $subject, string $message): bool {
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        error_log('Applicant status email not sent: invalid or missing email address.');
+        return false;
+    }
+
+    $mail = new PHPMailer(true);
+    try {
+        $mail->isSMTP();
+        $mail->Host       = 'smtp.gmail.com';
+        $mail->SMTPAuth   = true;
+        $mail->Username   = 'tasktrack74@gmail.com';
+        $mail->Password   = 'wukj ciyu ihsm xpqt';
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Port       = 587;
+        $mail->setFrom('tasktrack74@gmail.com', 'TaskTrack HR Team');
+        $mail->addAddress($email, $applicantName);
+        $mail->isHTML(true);
+        $mail->Subject = $subject;
+        $safeName = htmlspecialchars($applicantName, ENT_QUOTES, 'UTF-8');
+        $safeMessage = nl2br(htmlspecialchars($message, ENT_QUOTES, 'UTF-8'));
+        $mail->Body = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>'
+            . '<body style="margin:0;padding:0;background-color:#f1f5f2;font-family:Arial,Helvetica,sans-serif;color:#1f2a24;">'
+            . '<div style="display:none;max-height:0;overflow:hidden;opacity:0;">' . htmlspecialchars($subject, ENT_QUOTES, 'UTF-8') . '</div>'
+            . '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f1f5f2;padding:32px 12px;">'
+            . '<tr><td align="center">'
+            . '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:100%;max-width:600px;background-color:#ffffff;border:1px solid #e3ebe5;border-radius:12px;overflow:hidden;">'
+            . '<tr><td style="padding:24px 32px;background-color:#1f6e4a;">'
+            . '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>'
+            . '<td align="center" width="38" height="38" style="width:38px;height:38px;border-radius:10px;background-color:#ffffff;color:#1f6e4a;font-size:20px;font-weight:bold;">T</td>'
+            . '<td style="padding-left:12px;color:#ffffff;font-size:18px;font-weight:bold;letter-spacing:1px;">TASKTRACK'
+            . '<div style="padding-top:3px;color:#dcefe4;font-size:11px;font-weight:normal;letter-spacing:1.5px;">TALENT MANAGEMENT</div></td>'
+            . '</tr></table></td></tr>'
+            . '<tr><td style="padding:36px 32px 28px;">'
+            . '<p style="margin:0 0 10px;color:#1f6e4a;font-size:12px;font-weight:bold;letter-spacing:1.4px;">APPLICATION UPDATE</p>'
+            . '<h1 style="margin:0 0 20px;color:#1f2a24;font-size:24px;line-height:1.3;">Application status update</h1>'
+            . '<p style="margin:0 0 16px;color:#34443a;font-size:15px;line-height:1.7;">Magandang araw, <strong>' . $safeName . '</strong>.</p>'
+            . '<div style="margin:0;padding:18px 20px;border-left:4px solid #1f6e4a;border-radius:6px;background-color:#f3f8f4;color:#34443a;font-size:15px;line-height:1.75;">'
+            . $safeMessage
+            . '</div>'
+            . '<p style="margin:24px 0 0;color:#34443a;font-size:15px;line-height:1.7;">Salamat,<br><strong>TaskTrack HR Team</strong></p>'
+            . '</td></tr>'
+            . '<tr><td style="padding:18px 32px;border-top:1px solid #e8eee9;background-color:#fafcfb;color:#758278;font-size:12px;line-height:1.6;">'
+            . 'This is an automatic notification about your application. If you have questions, please contact the HR team.'
+            . '</td></tr></table>'
+            . '<p style="margin:16px 0 0;color:#87938a;font-size:11px;">&copy; TaskTrack</p>'
+            . '</td></tr></table></body></html>';
+        $mail->AltBody = "APPLICATION UPDATE\n\nMagandang araw, {$applicantName}.\n\n{$message}\n\nSalamat,\nTaskTrack HR Team\n\nThis is an automatic notification about your application.";
+        $mail->send();
+        return true;
+    } catch (Exception $e) {
+        error_log('Unable to send applicant status email to ' . $email . ': ' . $e->getMessage());
+        return false;
+    }
+};
 
 $message = "";
 
@@ -152,7 +208,58 @@ $passid = $_POST['idno'] ?? null;
 $view_data = null;
 $delete_message = "";
 
-if (isset($_POST['del']) && !empty($passid)) {
+if (isset($_POST['reject_applicant']) && !empty($_POST['reject_applicant_id'])) {
+    $applicant_id = filter_var($_POST['reject_applicant_id'], FILTER_VALIDATE_INT);
+    if ($applicant_id === false || $applicant_id === null) {
+        $delete_message = "Invalid applicant selected.";
+    } else {
+        $applicant_stmt = $conn->prepare("SELECT firstname, middlename, lastname, email, status FROM applicant WHERE applicant_id = ?");
+        if (!$applicant_stmt) {
+            throw new RuntimeException('Unable to load applicant for rejection: ' . $conn->error);
+        }
+        $applicant_stmt->bind_param("i", $applicant_id);
+        if (!$applicant_stmt->execute()) {
+            $error = $applicant_stmt->error;
+            $applicant_stmt->close();
+            throw new RuntimeException('Unable to load applicant for rejection: ' . $error);
+        }
+        $rejected_applicant = $applicant_stmt->get_result()->fetch_assoc();
+        $applicant_stmt->close();
+
+        if (!$rejected_applicant) {
+            $delete_message = "No applicant was updated; the record may not exist.";
+        } elseif (strtolower(trim((string)($rejected_applicant['status'] ?? ''))) === 'failed') {
+            $delete_message = "This applicant is already marked as Failed.";
+        } else {
+            $stmt = $conn->prepare("UPDATE applicant SET status = 'Failed' WHERE applicant_id = ?");
+            if (!$stmt) {
+                throw new RuntimeException('Unable to prepare applicant rejection: ' . $conn->error);
+            }
+            $stmt->bind_param("i", $applicant_id);
+            if (!$stmt->execute()) {
+                $delete_message = "Unable to reject application: " . $stmt->error;
+            } elseif ($stmt->affected_rows > 0) {
+                $applicant_name = trim(implode(' ', array_filter([
+                    $rejected_applicant['firstname'] ?? '',
+                    $rejected_applicant['middlename'] ?? '',
+                    $rejected_applicant['lastname'] ?? ''
+                ])));
+                $email_sent = $sendApplicantStatusEmail(
+                    trim((string)($rejected_applicant['email'] ?? '')),
+                    $applicant_name,
+                    'Application status update',
+                    'Your application status has been updated to Failed. Thank you for your interest in joining our team.'
+                );
+                $delete_message = "Application rejected and marked as Failed."
+                    . ($email_sent ? " An email update was sent to the applicant." : " The status was saved, but the email update could not be sent; check the mail settings and server log.");
+            } else {
+                $delete_message = "No applicant was updated; the record may not exist or may already be marked as Failed.";
+            }
+            $stmt->close();
+        }
+    }
+
+} elseif (isset($_POST['del']) && !empty($passid)) {
     $stmt = $conn->prepare("DELETE FROM applicant WHERE applicant_id = ?");
     $stmt->bind_param("i", $passid);
     if ($stmt->execute()) {
@@ -250,13 +357,119 @@ if (isset($_POST['save_interview'])) {
     $interview_type = $_POST['interview_type'] ?? '';
     $interview_mode = $_POST['interview_mode'] ?? '';
     $status         = $_POST['status'] ?? ''; // e.g., 'Hired', 'Passed', 'Pending'
-    $interview_date = $_POST['interview_date'] ?? '';
+    $interview_date = str_replace('T', ' ', trim($_POST['interview_date'] ?? ''));
+    if (strtolower(trim($interview_type)) === 'hired') {
+        $status = 'Hired';
+    }
+    $normalized_status = strtolower(trim($status));
+    $normalized_type = strtolower(trim(preg_replace('/\s+/', ' ', str_replace('_', ' ', $interview_type))));
+    if ($normalized_type === 'technical interview') {
+        $normalized_type = 'training';
+        $interview_type = 'Training';
+    }
+    $transfer_to_employee = $normalized_status === 'hired';
+    $is_hiring = $normalized_type === 'hired' || $normalized_status === 'hired';
+    $progression_message = '';
+    $applicant_email_message = '';
     
     $username       = $_POST['username'] ?? 'Applicant';
     $email          = $_POST['email'] ?? '';
 
+    $is_application_list = !empty($application_list_mode);
+    $is_interview_schedule = !empty($interview_schedule_mode);
+    $fail_schedule = static function ($error) use ($is_application_list, $is_interview_schedule) {
+        if ($is_application_list) {
+            $_SESSION['applicant_error'] = $error;
+            header("Location: application_form.php");
+            exit();
+        }
+        if ($is_interview_schedule) {
+            $_SESSION['interview_schedule_error'] = $error;
+            header("Location: interview_sched.php");
+            exit();
+        }
+        echo htmlspecialchars($error, ENT_QUOTES, 'UTF-8');
+        exit();
+    };
+
     if (!empty($applicant_id) && !empty($interview_date)) {
-        // Step 1: I-update ang interview details sa applicant table
+        $current_stmt = $conn->prepare("SELECT interview_type, status, firstname, middlename, lastname, email FROM applicant WHERE applicant_id = ?");
+        if (!$current_stmt) {
+            $fail_schedule("Unable to check the applicant's interview progress: " . $conn->error);
+        }
+        $current_stmt->bind_param("i", $applicant_id);
+        if (!$current_stmt->execute()) {
+            $error = $current_stmt->error;
+            $current_stmt->close();
+            $fail_schedule("Unable to check the applicant's interview progress: " . $error);
+        }
+        $current_applicant = $current_stmt->get_result()->fetch_assoc();
+        $current_stmt->close();
+        if (!$current_applicant) {
+            $fail_schedule("Applicant was not found.");
+        }
+        if (strtolower(trim((string)($current_applicant['status'] ?? ''))) === 'failed') {
+            $fail_schedule("This applicant is marked as Failed and cannot be moved to Passed or another interview stage.");
+        }
+        $username = trim(implode(' ', array_filter([
+            $current_applicant['firstname'] ?? '',
+            $current_applicant['middlename'] ?? '',
+            $current_applicant['lastname'] ?? ''
+        ]))) ?: 'Applicant';
+        $email = trim((string)($current_applicant['email'] ?? ''));
+
+        $current_type = strtolower(trim(preg_replace('/\s+/', ' ', str_replace('_', ' ', (string)($current_applicant['interview_type'] ?? '')))));
+        if ($current_type === 'technical interview') {
+            $current_type = 'training';
+        }
+        $current_status = strtolower(trim((string)($current_applicant['status'] ?? '')));
+        $current_stage_passed = $current_status === 'passed';
+        $is_same_stage = $normalized_type === $current_type;
+        $is_initial_pass = $current_type === ''
+            && $normalized_type === 'initial interview'
+            && $normalized_status === 'passed';
+        $can_schedule_training = $current_type === 'initial interview' && $current_stage_passed;
+        $can_schedule_final = $current_type === 'training' && $current_stage_passed;
+        $can_hire = $current_type === 'final interview' && $current_stage_passed;
+
+        if ($normalized_type === 'training' && !$is_same_stage && !$can_schedule_training) {
+            $fail_schedule("The applicant must pass the Initial Interview before scheduling Training.");
+        }
+        if ($normalized_type === 'final interview' && !$is_same_stage && !$can_schedule_final) {
+            $fail_schedule("The applicant must pass Training before scheduling a Final Interview.");
+        }
+        if ($normalized_type === 'initial interview' && !$is_same_stage && $current_type !== '') {
+            $fail_schedule("An applicant cannot return to Initial Interview after progressing to a later stage.");
+        }
+        if ($is_hiring && (!$can_hire || !in_array($normalized_type, ['hired', 'final interview'], true))) {
+            $fail_schedule("The applicant must pass the Final Interview before being marked as Hired.");
+        }
+        if (!$is_same_stage && !$is_hiring && !$is_initial_pass && !in_array($normalized_status, ['scheduled', 'pending'], true)) {
+            $fail_schedule("A new interview stage must start with Scheduled or Pending status.");
+        }
+
+        if ($normalized_status === 'passed' && ($is_same_stage || $is_initial_pass)) {
+            $stage_to_advance = $current_type !== '' ? $current_type : $normalized_type;
+            if ($stage_to_advance === 'initial interview') {
+                $progression_message = 'Initial Interview passed. Applicant moved to Training and is ready to schedule.';
+                $applicant_email_message = 'Congratulations! You passed the Initial Interview. Your next step is Training. The HR team will contact you to arrange the training schedule.';
+            } elseif ($stage_to_advance === 'training') {
+                $progression_message = 'Training passed. Applicant moved to Final Interview and is ready to schedule.';
+                $applicant_email_message = 'Congratulations! You passed Training. Your next stage is the Final Interview. The HR team will contact you to arrange the schedule.';
+            } elseif ($stage_to_advance === 'final interview') {
+                $interview_type = 'Hired';
+                $status = 'Hired';
+                $normalized_status = 'hired';
+                $transfer_to_employee = true;
+                $progression_message = 'Final Interview passed. Applicant was hired and transferred to the employee directory.';
+                $applicant_email_message = 'Congratulations! You passed the Final Interview and have been hired. The HR team will contact you with onboarding details.';
+            }
+        }
+
+        if ($transfer_to_employee && !$conn->begin_transaction()) {
+            $fail_schedule("Unable to start the employee transfer: " . $conn->error);
+        }
+
         $stmt = $conn->prepare("UPDATE applicant SET 
             interview_type = ?, 
             interview_mode = ?, 
@@ -264,100 +477,147 @@ if (isset($_POST['save_interview'])) {
             interview_date = ? 
             WHERE applicant_id = ?");
 
-        if ($stmt) {
-            $stmt->bind_param("ssssi", $interview_type, $interview_mode, $status, $interview_date, $applicant_id);
-
-            if ($stmt->execute()) {
-                $stmt->close();
-
-                // Step 2: KONEKSIYON SA EMPLOYEE TABLE (Auto-Hire Transfer)
-                $normalized_status = strtolower(trim($status));
-                if (in_array($normalized_status, ['hired', 'passed'])) {
-                    
-                    // Kunin ang kumpletong detalye ng applicant
-                    $fetch_stmt = $conn->prepare("SELECT * FROM applicant WHERE applicant_id = ?");
-                    $fetch_stmt->bind_param("i", $applicant_id);
-                    $fetch_stmt->execute();
-                    $app_data = $fetch_stmt->get_result()->fetch_assoc();
-                    $fetch_stmt->close();
-
-                    if ($app_data) {
-                        $full_name    = trim(($app_data['firstname'] ?? '') . ' ' . ($app_data['lastname'] ?? ''));
-                        $app_email    = $app_data['email'] ?? '';
-                        $app_contact  = $app_data['contact_number'] ?? '';
-                        $app_position = !empty($app_data['position_applied']) ? $app_data['position_applied'] : ($app_data['position'] ?? 'New Hire');
-                        $full_address = trim(($app_data['house_number'] ?? '') . ' ' . ($app_data['street'] ?? '') . ' ' . ($app_data['barangay'] ?? '') . ' ' . ($app_data['city'] ?? ''));
-                        $department   = 'General'; // Default Department
-
-                        // I-insert sa employee table (o i-update kung umiiral na)
-                        $emp_stmt = $conn->prepare("INSERT INTO employee (username, department, position, contact_number, address, email) 
-                            VALUES (?, ?, ?, ?, ?, ?) 
-                            ON DUPLICATE KEY UPDATE 
-                            department = VALUES(department), 
-                            position = VALUES(position), 
-                            contact_number = VALUES(contact_number), 
-                            address = VALUES(address)");
-                            
-                        if ($emp_stmt) {
-                            $emp_stmt->bind_param("ssssss", $full_name, $department, $app_position, $app_contact, $full_address, $app_email);
-                            $emp_stmt->execute();
-                            $emp_stmt->close();
-                        }
-                    }
-                }
-
-                // Step 3: Magpadala ng Email Notification
-                if (!empty($email)) {
-                    $formatted_date = date("F j, Y - g:i A", strtotime($interview_date));
-                    $subject = "Interview Schedule Notice - " . $interview_type;
-                    $body = "
-                        <h3>Magandang araw, {$username}!</h3>
-                        <p>Thank you for applying at Ginga! We reviewed your application and we'd love to invite you for an interview.:</p>
-                        <ul>
-                            <li><strong>Interview Type:</strong> {$interview_type}</li>
-                            <li><strong>Mode:</strong> {$interview_mode}</li>
-                            <li><strong>Date & Time:</strong> {$formatted_date}</li>
-                            <li><strong>Status:</strong> {$status}</li>
-                        </ul>
-                        <p>Salamat at mag-ingat!</p>
-                    ";
-
-                    $mail = new PHPMailer(true);
-                    try {
-                        $mail->isSMTP();
-                        $mail->Host       = 'smtp.gmail.com';
-                        $mail->SMTPAuth   = true;
-                        $mail->Username   = 'tasktrack74@gmail.com';
-                        $mail->Password   = 'wukj ciyu ihsm xpqt';
-                        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-                        $mail->Port       = 587;
-
-                        $mail->setFrom('tasktrack74@gmail.com', 'HR Team');
-                        $mail->addAddress($email, $username);
-    
-                        $mail->isHTML(true);
-                        $mail->Subject = $subject;
-                        $mail->Body    = $body;
-
-                        $mail->send();
-                    } catch (Exception $e) {
-                        // Iwas crash kung mag-fail ang mailer
-                    }
-                }
-
-                echo "<script>
-                        alert('Interview schedule updated! If status is Hired/Passed, applicant was transferred to Employee records.');
-                        window.location.href = 'interview_sched.php';
-                      </script>";
-                exit();
-            } else {
-                echo "Execution Error: " . htmlspecialchars($stmt->error);
+        if (!$stmt) {
+            if ($transfer_to_employee) {
+                $conn->rollback();
             }
-        } else {
-            echo "Prepare Error: " . htmlspecialchars($conn->error);
+            $fail_schedule("Unable to prepare interview schedule: " . $conn->error);
         }
+
+        $stmt->bind_param("ssssi", $interview_type, $interview_mode, $status, $interview_date, $applicant_id);
+        if (!$stmt->execute()) {
+            $error = $stmt->error;
+            $stmt->close();
+            if ($transfer_to_employee) {
+                $conn->rollback();
+            }
+            $fail_schedule("Unable to save interview schedule: " . $error);
+        }
+        $stmt->close();
+
+        if ($transfer_to_employee) {
+            $fetch_stmt = $conn->prepare("SELECT * FROM applicant WHERE applicant_id = ?");
+            if (!$fetch_stmt) {
+                $conn->rollback();
+                $fail_schedule("Unable to load applicant for employee transfer: " . $conn->error);
+            }
+            $fetch_stmt->bind_param("i", $applicant_id);
+            if (!$fetch_stmt->execute()) {
+                $error = $fetch_stmt->error;
+                $fetch_stmt->close();
+                $conn->rollback();
+                $fail_schedule("Unable to load applicant for employee transfer: " . $error);
+            }
+            $app_data = $fetch_stmt->get_result()->fetch_assoc();
+            $fetch_stmt->close();
+
+            if (!$app_data) {
+                $conn->rollback();
+                $fail_schedule("Applicant was not found; employee transfer was cancelled.");
+            }
+
+            $full_name = trim(($app_data['firstname'] ?? '') . ' ' . ($app_data['lastname'] ?? ''));
+            $app_email = trim((string)($app_data['email'] ?? ''));
+            $app_contact = $app_data['contact_number'] ?? '';
+            $app_position = !empty($app_data['position_applied']) ? $app_data['position_applied'] : ($app_data['position'] ?? 'New Hire');
+            $full_address = trim(($app_data['house_number'] ?? '') . ' ' . ($app_data['street'] ?? '') . ' ' . ($app_data['barangay'] ?? '') . ' ' . ($app_data['city'] ?? ''));
+            $department = trim((string)($app_data['department'] ?? '')) ?: 'General';
+
+            $emp_stmt = $conn->prepare("INSERT INTO employee (username, department, position, contact_number, address, email)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                department = VALUES(department),
+                position = VALUES(position),
+                contact_number = VALUES(contact_number),
+                address = VALUES(address)");
+            if (!$emp_stmt) {
+                $conn->rollback();
+                $fail_schedule("Unable to prepare employee transfer: " . $conn->error);
+            }
+            $emp_stmt->bind_param("ssssss", $full_name, $department, $app_position, $app_contact, $full_address, $app_email);
+            if (!$emp_stmt->execute()) {
+                $error = $emp_stmt->error;
+                $emp_stmt->close();
+                $conn->rollback();
+                $fail_schedule("Unable to transfer applicant to employees: " . $error);
+            }
+            $emp_stmt->close();
+
+            if (!$conn->commit()) {
+                $error = $conn->error;
+                $conn->rollback();
+                $fail_schedule("Unable to complete employee transfer: " . $error);
+            }
+        }
+
+        $status_changed = strtolower(trim((string)($current_applicant['status'] ?? ''))) !== $normalized_status;
+        $type_changed = $current_type !== $normalized_type;
+        $email_message = $applicant_email_message !== '' ? $applicant_email_message : $progression_message;
+        if ($email_message === '' && $normalized_status === 'hired') {
+            $email_message = 'Congratulations! Your application status has been updated to Hired.';
+        } elseif ($email_message === '' && $normalized_status === 'failed') {
+            $email_message = 'Your application status has been updated to Failed. Thank you for your interest in joining our team.';
+        } elseif ($email_message === '' && $normalized_status === 'passed') {
+            $email_message = 'You have passed the ' . $interview_type . '. The HR team will contact you about the next step.';
+        } elseif ($email_message === '' && $interview_date !== null && $interview_date !== '') {
+            $formatted_date = date("F j, Y - g:i A", strtotime($interview_date));
+            $email_message = "Your {$interview_type} status is {$status}. Interview date and time: {$formatted_date}. Mode: {$interview_mode}.";
+        } elseif ($email_message === '') {
+            $email_message = "Your application status is now {$status}.";
+        }
+
+        $notification_sent = null;
+        if ($progression_message !== '' || $status_changed || $type_changed) {
+            $notification_sent = $sendApplicantStatusEmail(
+                $email,
+                $username,
+                $normalized_status === 'hired' ? 'Congratulations - Application update' : 'Application status update',
+                $email_message
+            );
+        }
+
+        if ($progression_message !== '') {
+            $_SESSION['interview_schedule_message'] = $progression_message
+                . ($notification_sent ? ' An email update was sent to the applicant.' : ' The status was saved, but the email update could not be sent; check the mail settings and server log.');
+            header("Location: interview_sched.php");
+            exit();
+        }
+        if (!empty($application_list_mode)) {
+            $_SESSION['applicant_message'] = $progression_message !== ''
+                ? $progression_message
+                : ($normalized_status === 'hired'
+                ? "Applicant hired and transferred to the employee directory."
+                : ($transfer_to_employee
+                    ? "Applicant transferred to the employee directory."
+                    : "Interview schedule saved successfully."));
+            if ($notification_sent !== null) {
+                $_SESSION['applicant_message'] .= $notification_sent
+                    ? ' An email update was sent to the applicant.'
+                    : ' The status was saved, but the email update could not be sent; check the mail settings and server log.';
+            }
+            header("Location: application_form.php");
+            exit();
+        }
+        if (!empty($interview_schedule_mode)) {
+            $_SESSION['interview_schedule_message'] = $progression_message !== ''
+                ? $progression_message
+                : ($normalized_status === 'hired'
+                ? "Applicant hired and transferred to the employee directory."
+                : ($transfer_to_employee
+                    ? "Applicant transferred to the employee directory."
+                    : "Interview schedule saved successfully."));
+            if ($notification_sent !== null) {
+                $_SESSION['interview_schedule_message'] .= $notification_sent
+                    ? ' An email update was sent to the applicant.'
+                    : ' The status was saved, but the email update could not be sent; check the mail settings and server log.';
+            }
+            header("Location: interview_sched.php");
+            exit();
+        }
+        echo "<script>alert('Interview schedule updated! If status is Hired/Passed, applicant was transferred to Employee records.'); window.location.href = 'interview_sched.php';</script>";
+        exit();
     } else {
-        echo "<script>alert('Please complete the interview details!');</script>";
+        $fail_schedule("Please complete the interview details.");
     }
 }
 
@@ -366,8 +626,60 @@ if (isset($_POST['save_interview'])) {
 // -----------------------------------------------------
 
 $selected_status = isset($_GET['interview_status']) ? $_GET['interview_status'] : 'all';
+if (in_array($selected_status, ['Technical_Interview', 'Technical Interview'], true)) {
+    $selected_status = 'Training';
+}
 
-if ($selected_status === 'all') {
+if (!empty($application_list_mode)) {
+    $sql = "SELECT * FROM applicant
+            WHERE (interview_date IS NULL
+                   OR interview_date = ''
+                   OR interview_date = '0000-00-00 00:00:00')
+              AND LOWER(REPLACE(COALESCE(interview_type, ''), '_', ' ')) NOT IN ('technical interview', 'training', 'final interview')
+              AND NOT (LOWER(REPLACE(COALESCE(interview_type, ''), '_', ' ')) = 'initial interview'
+                       AND LOWER(TRIM(COALESCE(status, ''))) = 'passed')
+              AND COALESCE(LOWER(TRIM(status)), '') != 'hired'
+              AND COALESCE(LOWER(TRIM(interview_type)), '') != 'hired'";
+} elseif (!empty($interview_schedule_mode)) {
+    $sql = "SELECT * FROM applicant
+            WHERE (
+                    (interview_date IS NOT NULL
+                     AND interview_date != '0000-00-00 00:00:00'
+                     AND interview_date != '')
+                    OR (
+                        (interview_date IS NULL
+                         OR interview_date = '0000-00-00 00:00:00'
+                         OR interview_date = '')
+                        AND (
+                            (LOWER(REPLACE(interview_type, '_', ' ')) IN ('technical interview', 'training', 'final interview')
+                             AND LOWER(TRIM(status)) = 'pending')
+                            OR (LOWER(REPLACE(interview_type, '_', ' ')) = 'initial interview'
+                                AND LOWER(TRIM(status)) = 'passed')
+                            OR (LOWER(REPLACE(interview_type, '_', ' ')) IN ('technical interview', 'training')
+                                AND LOWER(TRIM(status)) = 'passed')
+                        )
+                    )
+              )
+              AND COALESCE(LOWER(TRIM(status)), '') != 'hired'
+              AND COALESCE(LOWER(TRIM(interview_type)), '') != 'hired'";
+    if ($selected_status !== 'all') {
+        $status_clean = mysqli_real_escape_string($conn, str_replace('_', ' ', $selected_status));
+        $sql .= " AND (
+                    LOWER(REPLACE(interview_type, '_', ' ')) = LOWER('$status_clean')
+                    OR (LOWER('$status_clean') = 'training'
+                        AND LOWER(REPLACE(interview_type, '_', ' ')) = 'technical interview')
+                    OR (LOWER('$status_clean') = 'training'
+                        AND LOWER(REPLACE(interview_type, '_', ' ')) = 'initial interview'
+                        AND LOWER(TRIM(status)) = 'passed')
+                    OR (LOWER('$status_clean') = 'final interview'
+                        AND LOWER(REPLACE(interview_type, '_', ' ')) = 'technical interview'
+                        AND LOWER(TRIM(status)) = 'passed')
+                    OR (LOWER('$status_clean') = 'final interview'
+                        AND LOWER(REPLACE(interview_type, '_', ' ')) = 'training'
+                        AND LOWER(TRIM(status)) = 'passed')
+                  )";
+    }
+} elseif ($selected_status === 'all') {
     $sql = "SELECT * FROM applicant 
             WHERE (interview_date IS NULL OR interview_date = '0000-00-00 00:00:00' OR interview_date = '')";
 } else {
@@ -376,7 +688,9 @@ if ($selected_status === 'all') {
             WHERE LOWER(REPLACE(interview_type, '_', ' ')) = LOWER(REPLACE('$status_clean', '_', ' '))";
 }
 
-$sql .= " ORDER BY applicant_id ASC";
+$sql .= (!empty($application_list_mode) || !empty($interview_schedule_mode))
+    ? " ORDER BY interview_date ASC, applicant_id DESC"
+    : " ORDER BY applicant_id ASC";
 
 $result = mysqli_query($conn, $sql);
 $count  = 0;

@@ -126,31 +126,14 @@ $quantity_err = $quantity_err ?? '';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Supervisor Form</title>
-    <link rel="stylesheet" href="css/supervisor.css?v=20261007-active-tasks">
+    <link rel="stylesheet" href="css/supervisor.css?v=20261009-logistics-route">
+    <link rel="stylesheet" href="css/tasktrack_sidebar.css?v=<?= filemtime(__DIR__ . '/css/tasktrack_sidebar.css'); ?>">
+    <link rel="stylesheet" href="css/table-scroll.css?v=<?= filemtime(__DIR__ . '/css/table-scroll.css'); ?>">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
-<div class="sidebar">
-  <div>
-    <div class="sidebar-header">
-      <div class="avatar">🐐</div>
-      <div>
-        <div class="name">TASKTRACK</div>
-        <div class="sub">Supervisor : <span><?= htmlspecialchars($_SESSION['name'] ?? ''); ?></span></div>
-        <div class="sub"><span><?php echo isset($_SESSION['email']) ? $_SESSION['email'] : ''; ?></span></div>
-      </div>
-    </div>
-    
-    <div class="sidebar-nav">
-      <button id="navDashboard" class="side-btn active" onclick="showPage('dashboard')">DASHBOARD</button>
-      <button id="navTask" class="side-btn" onclick="showPage('task')">TASK</button>      
-      <button class="side-btn" type="button"><a href="factory_main.php">PRODUCTION</a></button>
-      <button class="side-btn" type="button"><a href="delivery_main.php">LOGISTIC</a></button>    
-    </div>
-  </div>
-  <a href="logout.php" style="text-decoration: none;"><button class="logout-btn">LOG OUT</button></a>
-</div>
+<?php $tasktrackActive = 'dashboard'; include __DIR__ . '/config/tasktrack_sidebar.php'; ?>
 
 <div class="main">
   <div class="topbar"><h1>Supervisor</h1></div>
@@ -174,20 +157,56 @@ $quantity_err = $quantity_err ?? '';
         </div>
       </div>
       <div class="dash-lower">
-        <div class="chart-panel">
-          <div class="dashboard-panel-heading">
-            <div>
-              <h3>COMPLETED PRODUCT PROGRESS</h3>
-              <p>Monthly production completion overview</p>
+        <div class="charts-grid">
+          <div class="chart-panel">
+            <div class="dashboard-panel-heading">
+              <div>
+                <h3>COMPLETED PRODUCT PROGRESS</h3>
+                <p>Completed quantity by due month for the selected year</p>
+              </div>
+              <label class="pie-month-filter">
+                <span>Year</span>
+                <select id="chartYearFilter" aria-label="Select chart year">
+                  <option value="<?= (int) date('Y'); ?>"><?= (int) date('Y'); ?></option>
+                </select>
+              </label>
             </div>
-            <span class="dashboard-panel-icon" aria-hidden="true">↗</span>
+            <div class="chart-canvas-wrap">
+              <canvas id="myChart"></canvas>
+            </div>
           </div>
-          <div style="position: relative; height: 300px; width: 100%;">
-            <canvas id="myChart"></canvas>
-          </div>
-          <script src="js/supervisor.js"></script>
-        </div>
 
+          <div class="chart-panel">
+            <div class="dashboard-panel-heading">
+              <div>
+                <h3>MOST PRODUCED PRODUCTS</h3>
+                <p>Production records by product for the selected year and month</p>
+              </div>
+              <label class="pie-month-filter">
+                <span>Month</span>
+                <select id="pieMonthFilter" aria-label="Filter most produced products by month">
+                  <option value="all">All months</option>
+                  <option value="1">January</option>
+                  <option value="2">February</option>
+                  <option value="3">March</option>
+                  <option value="4">April</option>
+                  <option value="5">May</option>
+                  <option value="6">June</option>
+                  <option value="7">July</option>
+                  <option value="8">August</option>
+                  <option value="9">September</option>
+                  <option value="10">October</option>
+                  <option value="11">November</option>
+                  <option value="12">December</option>
+                </select>
+              </label>
+            </div>
+            <div class="chart-canvas-wrap">
+              <canvas id="productPieChart"></canvas>
+              <p id="pieChartEmpty" class="chart-empty-message" hidden>No product records available.</p>
+            </div>
+          </div>
+        </div>
         <div class="active-task-panel">
           <div class="active-task-heading">
             <div>
@@ -220,7 +239,7 @@ $quantity_err = $quantity_err ?? '';
               <?php endforeach; ?>
             </div>
           <?php else: ?>
-            <p class="active-task-empty">Walang kasalukuyang naka-assign na task sa Production o Logistics.</p>
+            <p class="active-task-empty">No active tasks are currently assigned to Production or Logistics.</p>
           <?php endif; ?>
         </div>
       </div>
@@ -229,12 +248,26 @@ $quantity_err = $quantity_err ?? '';
     <!-- TASK -->
     <div id="page-task" class="page" style="display:none;">
       <h2 class="section-title">TASKS</h2>
-      <div class="green-table-panel">
+      <div class="green-table-panel table-scroll">
         <table class="green-table">
           <thead>
             <tr><th>Employee</th><th>Task</th><th>Department</th><th>Due date</th><th>Status</th></tr>
           </thead>
-          <tbody id="taskBody"></tbody>
+          <tbody>
+            <?php if ($active_tasks): ?>
+              <?php foreach ($active_tasks as $task): ?>
+                <tr>
+                  <td><?= htmlspecialchars($task['assigned_to'] ?? 'N/A'); ?></td>
+                  <td><?= htmlspecialchars($task['task_name'] ?? 'N/A'); ?></td>
+                  <td><?= htmlspecialchars($task['department'] ?? 'N/A'); ?></td>
+                  <td><?= htmlspecialchars($task['due_date'] ?? 'N/A'); ?></td>
+                  <td><?= htmlspecialchars($task['task_status'] ?? 'Pending'); ?></td>
+                </tr>
+              <?php endforeach; ?>
+            <?php else: ?>
+              <tr><td colspan="5">No active assigned tasks.</td></tr>
+            <?php endif; ?>
+          </tbody>
         </table>
       </div>
     </div>
@@ -250,40 +283,9 @@ $quantity_err = $quantity_err ?? '';
       </div>
     </div>
 
-    <!-- LOGISTIC -->
-    <div id="page-logistic" class="page" style="display:none;">
-      <div class="assign"> <button><a href="delivery_task.php">Add Delivery Record</a></button></div>
-      <div class="assign"> <button><a href="supervisor.php">BACK</a></button></div>
-      <div class="stat-row">
-        <div class="stat-card green">
-          <div class="label" style="font-size:15px;opacity:0.9;">Total delivery</div>
-          <div class="num" style="margin-top:4px;">3</div>
-        </div>
-        <div class="stat-card green">
-          <div class="label" style="font-size:15px;opacity:0.9;">Active Shipments</div>
-          <div class="num" style="margin-top:4px;">3</div>
-          <div class="sub">5 total shipments</div>
-        </div>
-      </div>
-      <div class="bottom-row" style="margin-bottom:24px;">
-        <div class="info-panel">
-          <h4>Fleet status</h4>
-          <div class="info-row"><span>Active Vehicles:</span><span>12/15</span></div>
-          <div class="info-row"><span>Available Driver:</span><span>3</span></div>
-          <div class="info-row"><span>Maintenance:</span><span>0</span></div>
-        </div>
-        <div class="info-panel">
-          <h4>Warehouse capacity</h4>
-          <div class="info-row"><span>Warehouse A:</span><span>78%</span></div>
-          <div class="progress-track"><div class="progress-fill" style="width:78%;"></div></div>
-          <div class="info-row" style="margin-top:10px;"><span>Warehouse B:</span><span>62%</span></div>
-          <div class="progress-track"><div class="progress-fill" style="width:62%;"></div></div>
-        </div>
-      </div>
-    </div>
-
   </div>
 </div>
 <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
+<script src="js/supervisor.js?v=20261009-supervisor-fixes"></script>
 </body>
 </html>

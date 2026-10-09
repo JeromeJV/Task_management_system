@@ -123,6 +123,7 @@ function formatTime($timeStr) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Attendance Records</title>
+    <link rel="stylesheet" href="css/table-scroll.css?v=<?= filemtime(__DIR__ . '/css/table-scroll.css'); ?>">
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -309,6 +310,7 @@ function formatTime($timeStr) {
     </div>
 
     <?php if ($count > 0): ?>
+        <div class="table-scroll">
         <table>
             <thead>
                 <tr>
@@ -332,6 +334,7 @@ function formatTime($timeStr) {
                             <strong><?= htmlspecialchars($row['display_name']); ?></strong>
                             <?php if (!empty($row['user_email'])): ?>
                                 <span class="sub-text"><?= htmlspecialchars($row['user_email']); ?></span>
+                                </div>
                             <?php endif; ?>
                         </td>
                         <td><?= htmlspecialchars($row['user_role'] ?? 'N/A'); ?></td>

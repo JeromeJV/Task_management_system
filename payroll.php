@@ -118,6 +118,7 @@ while ($r = $payrolls->fetch_assoc()) {
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/table-scroll.css?v=<?= filemtime(__DIR__ . '/css/table-scroll.css'); ?>">
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -385,6 +386,11 @@ while ($r = $payrolls->fetch_assoc()) {
             <span>Calculate Payroll</span>
           </button>
 
+          <a href="office_employee.php" class="nav-item w-full px-5 py-3.5 flex items-center gap-4 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 transition text-xs font-semibold relative">
+            <i class="fa-solid fa-list-check text-sm w-5 text-center"></i>
+            <span>My Tasks</span>
+          </a>
+
         </nav>
       </div>
 
@@ -528,7 +534,7 @@ while ($r = $payrolls->fetch_assoc()) {
           </div>
 
           <div class="bg-white rounded-2xl border border-zinc-200 shadow-2xs overflow-hidden">
-            <div class="overflow-x-auto">
+            <div class="overflow-x-auto table-scroll">
               <table class="w-full text-left border-collapse" id="payrollTable">
                 <thead>
                   <tr class="border-b border-zinc-200 bg-zinc-50/80 text-[11px] uppercase tracking-wider text-zinc-500 font-bold">

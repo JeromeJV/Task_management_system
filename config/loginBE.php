@@ -78,7 +78,7 @@ if (isset($_POST['Submit'])) {
                             $redirect_url = 'supervisor.php';
                             break;
                         case 'employee':
-                            $redirect_url = 'employee.php';
+                            $redirect_url = 'office_employee.php';
                             break;
                         default: 
                             $redirect_url = 'employee.php';

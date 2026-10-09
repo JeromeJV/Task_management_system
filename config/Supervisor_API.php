@@ -324,22 +324,30 @@ elseif ($module === 'factory') {
     }
 
     $present_production_employees = [];
-    $present_employees_sql = "SELECT DISTINCT e.employee_id, e.username, e.position
+    $present_employees_sql = "SELECT e.employee_id, e.username, e.position
                               FROM employee e
-                              INNER JOIN users u
-                                  ON (u.name = e.username
-                                      OR (e.email IS NOT NULL AND e.email != '' AND u.email = e.email)
-                                      OR EXISTS (
-                                          SELECT 1
-                                          FROM attendance employee_user_link
-                                          WHERE employee_user_link.employee_id = e.employee_id
-                                            AND employee_user_link.user_id = u.id
-                                      ))
-                              INNER JOIN attendance a
-                                  ON (a.user_id = u.id OR (a.user_id IS NULL AND a.employee_id = e.employee_id))
-                              WHERE u.role = 'pro'
-                                AND DATE(a.attendance_date) = CURDATE()
-                                AND LOWER(a.status) = 'present'
+                              WHERE EXISTS (
+                                  SELECT 1
+                                  FROM users u
+                                  WHERE u.role = 'pro'
+                                    AND (
+                                        u.name = e.username
+                                        OR (e.email IS NOT NULL AND e.email != '' AND u.email = e.email)
+                                        OR EXISTS (
+                                            SELECT 1
+                                            FROM attendance employee_user_link
+                                            WHERE employee_user_link.employee_id = e.employee_id
+                                              AND employee_user_link.user_id = u.id
+                                        )
+                                    )
+                                    AND EXISTS (
+                                        SELECT 1
+                                        FROM attendance a
+                                        WHERE (a.user_id = u.id OR a.employee_id = e.employee_id)
+                                          AND DATE(a.attendance_date) = CURDATE()
+                                          AND LOWER(TRIM(a.status)) IN ('present', 'early', 'late', 'overtime', 'undertime', 'half day')
+                                    )
+                              )
                               ORDER BY e.position, e.username";
     $present_employees_result = mysqli_query($conn, $present_employees_sql);
     if (!$present_employees_result) {
@@ -374,12 +382,15 @@ elseif ($module === 'factory') {
                              WHERE employee_user_link.employee_id = e.employee_id
                                AND employee_user_link.user_id = u.id
                          ))
-                 INNER JOIN attendance a
-                     ON (a.user_id = u.id OR (a.user_id IS NULL AND a.employee_id = e.employee_id))
                  WHERE e.employee_id = ?
                    AND u.role = 'pro'
-                   AND DATE(a.attendance_date) = CURDATE()
-                   AND LOWER(a.status) = 'present'
+                   AND EXISTS (
+                       SELECT 1
+                       FROM attendance a
+                       WHERE (a.user_id = u.id OR a.employee_id = e.employee_id)
+                         AND DATE(a.attendance_date) = CURDATE()
+                         AND LOWER(TRIM(a.status)) IN ('present', 'early', 'late', 'overtime', 'undertime', 'half day')
+                   )
                  LIMIT 1"
             );
             $check_employee->bind_param("i", $employee_id);
@@ -473,12 +484,15 @@ elseif ($module === 'factory') {
                              WHERE employee_user_link.employee_id = e.employee_id
                                AND employee_user_link.user_id = u.id
                          ))
-                 INNER JOIN attendance a
-                     ON (a.user_id = u.id OR (a.user_id IS NULL AND a.employee_id = e.employee_id))
                  WHERE e.employee_id = ?
                    AND u.role = 'pro'
-                   AND DATE(a.attendance_date) = CURDATE()
-                   AND LOWER(a.status) = 'present'
+                   AND EXISTS (
+                       SELECT 1
+                       FROM attendance a
+                       WHERE (a.user_id = u.id OR a.employee_id = e.employee_id)
+                         AND DATE(a.attendance_date) = CURDATE()
+                         AND LOWER(TRIM(a.status)) IN ('present', 'early', 'late', 'overtime', 'undertime', 'half day')
+                   )
                  LIMIT 1"
             );
             $check_employee->bind_param("i", $employee_id);

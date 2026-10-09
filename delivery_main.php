@@ -11,6 +11,49 @@ $module = $_REQUEST['module'] ?? 'delivery';
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 $message = "";
 $status_message = "";
+
+$delivery_drivers = [];
+$delivery_team_result = mysqli_query($conn, "
+    SELECT u.id,
+           u.name,
+           CASE
+               WHEN EXISTS (
+                   SELECT 1
+                   FROM attendance a
+                   LEFT JOIN employee e ON e.employee_id = a.employee_id
+                   WHERE DATE(a.attendance_date) = CURDATE()
+                     AND LOWER(TRIM(a.status)) = 'present'
+                     AND a.time_in IS NOT NULL
+                     AND a.time_in != '00:00:00'
+                     AND (
+                         a.user_id = u.id
+                         OR e.username = u.name
+                         OR (e.email IS NOT NULL AND e.email != '' AND e.email = u.email)
+                         OR EXISTS (
+                             SELECT 1
+                             FROM attendance driver_user_link
+                             WHERE driver_user_link.employee_id = e.employee_id
+                               AND driver_user_link.user_id = u.id
+                         )
+                     )
+               ) THEN 'Present'
+               ELSE 'Absent'
+           END AS attendance_status
+    FROM users u
+    WHERE u.role = 'log'
+    ORDER BY u.name
+");
+if (!$delivery_team_result) {
+    throw new RuntimeException('Unable to load delivery drivers: ' . mysqli_error($conn));
+}
+while ($delivery_driver = mysqli_fetch_assoc($delivery_team_result)) {
+    $delivery_drivers[] = $delivery_driver;
+}
+$present_delivery_count = count(array_filter(
+    $delivery_drivers,
+    static fn ($delivery_driver) => $delivery_driver['attendance_status'] === 'Present'
+));
+$absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -18,7 +61,8 @@ $status_message = "";
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Logistic Management - TASKTRACK</title>
-    <link rel="stylesheet" href="css/delivery_main.css">
+    <link rel="stylesheet" href="css/delivery_main.css?v=<?= filemtime(__DIR__ . '/css/delivery_main.css'); ?>">
+    <link rel="stylesheet" href="css/table-scroll.css?v=<?= filemtime(__DIR__ . '/css/table-scroll.css'); ?>">
     <style>
         /* ============================================================
            MODAL
@@ -245,48 +289,14 @@ $status_message = "";
             }
         }
     </style>
+    <link rel="stylesheet" href="css/tasktrack_sidebar.css?v=<?= filemtime(__DIR__ . '/css/tasktrack_sidebar.css'); ?>">
 </head>
 <body>
 <div class="app">
     <!-- ============================================================
          SIDEBAR
     ============================================================ -->
-    <aside class="sidebar">
-        <div class="sidebar-header">
-            <div class="avatar">
-                🚚
-            </div>
-            <div class="titles">
-                <div class="name">
-                    TASKTRACK
-                </div>
-                <div class="sub">
-                    Supervisor:
-                    <span>
-                        <?= htmlspecialchars($_SESSION['name'] ?? ''); ?>
-                    </span>
-                </div>
-                <div class="sub">
-                    <span>
-                        <?= htmlspecialchars($_SESSION['email'] ?? ''); ?>
-                    </span>
-                </div>
-            </div>
-        </div>
-        <!-- ========================================================
-             SIDEBAR NAVIGATION
-        ======================================================== -->
-        <nav class="sidebar-nav">
-            <a href="supervisor.php" class="side-btn">DASHBOARD</a>
-            <a href="task.php" class="side-btn">TASK</a>
-            <a href="employee.php" class="side-btn">EMPLOYEE</a>
-            <a href="factory_main.php" class="side-btn">PRODUCTION</a>
-            <a href="delivery_main.php" class="side-btn active">LOGISTIC</a>
-            <a href="logout.php" style="text-decoration: none;">
-                <button class="logout-btn">LOG OUT</button>
-            </a>
-        </nav>
-    </aside>
+    <?php $tasktrackActive = 'logistics'; include __DIR__ . '/config/tasktrack_sidebar.php'; ?>
     <!-- ============================================================
          MAIN CONTENT
     ============================================================ -->
@@ -329,6 +339,68 @@ $status_message = "";
 
             <div class="page active">
 
+                <section class="delivery-team-panel" aria-labelledby="deliveryDriversTitle">
+                    <div class="delivery-team-heading">
+                        <div>
+                            <p class="delivery-team-eyebrow">TEAM OVERVIEW</p>
+                            <h2 id="deliveryDriversTitle" class="section-title">Delivery Drivers</h2>
+                            <p>Driver roster and attendance for <?= htmlspecialchars(date('F j, Y')); ?>.</p>
+                        </div>
+                        <div class="delivery-team-actions">
+                            <button
+                                type="button"
+                                class="delivery-staff-toggle"
+                                id="deliveryStaffToggle"
+                                aria-expanded="false"
+                                aria-controls="deliveryStaffRoster"
+                                onclick="toggleDeliveryStaff()"
+                            >
+                                View Staff
+                            </button>
+                            <div class="delivery-team-summary" aria-label="Delivery team attendance summary">
+                                <div class="delivery-team-stat is-total">
+                                    <span class="delivery-team-stat-value"><?= count($delivery_drivers); ?></span>
+                                    <span class="delivery-team-stat-label">Total staff</span>
+                                </div>
+                                <div class="delivery-team-stat is-present">
+                                    <span class="delivery-team-stat-value"><?= $present_delivery_count; ?></span>
+                                    <span class="delivery-team-stat-label">Present</span>
+                                </div>
+                                <div class="delivery-team-stat is-absent">
+                                    <span class="delivery-team-stat-value"><?= $absent_delivery_count; ?></span>
+                                    <span class="delivery-team-stat-label">Absent</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="deliveryStaffRoster" hidden>
+                        <?php if (!empty($delivery_drivers)): ?>
+                            <div class="delivery-driver-list">
+                                <?php foreach ($delivery_drivers as $delivery_driver): ?>
+                                    <?php $is_present = $delivery_driver['attendance_status'] === 'Present'; ?>
+                                    <article class="delivery-driver-item">
+                                        <span class="delivery-driver-avatar" aria-hidden="true">
+                                            <?= htmlspecialchars(strtoupper(substr($delivery_driver['name'] ?? 'D', 0, 1))); ?>
+                                        </span>
+                                        <span class="delivery-driver-details">
+                                            <span class="delivery-driver-name">
+                                                <?= htmlspecialchars($delivery_driver['name'] ?? 'Unnamed delivery driver'); ?>
+                                            </span>
+                                            <span class="delivery-driver-role">Delivery team member</span>
+                                        </span>
+                                        <span class="delivery-attendance <?= $is_present ? 'is-present' : 'is-absent'; ?>">
+                                            <span class="delivery-attendance-dot" aria-hidden="true"></span>
+                                            <?= htmlspecialchars($delivery_driver['attendance_status']); ?>
+                                        </span>
+                                    </article>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php else: ?>
+                            <p class="empty-message">No delivery drivers found.</p>
+                        <?php endif; ?>
+                    </div>
+                </section>
 
                 <!-- ==================================================
                      DELIVERY TABS
@@ -373,7 +445,7 @@ $status_message = "";
 
                     <?php if (!empty($pending_records)): ?>
 
-                        <div class="table-wrap">
+                        <div class="table-wrap table-scroll">
 
                             <table>
 
@@ -534,7 +606,7 @@ $status_message = "";
 
                     <?php if (!empty($history_records)): ?>
 
-                        <div class="table-wrap">
+                        <div class="table-wrap table-scroll">
 
                             <table>
 
@@ -1196,6 +1268,16 @@ function showDeliverySection(section) {
 
     }
 
+}
+
+function toggleDeliveryStaff() {
+    const roster = document.getElementById("deliveryStaffRoster");
+    const toggle = document.getElementById("deliveryStaffToggle");
+    const isExpanded = toggle.getAttribute("aria-expanded") === "true";
+
+    roster.hidden = isExpanded;
+    toggle.setAttribute("aria-expanded", String(!isExpanded));
+    toggle.textContent = isExpanded ? "View Staff" : "Hide Staff";
 }
 
 

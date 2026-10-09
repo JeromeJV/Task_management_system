@@ -1,0 +1,227 @@
+.tasktrack-sidebar {
+    position: fixed;
+    z-index: 1000;
+    inset: 0 auto 0 0;
+    display: flex;
+    width: 75px;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 18px 0;
+    border-right: 1px solid #e5e7eb;
+    background: #fff;
+    transition: width .35s cubic-bezier(.4, 0, .2, 1), box-shadow .35s ease;
+}
+
+.tasktrack-sidebar:hover,
+.tasktrack-sidebar:focus-within {
+    width: 240px;
+    box-shadow: 6px 0 24px rgba(0, 0, 0, .08);
+}
+
+.tasktrack-brand {
+    display: grid;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    place-items: center;
+    align-self: center;
+    border-radius: 9px;
+    background: #1f6e4a;
+    color: #fff;
+    font-size: 18px;
+    font-weight: 800;
+}
+
+.tasktrack-account {
+    display: flex;
+    min-height: 82px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    overflow: hidden;
+    margin: 17px 0 13px;
+    padding: 0 17px;
+    border-bottom: 1px solid #e5e7eb;
+    white-space: nowrap;
+}
+
+.tasktrack-account strong,
+.tasktrack-account span,
+.tasktrack-nav-label {
+    overflow: hidden;
+    opacity: 0;
+    transform: translateX(-8px);
+    transition: opacity .2s ease, transform .2s ease;
+}
+
+.tasktrack-account strong {
+    color: #202b23;
+    font-size: 13px;
+    font-weight: 750;
+}
+
+.tasktrack-account span {
+    color: #788179;
+    font-size: 10px;
+    text-overflow: ellipsis;
+}
+
+.tasktrack-sidebar:hover .tasktrack-account strong,
+.tasktrack-sidebar:hover .tasktrack-account span,
+.tasktrack-sidebar:focus-within .tasktrack-account strong,
+.tasktrack-sidebar:focus-within .tasktrack-account span,
+.tasktrack-sidebar:hover .tasktrack-nav-label,
+.tasktrack-sidebar:focus-within .tasktrack-nav-label {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.tasktrack-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.tasktrack-nav-link,
+.tasktrack-logout {
+    display: flex;
+    width: 100%;
+    height: 52px;
+    flex: 0 0 52px;
+    align-items: center;
+    gap: 0;
+    overflow: hidden;
+    border: 0;
+    border-left: 4px solid transparent;
+    background: transparent;
+    color: #6b7280;
+    font-size: 0;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color .2s ease, background .2s ease, border-color .2s ease;
+}
+
+.tasktrack-icon-cell {
+    display: flex;
+    width: 71px;
+    min-width: 71px;
+    height: 52px;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 71px;
+    color: #6b7280;
+    transition: color .2s ease;
+}
+
+.tasktrack-icon-cell svg {
+    display: block;
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.8;
+}
+
+.tasktrack-nav-label {
+    color: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: .01em;
+}
+
+.tasktrack-nav-link:hover,
+.tasktrack-nav-link.is-active,
+.tasktrack-logout:hover {
+    border-left-color: #1f6e4a;
+    background: #f3f4f6;
+    color: #111827;
+}
+
+.tasktrack-nav-link:hover .tasktrack-icon-cell,
+.tasktrack-nav-link.is-active .tasktrack-icon-cell,
+.tasktrack-logout:hover .tasktrack-icon-cell {
+    color: #1f6e4a;
+}
+
+.tasktrack-logout {
+    margin-top: auto;
+}
+
+body .main {
+    width: calc(100% - 75px);
+    margin-left: 75px;
+}
+
+body .employee-main {
+    margin-left: 75px;
+}
+
+@media (max-width: 768px) {
+    .tasktrack-sidebar {
+        width: 58px;
+    }
+
+    .tasktrack-sidebar:hover,
+    .tasktrack-sidebar:focus-within {
+        width: 58px;
+    }
+
+    .tasktrack-sidebar.open {
+        width: 240px;
+    }
+
+    .tasktrack-account,
+    .tasktrack-nav-label {
+        display: none;
+    }
+
+    .tasktrack-sidebar.open .tasktrack-account,
+    .tasktrack-sidebar.open .tasktrack-nav-label {
+        display: flex;
+    }
+
+    .tasktrack-sidebar.open .tasktrack-nav-link,
+    .tasktrack-sidebar.open .tasktrack-logout {
+        width: 100%;
+    }
+
+    .tasktrack-sidebar.open .tasktrack-account strong,
+    .tasktrack-sidebar.open .tasktrack-account span,
+    .tasktrack-sidebar.open .tasktrack-nav-label {
+        opacity: 1;
+        transform: translateX(0);
+    }
+
+    .tasktrack-nav-link,
+    .tasktrack-logout {
+        width: 58px;
+    }
+
+    .tasktrack-icon-cell {
+        width: 54px;
+        min-width: 54px;
+        flex-basis: 54px;
+    }
+
+    body .main {
+        width: calc(100% - 58px);
+        margin-left: 58px;
+    }
+
+    body .employee-main {
+        margin-left: 58px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tasktrack-sidebar,
+    .tasktrack-account strong,
+    .tasktrack-account span,
+    .tasktrack-nav-label {
+        transition-duration: .01ms;
+    }
+}

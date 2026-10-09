@@ -1,178 +1,246 @@
-    <?php
-        session_start();
-        include('config/connection.php');
-        include('config/autoLog.php');
-        
-        // Kunin ang hiwalay na backend file
-        include('config/application_API.php'); 
-    ?>
+<?php
+include 'config/connection.php';
+include 'config/application_API.php';
+session_start();
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Application Form</title>
+    <link rel="stylesheet" href="./css/Applicants.css" />
+</head>
+<body>
 
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>  
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Applicant List</title>
-    </head>
-    <body>
-        <?php if (!empty($message)): ?>
-            <div class="alert alert-success" role="alert"><?= htmlspecialchars($message) ?></div>
-        <?php endif; ?>
-        
-        <button><a href="HR.php">Back</a></button>
-        <div style="overflow-x: auto; max-width: 300%;">
-            <?php if ($count > 0): ?>
-                <table border="0" cellpadding="5" cellspacing="0">
-                    <thead>
-                        <tr>
-                            <th>Applicant ID</th>
-                            <th>Name</th>
-                            <th>Contact Number</th>
-                            <th>Email address</th>
-                            <th>Address</th>
-                            <th>Position Applied</th>
-                            <th>Previous Company</th>
-                            <th>Previous Position</th>
-                            <th>Date Of Start</th>
-                            <th>Date Of End</th>
-                            <th>Highest Educational Attainment</th>
-                            <th>Start Date</th>
-                            <th>Interview</th>
-                            <th>Resume</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($records as $row): ?>
-                            <tr>
-                                <form action="" method="post">
-                                    <input type="hidden" name="idno" value="<?= htmlspecialchars($row['applicant_id'] ?? ''); ?>">
-                                    <td><?= htmlspecialchars($row['applicant_id'] ?? ''); ?></td>
-                                    <td><?= htmlspecialchars($row['firstname'] . ' ' . $row['middlename'] . ' ' . $row['lastname']); ?></td>
-                                    <td><?= htmlspecialchars($row['contact_number'] ?? ''); ?></td>
-                                    <td><?= htmlspecialchars($row['email'] ?? ''); ?></td>
-                                    <td><?= htmlspecialchars($row['house_number'] . ' ' . $row['street'] . ' ' . $row['barangay']. ' ' . $row['city'] . ' ' . $row['province']); ?></td>
-                                    <td><?= htmlspecialchars($row['position_applied'] ?? ''); ?></td>
-                                    <td><?= htmlspecialchars($row['company_name'] ?? ''); ?></td>
-                                    <td><?= htmlspecialchars($row['position'] ?? ''); ?></td>
-                                    <td><?= htmlspecialchars($row['date_of_start'] ?? ''); ?></td>
-                                    <td><?= htmlspecialchars($row['date_of_end'] ?? ''); ?></td>
-                                    <td><?= htmlspecialchars($row['education'] ?? ''); ?></td>
-                                    <td><?= htmlspecialchars($row['start_date'] ?? ''); ?></td>
-                                    <td>
-                                    <!-- Ipasa ang ID, Pangalan, at Email gamit ang function -->
-                                        <button type="button" onclick="openModal('<?= $row['applicant_id']; ?>', '<?= htmlspecialchars($row['firstname'] . ' ' . $row['lastname']); ?>', '<?= htmlspecialchars($row['email']); ?>')">
-                                            Set Schedule
-                                        </button>
-                                    </td>
-                                    <td style="text-align: center;">
-                                    <?php if (!empty($row['resume_path'])): ?>
-                                        <a href="view_resume.php?file=<?= urlencode($row['resume_path']); ?>" target="_blank">
-                                            View Resume
-                                        </a>
-                                    <?php else: ?>
-                                        <span style="color: #888;">No File</span>
-                                    <?php endif; ?>
-                                </td>
-                                <td>
-                                    <input type="submit" name="del" value="Delete" onclick="return confirm('Are you sure you want to delete it?');">
-                                </td>
-                                </form>
-                            </tr>
-                            <?php endforeach; ?>
-                    </tbody>
-                </table>
-        </div>
-        <?php else: ?>
-            <p>No records found.</p>
-        <?php endif; ?>
+    <div class="header">
+        <div class="steps">
+            <div class="step active" data-step="1">
+                <div class="connector"><div class="fill"></div></div>
+                <div class="circle">1</div>
+                <div class="label">Contact Info</div>
+            </div>
 
-        <!-- ================= ISANG POP-UP MODAL SA LABAS NG LOOP ================= -->
-    <div id="inputModal" class="modal">
-        <div class="modal-content">
-            <h3>Set Interview Schedule</h3>
-            
-            <form action="appli_form.php" method="POST">
-                <!-- Hidden Input para maipasa ang Applicant ID sa PHP -->
-                <input type="hidden" name="applicant_id" id="modal_applicant_id">
+            <div class="step" data-step="2">
+                <div class="connector"><div class="fill"></div></div>
+                <div class="circle">2</div>
+                <div class="label">Work</div>
+            </div>
 
-                <label>Interview Type:</label><br>
-                <select name="interview_type" required>
-                    <option value="">--Type Of Interview--</option>
-                    <option value="Initial Interview" <?= (isset($_POST['interview_type']) && $_POST['interview_type'] == 'initial interview') ? 'selected' : '' ?>>Initial Interview</option>
-                    <option value="Technical Interview" <?= (isset($_POST['interview_type']) && $_POST['interview_type'] == 'Technical Interview') ? 'selected' : '' ?>>Technical Interview</option>
-                    <option value="Final Interview" <?= (isset($_POST['interview_type']) && $_POST['interview_type'] == 'Final Interview') ? 'selected' : '' ?>>Final Interview</option>
-                </select>
-                
-                <br><br>
+            <div class="step" data-step="3">
+                <div class="connector"><div class="fill"></div></div>
+                <div class="circle">3</div>
+                <div class="label">Educational Background</div>
+            </div>
 
-                <label>Interview Mode:</label><br>
-                <select name="interview_mode" required>
-                    <option value="Online" <?= (isset($_POST['interview_mode']) && $_POST['interview_mode'] == 'Online') ? 'selected' : '' ?>>Online (Google Meet)</option>
-                    <option value="On-site" <?= (isset($_POST['interview_mode']) && $_POST['interview_mode'] == 'On-site') ? 'selected' : '' ?>>Face-to-Face (Office)</option>
-                </select>
-                
-                <br><br>
-
-                <label>Update Status:</label><br>
-                <select name="status" required>
-                    <option value="Scheduled" <?= (isset($_POST['status']) && $_POST['status'] == 'Scheduled') ? 'selected' : '' ?>>Scheduled</option>
-                    <option value="Pending" <?= (isset($_POST['status']) && $_POST['status'] == 'Pending') ? 'selected' : '' ?>>Pending</option>
-                    <option value="Passed" <?= (isset($_POST['status']) && $_POST['status'] == 'Passed') ? 'selected' : '' ?>>Passed</option>
-                    <option value="Failed" <?= (isset($_POST['status']) && $_POST['status'] == 'Failed') ? 'selected' : '' ?>>Failed</option>
-                </select>
-                
-                <br><br>
-
-                <label>Name:</label><br>
-                <input type="text" name="username" id="modal_username" readonly><br><br>
-
-                <label>Email:</label><br>
-                <input type="email" name="email" id="modal_email" readonly><br><br>
-
-                <label>Interview Date & Time:</label><br>
-                <input type="datetime-local" name="interview_date" required><br><br>
-                
-                <button type="submit" name="save_interview">I-save Schedule</button>
-                <button type="button" onclick="closeModal()">Cancel</button>
-            </form>
+            <div class="step" data-step="4">
+                <div class="connector"><div class="fill"></div></div>
+                <div class="circle">4</div>
+                <div class="label">Availability</div>
+            </div>
         </div>
     </div>
 
-    <!-- CSS Style ng Modal -->
-    <style>
-    .modal {
-        display: none;
-        position: fixed;
-        top: 0; left: 0;
-        width: 100%; height: 100%;
-        background-color: rgba(0,0,0,0.5);
-        z-index: 1000;
-    }
-    .modal-content {
-        background-color: #fff;
-        margin: 10% auto;
-        padding: 20px;
-        width: 320px;
-        border-radius: 8px;
-        text-align: center;
-    }
-    </style>
+    <div class="form-container">
+        <form action="" method="post" enctype="multipart/form-data" class="application-form" id="applicationForm">
+            
+            <?php if (!empty($message)): ?>
+                <div class="alert alert-danger" role="alert"><?= htmlspecialchars($message) ?></div>
+            <?php endif; ?>
 
-    <!-- JavaScript sa Labas ng Loop -->
-    <script>
-    function openModal(id, name, email) {
-        // I-set ang mga values sa loob ng modal bago ito buksan
-        document.getElementById("modal_applicant_id").value = id;
-        document.getElementById("modal_username").value = name;
-        document.getElementById("modal_email").value = email;
-        
-        document.getElementById("inputModal").style.display = "block";
-    }
+            <!-- STEP 1 : CONTACT INFORMATION -->
+            <div class="card" data-section="1">
+                <p class="section-title">Contact Information</p>
 
-    function closeModal() {
-        document.getElementById("inputModal").style.display = "none";
-    }
-    </script>
-    </body>
-    </html>
+                <!-- NAME FIELDS -->
+                <fieldset class="name">
+                    <legend>Name</legend>
+                    <div class="field-grid">
+                        <div class="field">
+                            <label for="lastName">Last Name</label>
+                            <input type="text" id="lastName" name="last_name" class="<?= (!empty($lastname_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['last_name'] ?? $_POST['lastname'] ?? '') ?>" required />
+                            <?php if (!empty($lastname_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($lastname_err) ?></div><?php endif; ?>
+                        </div>
+                        <div class="field">
+                            <label for="firstName">First Name</label>
+                            <input type="text" id="firstName" name="first_name" class="<?= (!empty($firstname_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['first_name'] ?? $_POST['firstname'] ?? '') ?>" required />
+                            <?php if (!empty($firstname_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($firstname_err) ?></div><?php endif; ?>
+                        </div>
+                        <div class="field">
+                            <label for="middleName">Middle Name</label>
+                            <input type="text" id="middleName" name="middle_name" class="<?= (!empty($middlename_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['middle_name'] ?? $_POST['middlename'] ?? '') ?>" required />
+                            <?php if (!empty($middlename_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($middlename_err) ?></div><?php endif; ?>
+                        </div>
+                    </div>
+                </fieldset>
+
+                <!-- CONTACT FIELDS -->
+                <fieldset class="contacts">
+                    <legend>Contacts</legend>
+                    <div class="field-grid">
+                        <div class="field">
+                            <label for="phoneNumber">Phone Number</label>
+                            <input type="tel" id="phoneNumber" name="phone_number" class="<?= (!empty($contact_number_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['phone_number'] ?? $_POST['contact_number'] ?? '') ?>" inputmode="numeric" maxlength="11" placeholder="+63 9xx xxx xxxx" required />
+                            <?php if (!empty($contact_number_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($contact_number_err) ?></div><?php endif; ?>
+                        </div>
+                        <div class="field">
+                            <label for="emailAddress">Email</label>
+                            <input type="email" id="emailAddress" name="email_address" class="<?= (!empty($email_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['email_address'] ?? $_POST['email'] ?? '') ?>" placeholder="Enter your Email" required />
+                            <?php if (!empty($email_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($email_err) ?></div><?php endif; ?>
+                        </div>
+                        <div class="field">
+                            <label for="facebookUrl">Facebook Link</label>
+                            <input type="url" id="facebookUrl" name="facebook_url" value="<?= htmlspecialchars($_POST['facebook_url'] ?? '') ?>" placeholder="https://facebook.com/username" required />
+                        </div>
+                    </div>
+                </fieldset>
+
+                <!-- ADDRESS FIELDS -->
+                <fieldset class="address">
+                    <legend>Address</legend>
+                    <div class="field-grid">
+                        <div class="field">
+                            <label for="addressRegion">Region</label>
+                            <select id="addressRegion" name="address_region" required>
+                                <option value="">Select Region</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="addressProvince">Province</label>
+                            <select id="addressProvince" name="address_province" required disabled>
+                                <option value="">Select Province</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="addressCity">City / Municipality</label>
+                            <select id="addressCity" name="address_city" class="<?= (!empty($city_err)) ? 'is-invalid' : '' ?>" required disabled>
+                                <option value="">Select City/Municipality</option>
+                            </select>
+                            <?php if (!empty($city_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($city_err) ?></div><?php endif; ?>
+                        </div>
+                        <div class="field">
+                            <label for="addressBarangay">Barangay</label>
+                            <select id="addressBarangay" name="address_barangay" class="<?= (!empty($barangay_err)) ? 'is-invalid' : '' ?>" required disabled>
+                                <option value="">Select Barangay</option>
+                            </select>
+                            <?php if (!empty($barangay_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($barangay_err) ?></div><?php endif; ?>
+                        </div>
+                        <div class="field">
+                            <label for="addressStreet">Street</label>
+                            <input type="text" id="addressStreet" name="address_street" class="<?= (!empty($street_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['address_street'] ?? $_POST['street'] ?? '') ?>" placeholder="Street" required />
+                            <?php if (!empty($street_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($street_err) ?></div><?php endif; ?>
+                        </div>
+                        <div class="field">
+                            <label for="addressHouseNumber">House Number</label>
+                            <input type="text" id="addressHouseNumber" name="address_house_number" class="<?= (!empty($house_number_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['address_house_number'] ?? $_POST['house_number'] ?? '') ?>" placeholder="House Number" required />
+                            <?php if (!empty($house_number_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($house_number_err) ?></div><?php endif; ?>
+                        </div>
+                    </div>
+                    <div class="api-error" id="apiError">Could not load location data. Please check your internet connection.</div>
+                </fieldset>
+            </div>
+
+            <!-- STEP 2 : JOB HISTORY -->
+            <div class="card" data-section="2">
+                <p class="section-title">Recent Work</p>
+
+                <fieldset class="position-information">
+                    <legend>Position Information</legend>
+                    <div class="field single-field">
+                        <label for="positionApplying">Position Applied</label>
+                        <select id="positionApplying" name="position_applying" class="form-select">
+                            <?php $selectedPos = $_POST['position_applying'] ?? $_POST['position_applied'] ?? ''; ?>
+                            <option value="HR" <?= ($selectedPos === 'HR') ? 'selected' : '' ?>>HR</option>
+                            <option value="Payroll" <?= ($selectedPos === 'Payroll') ? 'selected' : '' ?>>Payroll</option>
+                            <option value="Supervisor" <?= ($selectedPos === 'Supervisor') ? 'selected' : '' ?>>Supervisor</option>
+                            <option value="Logistics" <?= ($selectedPos === 'Logistics') ? 'selected' : '' ?>>Logistics</option>
+                            <option value="Driver" <?= ($selectedPos === 'Driver') ? 'selected' : '' ?>>Driver</option>
+                            <option value="Production" <?= ($selectedPos === 'Production') ? 'selected' : '' ?>>Production</option>
+                        </select>
+                    </div>
+                </fieldset>
+
+                <fieldset class="work-experience">
+                    <legend>Work Experience</legend>
+                    <div class="field-grid">
+                        <div class="field">
+                            <label for="workCompany">Previous Company Name</label>
+                            <input type="text" id="workCompany" name="work_company" class="<?= (!empty($company_name_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['work_company'] ?? $_POST['company_name'] ?? '') ?>" placeholder="Enter Company Name" required />
+                            <?php if (!empty($company_name_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($company_name_err) ?></div><?php endif; ?>
+                        </div>
+                        <div class="field">
+                            <label for="workPosition">Previous Position</label>
+                            <input type="text" id="workPosition" name="work_position" class="<?= (!empty($position_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['work_position'] ?? $_POST['position'] ?? '') ?>" placeholder="Enter Position" required />
+                            <?php if (!empty($position_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($position_err) ?></div><?php endif; ?>
+                        </div>
+                        <div class="field">
+                            <label for="workStartDate">Date Of Start (Previous Work)</label>
+                            <input type="date" id="workStartDate" name="work_start_date" value="<?= htmlspecialchars($_POST['work_start_date'] ?? $_POST['date_of_start'] ?? '') ?>" required />
+                        </div>
+                        <div class="field">
+                            <label for="workEndDate">Date Of End</label>
+                            <input type="date" id="workEndDate" name="work_end_date" value="<?= htmlspecialchars($_POST['work_end_date'] ?? $_POST['date_of_end'] ?? '') ?>" />
+                        </div>
+                    </div>
+                </fieldset>
+            </div>
+
+            <!-- STEP 3 : EDUCATIONAL BACKGROUND -->
+            <div class="card" data-section="3">
+                <p class="section-title">Educational Background</p>
+
+                <fieldset class="education">
+                    <legend>Educational Background</legend>
+                    <div class="field mb-3">
+                        <label for="schoolName">School Name</label>
+                        <input type="text" id="schoolName" name="school_name" value="<?= htmlspecialchars($_POST['school_name'] ?? '') ?>" required />
+                    </div>
+                    <div class="field single-field">
+                        <label for="educationLevel">Highest Education Attained</label>
+                        <select id="educationLevel" name="education_level" required>
+                            <?php $selectedEdu = $_POST['education_level'] ?? $_POST['education'] ?? ''; ?>
+                            <option value="" disabled <?= empty($selectedEdu) ? 'selected' : '' ?>>Select education level</option>
+                            <option value="highschool_grad" <?= ($selectedEdu === 'highschool_grad') ? 'selected' : '' ?>>High School Graduate</option>
+                            <option value="seniorhigh_under" <?= ($selectedEdu === 'seniorhigh_under') ? 'selected' : '' ?>>Senior High Undergraduate</option>
+                            <option value="seniorhigh_grad" <?= ($selectedEdu === 'seniorhigh_grad') ? 'selected' : '' ?>>Senior High Graduate</option>
+                            <option value="college_under" <?= ($selectedEdu === 'college_under') ? 'selected' : '' ?>>College Undergraduate</option>
+                            <option value="college_grad" <?= ($selectedEdu === 'college_grad') ? 'selected' : '' ?>>College Graduate</option>
+                            <option value="vocational" <?= ($selectedEdu === 'vocational') ? 'selected' : '' ?>>Vocational</option>
+                            <option value="n/a" <?= ($selectedEdu === 'n/a') ? 'selected' : '' ?>>Not Applicable</option>
+                        </select>
+                    </div>
+                </fieldset>
+            </div>
+
+            <!-- STEP 4 : AVAILABILITY -->
+            <div class="card" data-section="4">
+                <p class="section-title">Availability</p>
+
+                <div class="field single-field mb-3">
+                    <label for="availabilityDate">When are you available to start</label>
+                    <input type="date" id="availabilityDate" name="availability_start_date" class="<?= (!empty($start_date_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['availability_start_date'] ?? $_POST['start_date'] ?? '') ?>" required />
+                    <?php if (!empty($start_date_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($start_date_err) ?></div><?php endif; ?>
+                </div>
+
+                <div class="field resume-field mb-3">
+                    <label for="resumeFile">Resume / CV</label>
+                    <div class="resume-upload">
+                        <input type="file" id="resumeFile" name="resume_file" class="<?= (!empty($resume_err)) ? 'is-invalid' : '' ?>" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" required />
+                        <p class="hint small text-muted">Attach your resume (PDF, Word, or Image, max ~10MB).</p>
+                        <p class="file-name" id="resumeFileName"></p>
+                        <?php if (!empty($resume_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($resume_err) ?></div><?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
+            <div class="submit-row">
+                <button type="submit" class="submit-btn btn_font" id="submitBtn" name="submit">Submit Application</button>
+                <p class="submit-status" id="submitStatus"></p>
+            </div>
+
+        </form>
+    </div>
+
+    <script src="./js/applicants.js"></script>
+</body>
+</html>
