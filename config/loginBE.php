@@ -84,7 +84,7 @@ if (isset($_POST['Submit'])) {
                             $redirect_url = 'employee.php';
                             break;
                     }
-
+// pasa
                     if ($is_ajax_login) {
                         header('Content-Type: application/json; charset=utf-8');
                         echo json_encode([
