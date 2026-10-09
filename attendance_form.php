@@ -1,24 +1,3 @@
-<?php
-session_start();
-date_default_timezone_set('Asia/Manila');
-include 'config/connection.php';
-
-// Fetch users with employee details
-$query = "
-    SELECT 
-        u.id AS user_id,
-        u.name AS user_name,
-        u.role AS user_role,
-        e.employee_id,
-        e.position
-    FROM users u
-    LEFT JOIN employee e ON (u.id = e.employee_id OR u.name = e.username)
-    ORDER BY u.name ASC
-";
-
-$employees = $conn->query($query);
-?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -30,9 +9,10 @@ $employees = $conn->query($query);
         #digital-clock { font-size: 32px; font-weight: bold; color: #2c3e50; margin: 15px 0; background: #eef2f7; padding: 10px; border-radius: 6px; }
         .form-group { margin-bottom: 15px; text-align: left; }
         label { font-weight: bold; display: block; margin-bottom: 5px; }
-        select { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; }
-        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
+        input { width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; }
+        .btn-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 15px; }
         button { padding: 12px; border: none; border-radius: 6px; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button:disabled { cursor: not-allowed; opacity: 0.55; }
         .btn-in { background-color: #28a745; }
         .btn-out { background-color: #dc3545; }
         .btn-in2 { background-color: #17a2b8; }
@@ -51,29 +31,13 @@ $employees = $conn->query($query);
     <div id="current-date" style="color: #666; font-size: 14px; margin-bottom: 20px;"></div>
 
     <div class="form-group">
-        <label for="employee_id">Choose Employee / System Account:</label>
-        <select name="employee_id" id="employee_id" class="form-control">
-            <option value="">-- Select Employee --</option>
-            <?php
-            // Isinama ang 'position' sa SELECT query
-            $empList = mysqli_query($conn, "SELECT employee_id, username, position FROM employee ORDER BY username ASC");
-            if ($empList && mysqli_num_rows($empList) > 0) {
-                while ($emp = mysqli_fetch_assoc($empList)) {
-                    $posText = !empty($emp['position']) ? $emp['position'] : 'No Position';
-                    echo "<option value='" . htmlspecialchars($emp['employee_id']) . "' data-position='" . htmlspecialchars($posText) . "'>";
-                    echo htmlspecialchars($emp['username']) . " (" . htmlspecialchars($posText) . " - ID: " . htmlspecialchars($emp['employee_id']) . ")";
-                    echo "</option>";
-                }
-            }
-            ?>
-        </select>
+        <label for="employee_id">Employee ID:</label>
+        <input type="text" name="employee_id" id="employee_id" inputmode="numeric" pattern="[0-9]+" autocomplete="off" placeholder="Enter Employee ID" required>
+        <div id="employee-name" aria-live="polite" style="margin-top: 8px; min-height: 18px; color: #666;"></div>
     </div>
 
     <div class="btn-grid">
-        <button class="btn-in" onclick="recordAttendance('time_in')">Time In 1</button>
-        <button class="btn-out" onclick="recordAttendance('time_out')">Time Out 1</button>
-        <button class="btn-in2" onclick="recordAttendance('time_in_2')">Time In 2</button>
-        <button class="btn-out2" onclick="recordAttendance('time_out_2')">Time Out 2</button>
+        <button type="button" id="submit-attendance" class="btn-in" onclick="recordAttendance()" disabled>Submit</button>
     </div>
 
     <div id="alert-msg"></div>
@@ -82,6 +46,89 @@ $employees = $conn->query($query);
 <a href="index.php" class="btn-back">&larr; BACK TO INDEX</a>
 
 <script>
+    const employeeIdInput = document.getElementById('employee_id');
+    const employeeName = document.getElementById('employee-name');
+    const alertMsg = document.getElementById('alert-msg');
+    const submitButton = document.getElementById('submit-attendance');
+    const actionLabels = {
+        time_in: 'Time In 1',
+        time_out: 'Time Out 1',
+        time_in_2: 'Time In 2',
+        time_out_2: 'Time Out 2'
+    };
+    let lookupTimer;
+    let lookupRequest = 0;
+    let resolvedEmployeeId = '';
+    let currentEmployeeName = '';
+    let nextAction = null;
+
+    function renderNextAction(action) {
+        nextAction = action;
+        if (action && actionLabels[action]) {
+            submitButton.innerText = 'Submit';
+            submitButton.disabled = false;
+            employeeName.innerText = `Name: ${currentEmployeeName} | Next: ${actionLabels[action]}`;
+        } else {
+            submitButton.innerText = 'Submit';
+            submitButton.disabled = true;
+            employeeName.innerText = `Name: ${currentEmployeeName} | Attendance is complete for today.`;
+        }
+    }
+
+    employeeIdInput.addEventListener('input', () => {
+        clearTimeout(lookupTimer);
+        lookupRequest++;
+        resolvedEmployeeId = '';
+        currentEmployeeName = '';
+        nextAction = null;
+        submitButton.innerText = 'Submit';
+        submitButton.disabled = true;
+        employeeName.innerText = '';
+        alertMsg.innerText = '';
+
+        const employeeId = employeeIdInput.value.trim();
+        if (!/^[0-9]+$/.test(employeeId) || Number(employeeId) < 1) {
+            employeeName.innerText = employeeId ? 'Enter a valid Employee ID.' : '';
+            return;
+        }
+
+        employeeName.innerText = 'Looking up employee...';
+        lookupTimer = setTimeout(() => lookupEmployee(employeeId), 300);
+    });
+
+    async function lookupEmployee(employeeId) {
+        const requestId = ++lookupRequest;
+        const formData = new FormData();
+        formData.append('employee_id', employeeId);
+        formData.append('action_type', 'lookup');
+
+        try {
+            const response = await fetch('config/attendance_API.php', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+
+            if (requestId !== lookupRequest || employeeIdInput.value.trim() !== employeeId) {
+                return;
+            }
+
+            if (data.status === 'success') {
+                resolvedEmployeeId = employeeId;
+                currentEmployeeName = data.employee_name;
+                renderNextAction(data.next_action);
+            } else {
+                employeeName.innerText = data.message;
+            }
+        } catch (error) {
+            if (requestId !== lookupRequest) {
+                return;
+            }
+            console.error(error);
+            employeeName.innerText = 'Could not retrieve the employee name. Please try again.';
+        }
+    }
+
     function updateClock() {
         const now = new Date();
         document.getElementById('digital-clock').innerText = now.toLocaleTimeString('en-US');
@@ -90,53 +137,49 @@ $employees = $conn->query($query);
     setInterval(updateClock, 1000);
     updateClock();
 
-    function recordAttendance(actionType) {
-        const selectElement = document.getElementById('employee_id');
-        const employeeId = selectElement.value;
-        const alertMsg = document.getElementById('alert-msg');
-
-        if (!employeeId) {
+    async function recordAttendance() {
+        const employeeId = employeeIdInput.value.trim();
+        if (!employeeId || employeeId !== resolvedEmployeeId || !nextAction) {
             alertMsg.style.color = "red";
-            alertMsg.innerText = "Please choose an employee!";
+            alertMsg.innerText = "Enter and verify an Employee ID, or this employee's attendance is already complete.";
             return;
         }
 
-        // Kunin ang position mula sa napiling option
-        const selectedOption = selectElement.options[selectElement.selectedIndex];
-        const position = selectedOption.getAttribute('data-position') || '';
-
         const formData = new FormData();
         formData.append('employee_id', employeeId);
-        formData.append('action_type', actionType);
-        formData.append('position', position); // Isinama ang position sa request
+        formData.append('action_type', 'submit');
+        submitButton.disabled = true;
 
-        fetch('config/attendance_API.php', {
-            method: 'POST',
-            body: formData
-        })
-        .then(async response => {
-            const text = await response.text();
-            try {
-                return JSON.parse(text);
-            } catch (err) {
-                console.error("Server Raw Response Error:", text);
-                throw new Error("Invalid JSON response from server");
+        try {
+            const response = await fetch('config/attendance_API.php', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+            if (employeeIdInput.value.trim() !== employeeId) {
+                return;
             }
-        })
-        .then(data => {
+
             if (data.status === 'success') {
                 alertMsg.style.color = "green";
                 alertMsg.innerText = data.message;
+                renderNextAction(data.next_action);
             } else {
                 alertMsg.style.color = "red";
                 alertMsg.innerText = data.message;
+                if (data.next_action !== undefined) {
+                    renderNextAction(data.next_action);
+                }
             }
-        })
-        .catch(error => {
+        } catch (error) {
             console.error(error);
             alertMsg.style.color = "red";
-            alertMsg.innerText = "System Error! (Check Browser Console F12)";
-        });
+            alertMsg.innerText = "System error. Please check the browser console or try again.";
+        } finally {
+            if (employeeIdInput.value.trim() === employeeId && resolvedEmployeeId === employeeId && nextAction) {
+                submitButton.disabled = false;
+            }
+        }
     }
 </script>
 

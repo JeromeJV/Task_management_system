@@ -1,6 +1,8 @@
 <?php
 header('Content-Type: application/json');
 require_once __DIR__ . '/connection.php';
+require_once __DIR__ . '/attendance_helpers.php';
+require_once __DIR__ . '/payroll_helpers.php';
 
 session_start();
 
@@ -22,76 +24,99 @@ $action = $_REQUEST['action'] ?? ($method === 'GET' ? 'get_all' : '');
 // =================================================================
 if ($method === 'GET') {
     
+    if ($action === 'get_available_employees') {
+        $pay_period = $_GET['pay_period'] ?? 'Kinsenas';
+        $pay_date = $_GET['pay_date'] ?? date('Y-m-d');
+
+        try {
+            getPayrollPeriodDates($pay_period, $pay_date);
+            $monthStart = substr($pay_date, 0, 7) . '-01';
+            $monthEnd = (new DateTimeImmutable($pay_date))->modify('last day of this month')->format('Y-m-d');
+        } catch (Throwable $error) {
+            http_response_code(400);
+            echo json_encode([
+                'status' => 'error',
+                'message' => $error->getMessage()
+            ]);
+            exit();
+        }
+
+        $statement = $conn->prepare("
+            SELECT e.employee_id, e.username
+            FROM employee e
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM payroll p
+                WHERE p.employee_id = e.employee_id
+                  AND p.pay_period = ?
+                  AND p.pay_date BETWEEN ? AND ?
+            )
+            ORDER BY e.username ASC
+        ");
+        if (!$statement) {
+            http_response_code(500);
+            echo json_encode([
+                'status' => 'error',
+                'message' => 'Failed to prepare employee eligibility query: ' . $conn->error
+            ]);
+            exit();
+        }
+
+        $statement->bind_param('sss', $pay_period, $monthStart, $monthEnd);
+        if (!$statement->execute()) {
+            $error = $statement->error;
+            $statement->close();
+            http_response_code(500);
+            echo json_encode([
+                'status' => 'error',
+                'message' => 'Failed to read eligible employees: ' . $error
+            ]);
+            exit();
+        }
+
+        $employees = [];
+        $result = $statement->get_result();
+        while ($employee = $result->fetch_assoc()) {
+            $employees[] = [
+                'employee_id' => (int) $employee['employee_id'],
+                'username' => $employee['username'],
+                'daily_rate' => 755
+            ];
+        }
+        $statement->close();
+
+        echo json_encode([
+            'status' => 'success',
+            'employees' => $employees
+        ]);
+        exit();
+    }
+
     // ACTION: GET ATTENDANCE DAYS WORKED FOR A PAY PERIOD
     if ($action === 'get_attendance') {
+        date_default_timezone_set('Asia/Manila');
+        finalizeDailyAttendance($conn, date('Y-m-d'), date('H:i:s'));
+
         $employee_id = intval($_GET['employee_id'] ?? 0);
         $pay_period = $_GET['pay_period'] ?? '1st Half';
         $pay_date = $_GET['pay_date'] ?? date('Y-m-d');
-        
-        // I-parse ang Pay Date para makuha ang Target Month at Year
-        $timestamp = strtotime($pay_date);
-        if (!$timestamp) {
-            // Support para sa MM/DD/YYYY format mula sa HTML date input
-            $parts = explode('/', $pay_date);
-            if (count($parts) === 3) {
-                $timestamp = strtotime("{$parts[2]}-{$parts[0]}-{$parts[1]}");
-            }
-        }
-        
-        $target_year = $timestamp ? date('Y', $timestamp) : date('Y');
-        $target_month = $timestamp ? date('m', $timestamp) : date('m');
+        $daily_rate = max(0, floatval($_GET['daily_rate'] ?? 755));
 
-        // Pagtukoy sa Day Range (1st Half vs 2nd Half)
-        if (strpos($pay_period, '1st') !== false || strpos($pay_period, 'Kinsenas') !== false) {
-            $start_day = 1;
-            $end_day = 15;
-        } else {
-            $start_day = 16;
-            $end_day = 31;
-        }
-
-        /*
-         * Correct Column: attendance_date
-         * Hina-handle pareho ang YYYY-MM-DD at 'Oct 01, 2026' string formats
-         */
-        $query = $conn->prepare("
-            SELECT COUNT(DISTINCT 
-                CASE 
-                    WHEN attendance_date LIKE '%-%' THEN attendance_date
-                    ELSE STR_TO_DATE(attendance_date, '%b %d, %Y')
-                END
-            ) as days_worked 
-            FROM attendance 
-            WHERE (employee_id = ? OR user_id = ?)
-              AND LOWER(status) = 'present' 
-              AND (
-                  DAY(CASE WHEN attendance_date LIKE '%-%' THEN attendance_date ELSE STR_TO_DATE(attendance_date, '%b %d, %Y') END) BETWEEN ? AND ?
-              )
-              AND MONTH(CASE WHEN attendance_date LIKE '%-%' THEN attendance_date ELSE STR_TO_DATE(attendance_date, '%b %d, %Y') END) = ?
-              AND YEAR(CASE WHEN attendance_date LIKE '%-%' THEN attendance_date ELSE STR_TO_DATE(attendance_date, '%b %d, %Y') END) = ?
-        ");
-
-        if ($query) {
-            $query->bind_param("iiiiii", $employee_id, $employee_id, $start_day, $end_day, $target_month, $target_year);
-            $query->execute();
-            $res = $query->get_result()->fetch_assoc();
-            
+        try {
+            [$startDate, $endDate] = getPayrollPeriodDates($pay_period, $pay_date);
+            $summary = getPayrollAttendanceSummary($conn, $employee_id, $startDate, $endDate, $daily_rate);
             echo json_encode([
                 'status' => 'success',
-                'days_worked' => intval($res['days_worked'] ?? 0),
-                'debug' => [
-                    'employee_id' => $employee_id,
-                    'month' => $target_month,
-                    'year' => $target_year,
-                    'start_day' => $start_day,
-                    'end_day' => $end_day
-                ]
+                'days_worked' => $summary['days_worked'],
+                'late_minutes' => $summary['late_minutes'],
+                'late_deduction' => $summary['late_deduction'],
+                'excessive_late_days' => $summary['excessive_late_days']
             ]);
-        } else {
+        } catch (Throwable $error) {
+            http_response_code(400);
             echo json_encode([
                 'status' => 'error',
-                'days_worked' => 0, 
-                'error' => $conn->error
+                'message' => $error->getMessage()
             ]);
         }
         exit();
@@ -160,16 +185,70 @@ if ($method === 'POST' && $action === 'create_payroll') {
     $attendance_id = !empty($_POST['attendance_id']) ? intval($_POST['attendance_id']) : NULL;
     $pay_period    = $_POST['pay_period'] ?? 'Kinsenas';
     $pay_date      = $_POST['pay_date'] ?? date('Y-m-d');
-    $status        = $_POST['status'] ?? 'Pending';
+    $status        = 'Pending';
+    $daily_rate    = max(0, floatval($_POST['daily_rate'] ?? 755));
+
+    try {
+        [$startDate, $endDate] = getPayrollPeriodDates($pay_period, $pay_date);
+        $attendanceSummary = getPayrollAttendanceSummary($conn, $employee_id, $startDate, $endDate, $daily_rate);
+        $monthStart = substr($pay_date, 0, 7) . '-01';
+        $monthEnd = (new DateTimeImmutable($pay_date))->modify('last day of this month')->format('Y-m-d');
+    } catch (Throwable $error) {
+        http_response_code(400);
+        echo json_encode([
+            'status' => 'error',
+            'message' => $error->getMessage()
+        ]);
+        exit();
+    }
+
+    $paidPayrollCheck = $conn->prepare("
+        SELECT payroll_id
+        FROM payroll
+        WHERE employee_id = ?
+          AND pay_period = ?
+          AND pay_date BETWEEN ? AND ?
+        LIMIT 1
+    ");
+    if (!$paidPayrollCheck) {
+        http_response_code(500);
+        echo json_encode([
+            'status' => 'error',
+            'message' => 'Failed to prepare duplicate payroll check: ' . $conn->error
+        ]);
+        exit();
+    }
+
+    $paidPayrollCheck->bind_param('isss', $employee_id, $pay_period, $monthStart, $monthEnd);
+    if (!$paidPayrollCheck->execute()) {
+        $error = $paidPayrollCheck->error;
+        $paidPayrollCheck->close();
+        http_response_code(500);
+        echo json_encode([
+            'status' => 'error',
+            'message' => 'Failed to check existing paid payroll: ' . $error
+        ]);
+        exit();
+    }
+    $hasPaidPayroll = $paidPayrollCheck->get_result()->num_rows > 0;
+    $paidPayrollCheck->close();
+    if ($hasPaidPayroll) {
+        http_response_code(409);
+        echo json_encode([
+            'status' => 'error',
+            'message' => 'A payroll record already exists for this employee and pay period. Update its status from the payroll list instead of creating a duplicate.'
+        ]);
+        exit();
+    }
 
     // Earnings
-    $regular_pay     = floatval($_POST['regular_pay'] ?? 0.00);
+    $regular_pay     = round($attendanceSummary['days_worked'] * $daily_rate, 2);
     $paid_leaves     = floatval($_POST['paid_leaves'] ?? 0.00);
     $daily_allowance = floatval($_POST['daily_allowance'] ?? 0.00);
     $reimbursement   = floatval($_POST['reimbursement'] ?? 0.00);
 
     // Deductions
-    $late_deduction = floatval($_POST['late_deduction'] ?? 0.00);
+    $late_deduction = $attendanceSummary['late_deduction'];
     $sss            = floatval($_POST['sss'] ?? 0.00);
     $pagibig        = floatval($_POST['pagibig'] ?? 0.00);
     $philhealth     = floatval($_POST['philhealth'] ?? 0.00);
@@ -214,23 +293,35 @@ if ($method === 'POST' && $action === 'create_payroll') {
 // =================================================================
 // 3. TOGGLE PAYROLL STATUS
 // =================================================================
-if ($method === 'POST' && $action === 'toggle_status') {
+if ($method === 'POST' && $action === 'mark_paid') {
     $payroll_id = intval($_POST['payroll_id'] ?? 0);
-    $status     = $_POST['status'] ?? 'Pending';
 
-    $stmt = $conn->prepare("UPDATE payroll SET status = ? WHERE payroll_id = ?");
-    $stmt->bind_param("si", $status, $payroll_id);
-
-    if ($stmt->execute()) {
-        echo json_encode([
-            'status' => 'success',
-            'message' => 'Status updated successfully.'
-        ]);
-    } else {
+    $stmt = $conn->prepare("
+        UPDATE payroll
+        SET status = 'Paid', paid_at = CURRENT_TIMESTAMP
+        WHERE payroll_id = ? AND status = 'Pending'
+    ");
+    if (!$stmt) {
         http_response_code(500);
         echo json_encode([
             'status' => 'error',
-            'message' => 'Failed to update status: ' . $stmt->error
+            'message' => 'Failed to prepare payment status update: ' . $conn->error
+        ]);
+        exit();
+    }
+    $stmt->bind_param("i", $payroll_id);
+
+    if ($stmt->execute() && $stmt->affected_rows === 1) {
+        echo json_encode([
+            'status' => 'success',
+            'message' => 'Payroll marked as paid.'
+        ]);
+    } else {
+        $error = $stmt->error;
+        http_response_code($error !== '' ? 500 : 409);
+        echo json_encode([
+            'status' => 'error',
+            'message' => $error !== '' ? 'Failed to update payment status: ' . $error : 'Payroll was not pending or could not be found.'
         ]);
     }
     exit();

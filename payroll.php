@@ -23,8 +23,74 @@ $total_pending_pay = $pending_data['total'] ?? 0;
 
 $total_budget = $total_disbursed + $total_pending_pay;
 
-// Fetch Employees List for Modal Dropdown
-$employees_list = $conn->query("SELECT * FROM employee ORDER BY username ASC");
+$chartMonth = $_GET['chart_month'] ?? date('Y-m');
+$chartMonthDate = DateTimeImmutable::createFromFormat('!Y-m', $chartMonth);
+$chartMonthErrors = DateTimeImmutable::getLastErrors();
+if (
+    !$chartMonthDate
+    || $chartMonthDate->format('Y-m') !== $chartMonth
+    || ($chartMonthErrors !== false && ($chartMonthErrors['warning_count'] > 0 || $chartMonthErrors['error_count'] > 0))
+) {
+    http_response_code(400);
+    exit('Invalid chart month.');
+}
+$chartMonthStart = $chartMonthDate->format('Y-m-01');
+$chartMonthEnd = $chartMonthDate->modify('last day of this month')->format('Y-m-d');
+
+$monthly_status_counts = [
+    'Paid' => 0,
+    'Pending' => 0
+];
+$monthly_status_stmt = $conn->prepare("
+    SELECT status, COUNT(*) AS total
+    FROM payroll
+    WHERE pay_date BETWEEN ? AND ?
+    GROUP BY status
+");
+if (!$monthly_status_stmt) {
+    throw new RuntimeException('Failed to prepare monthly payroll status counts: ' . $conn->error);
+}
+$monthly_status_stmt->bind_param('ss', $chartMonthStart, $chartMonthEnd);
+if (!$monthly_status_stmt->execute()) {
+    $error = $monthly_status_stmt->error;
+    $monthly_status_stmt->close();
+    throw new RuntimeException('Failed to load monthly payroll status counts: ' . $error);
+}
+$monthly_status_res = $monthly_status_stmt->get_result();
+while ($monthly_status = $monthly_status_res->fetch_assoc()) {
+    if (isset($monthly_status_counts[$monthly_status['status']])) {
+        $monthly_status_counts[$monthly_status['status']] = (int) $monthly_status['total'];
+    }
+}
+$monthly_status_stmt->close();
+
+$period_payroll_totals = [
+    'Kinsenas' => 0.0,
+    'Katapusan' => 0.0
+];
+$period_payroll_stmt = $conn->prepare("
+    SELECT pay_period, SUM(gross_pay) AS total
+    FROM payroll
+    WHERE pay_date BETWEEN ? AND ?
+    GROUP BY pay_period
+");
+if (!$period_payroll_stmt) {
+    throw new RuntimeException('Failed to prepare monthly payroll totals: ' . $conn->error);
+}
+$period_payroll_stmt->bind_param('ss', $chartMonthStart, $chartMonthEnd);
+if (!$period_payroll_stmt->execute()) {
+    $error = $period_payroll_stmt->error;
+    $period_payroll_stmt->close();
+    throw new RuntimeException('Failed to load monthly payroll totals: ' . $error);
+}
+$period_payroll_res = $period_payroll_stmt->get_result();
+while ($period_payroll = $period_payroll_res->fetch_assoc()) {
+    if (isset($period_payroll_totals[$period_payroll['pay_period']])) {
+        $period_payroll_totals[$period_payroll['pay_period']] = (float) $period_payroll['total'];
+    }
+}
+$period_payroll_stmt->close();
+$monthly_salary_expense = array_sum($period_payroll_totals);
 
 // Fetch Payroll Records with Employee Details
 $payrolls = $conn->query("
@@ -426,7 +492,23 @@ while ($r = $payrolls->fetch_assoc()) {
             </div>
 
             <div class="lg:col-span-7 bg-white p-6 rounded-2xl border border-zinc-200 shadow-2xs space-y-4">
-              <h3 class="font-bold text-zinc-900 text-base border-b border-zinc-100 pb-3">Payroll Financial Breakdown</h3>
+              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-zinc-100 pb-3">
+                <div>
+                  <h3 class="font-bold text-zinc-900 text-base">Monthly Salary Expense</h3>
+                  <p class="text-[11px] text-zinc-500">Gross payroll before deductions</p>
+                </div>
+                <form method="GET" action="payroll.php" class="flex items-center gap-2">
+                  <label for="chart_month" class="text-xs font-semibold text-zinc-600">Month</label>
+                  <input
+                    type="month"
+                    id="chart_month"
+                    name="chart_month"
+                    value="<?php echo htmlspecialchars($chartMonth, ENT_QUOTES, 'UTF-8'); ?>"
+                    onchange="this.form.submit()"
+                    class="rounded-lg border border-zinc-200 px-2 py-1.5 text-xs"
+                  >
+                </form>
+              </div>
               <div class="relative flex items-center justify-center h-56">
                 <canvas id="chart-payroll-bar"></canvas>
               </div>
@@ -477,9 +559,17 @@ while ($r = $payrolls->fetch_assoc()) {
                     <td class="p-4 text-right font-mono text-red-500">-₱<?php echo number_format($row['total_deductions'], 2); ?></td>
                     <td class="p-4 text-right font-mono font-bold text-slate-800">₱<?php echo number_format($row['total_credited'], 2); ?></td>
                     <td class="p-4 text-center">
-                      <button onclick="toggleStatus(<?php echo $row['payroll_id']; ?>, '<?php echo $row['status']; ?>')" class="px-2.5 py-1 rounded-full text-[10px] font-bold transition <?php echo $row['status'] === 'Paid' ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'; ?>">
-                        <?php echo $row['status'] === 'Paid' ? '✓ Paid' : '⏳ Pending'; ?>
-                      </button>
+                      <?php if ($row['status'] === 'Paid'): ?>
+                        <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">✓ Paid</span>
+                        <p class="mt-1 text-[10px] text-zinc-500">
+                          <?php echo !empty($row['paid_at']) ? 'Paid on ' . htmlspecialchars(date('M j, Y', strtotime($row['paid_at']))) : 'Payment date not recorded'; ?>
+                        </p>
+                      <?php else: ?>
+                        <span class="block mb-1 text-[10px] font-bold text-amber-700">⏳ Pending</span>
+                        <button onclick="markPayrollPaid(<?php echo (int) $row['payroll_id']; ?>)" class="px-2.5 py-1 rounded-full text-[10px] font-bold transition bg-emerald-100 text-emerald-700 hover:bg-emerald-200">
+                          Mark as Paid
+                        </button>
+                      <?php endif; ?>
                     </td>
                     <td class="p-4 text-center">
                       <button onclick='printPayslip(<?php echo json_encode($row); ?>)' class="px-3 py-1.5 bg-zinc-100 hover:bg-emerald-700 hover:text-white text-zinc-700 rounded-lg font-bold transition text-[11px] inline-flex items-center gap-1.5">
@@ -505,22 +595,14 @@ while ($r = $payrolls->fetch_assoc()) {
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label class="block text-xs font-bold text-zinc-800 mb-1">Select Employee</label>
-                  <select name="employee_id" id="calc_employee_id" required onchange="onEmployeeSelect()" class="w-full px-3 py-2 border rounded-xl text-xs bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
-                    <option value="">-- Choose Employee --</option>
-                    <?php
-                    $employees_list->data_seek(0);
-                    while($emp = $employees_list->fetch_assoc()):
-                    ?>
-                    <option value="<?php echo $emp['employee_id']; ?>" data-rate="<?php echo $emp['daily_rate'] ?? 750; ?>">
-                        <?php echo htmlspecialchars($emp['username']); ?> (#<?php echo $emp['employee_id']; ?>)
-                    </option>
-                    <?php endwhile; ?>
+                  <select name="employee_id" id="calc_employee_id" required onchange="onEmployeeSelect()" disabled class="w-full px-3 py-2 border rounded-xl text-xs bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                    <option value="">Loading eligible employees...</option>
                   </select>
                 </div>
 
                 <div>
                   <label class="block text-xs font-bold text-zinc-800 mb-1">Pay Period</label>
-                  <select name="pay_period" id="calc_pay_period" onchange="fetchEmployeeAttendance()" class="w-full px-3 py-2 border rounded-xl text-xs bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                  <select name="pay_period" id="calc_pay_period" onchange="refreshEligibleEmployees()" class="w-full px-3 py-2 border rounded-xl text-xs bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
                     <option value="Kinsenas">1st Half (1st - 15th)</option>
                     <option value="Katapusan">2nd Half (16th - 31st)</option>
                   </select>
@@ -530,7 +612,7 @@ while ($r = $payrolls->fetch_assoc()) {
               <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label class="block text-xs font-bold text-zinc-800 mb-1">Daily Rate (₱)</label>
-                  <input type="number" step="0.01" id="daily_rate" name="daily_rate" value="750.00" oninput="calculateRegularPay()" class="w-full px-3 py-2 border rounded-xl text-xs bg-white outline-none font-mono">
+                  <input type="number" step="0.01" id="daily_rate" name="daily_rate" value="755.00" oninput="calculateRegularPay()" class="w-full px-3 py-2 border rounded-xl text-xs bg-white outline-none font-mono">
                 </div>
                 <div>
                   <label class="block text-xs font-bold text-zinc-800 mb-1">Days Worked</label>
@@ -562,7 +644,9 @@ while ($r = $payrolls->fetch_assoc()) {
               <div class="grid grid-cols-3 gap-3">
                 <div>
                   <label class="block text-[11px] text-zinc-600">Late Deduction (₱)</label>
-                  <input type="number" step="0.01" name="late_deduction" placeholder="000.00" class="w-full px-2.5 py-1.5 border rounded-lg text-xs font-mono">
+                  <input type="number" step="0.01" id="late_deduction" name="late_deduction" value="0.00" readonly class="w-full px-2.5 py-1.5 border rounded-lg text-xs font-mono bg-zinc-100">
+                  <p id="attendance-calculation-message" class="mt-1 text-[10px] text-zinc-500" aria-live="polite">Deduction starts after 8:01 AM and uses completed late minutes through 12:00 PM × daily rate ÷ 8 ÷ 60.</p>
+                  <p id="attendance-validation-warning" class="mt-2 hidden rounded-lg border border-amber-300 bg-amber-50 p-2 text-[11px] font-semibold text-amber-800" role="alert"></p>
                 </div>
                 <div>
                   <label class="block text-[11px] text-zinc-600">SSS / Calamity Loan (₱)</label>
@@ -636,10 +720,6 @@ while ($r = $payrolls->fetch_assoc()) {
     const payrollLoadingStatus = document.getElementById('payrollLoadingStatus');
 
     payrollForm.addEventListener('submit', function (event) {
-      if (payrollForm.dataset.readyToSubmit === 'true') {
-        return;
-      }
-
       event.preventDefault();
       if (payrollForm.dataset.submitting === 'true') {
         return;
@@ -662,14 +742,71 @@ while ($r = $payrolls->fetch_assoc()) {
       }, 2000);
 
       window.setTimeout(function () {
-        payrollForm.dataset.readyToSubmit = 'true';
-        if (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement) {
-          payrollForm.requestSubmit(submitter);
-          return;
-        }
-        payrollForm.requestSubmit();
+        sessionStorage.setItem('payrollTabAfterReload', 'employees');
+        HTMLFormElement.prototype.submit.call(payrollForm);
       }, 3500);
     });
+
+    let attendanceSummaryRequest = 0;
+    let excessiveLateDays = [];
+    let eligibleEmployeesRequest = 0;
+
+    async function refreshEligibleEmployees() {
+      const requestId = ++eligibleEmployeesRequest;
+      const employeeSelect = document.getElementById('calc_employee_id');
+      const selectedEmployeeId = employeeSelect.value;
+      const period = document.getElementById('calc_pay_period').value;
+      const payDate = document.querySelector('input[name="pay_date"]').value;
+      employeeSelect.disabled = true;
+      employeeSelect.innerHTML = '<option value="">Loading eligible employees...</option>';
+
+      try {
+        const params = new URLSearchParams({
+          action: 'get_available_employees',
+          pay_period: period,
+          pay_date: payDate
+        });
+        const response = await fetch(`config/Payroll_API.php?${params.toString()}`);
+        if (!response.ok) {
+          throw new Error(`Employee lookup failed (${response.status}).`);
+        }
+        const data = await response.json();
+        if (requestId !== eligibleEmployeesRequest) {
+          return;
+        }
+        if (data.status !== 'success') {
+          throw new Error(data.message || 'Could not load eligible employees.');
+        }
+
+        const employees = data.employees || [];
+        employeeSelect.replaceChildren(new Option(
+          employees.length ? '-- Choose Employee --' : 'No employees available for this pay period',
+          ''
+        ));
+        employees.forEach(employee => {
+          const option = new Option(
+            `${employee.username} (#${employee.employee_id})`,
+            employee.employee_id
+          );
+          option.dataset.rate = employee.daily_rate;
+          employeeSelect.add(option);
+        });
+        employeeSelect.disabled = employees.length === 0;
+
+        if (employees.some(employee => String(employee.employee_id) === selectedEmployeeId)) {
+          employeeSelect.value = selectedEmployeeId;
+        }
+        onEmployeeSelect();
+      } catch (error) {
+        if (requestId !== eligibleEmployeesRequest) {
+          return;
+        }
+        console.error(error);
+        employeeSelect.replaceChildren(new Option('Could not load employees. Please retry.', ''));
+        employeeSelect.disabled = true;
+        fetchEmployeeAttendance();
+      }
+    }
 
     function switchTab(tabName) {
       document.getElementById('view-dashboard').classList.add('hidden');
@@ -701,13 +838,27 @@ while ($r = $payrolls->fetch_assoc()) {
       });
     }
 
-    function toggleStatus(id, currentStatus) {
-      let newStatus = currentStatus === 'Paid' ? 'Pending' : 'Paid';
-      fetch('config/Payroll_API.php', {
+    async function markPayrollPaid(id) {
+      if (!window.confirm('Confirm that this payroll has actually been paid to the employee?')) {
+        return;
+      }
+
+      try {
+        const response = await fetch('config/Payroll_API.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `action=toggle_status&payroll_id=${id}&status=${newStatus}`
-      }).then(() => location.reload());
+          body: `action=mark_paid&payroll_id=${id}`
+        });
+        const data = await response.json();
+        if (!response.ok || data.status !== 'success') {
+          throw new Error(data.message || 'Could not mark payroll as paid.');
+        }
+        sessionStorage.setItem('payrollTabAfterReload', 'employees');
+        location.reload();
+      } catch (error) {
+        console.error(error);
+        window.alert(error.message || 'Could not mark payroll as paid.');
+      }
     }
 
     function calculateRegularPay() {
@@ -721,41 +872,93 @@ while ($r = $payrolls->fetch_assoc()) {
       let select = document.getElementById('calc_employee_id');
       let selectedOption = select.options[select.selectedIndex];
       if (selectedOption && selectedOption.dataset.rate) {
-        document.getElementById('daily_rate').value = parseFloat(selectedOption.dataset.rate || 750).toFixed(2);
+        document.getElementById('daily_rate').value = parseFloat(selectedOption.dataset.rate || 755).toFixed(2);
       } else {
-        document.getElementById('daily_rate').value = "750.00";
+        document.getElementById('daily_rate').value = "755.00";
       }
       fetchEmployeeAttendance();
     }
 
     function fetchEmployeeAttendance() {
+        const requestId = ++attendanceSummaryRequest;
+        excessiveLateDays = [];
+        renderAttendanceValidationWarning();
         let empId = document.getElementById('calc_employee_id').value;
         let period = document.getElementById('calc_pay_period').value;
         let payDate = document.querySelector('input[name="pay_date"]').value;
+        let dailyRate = document.getElementById('daily_rate').value;
+        let summaryMessage = document.getElementById('attendance-calculation-message');
                       
         if (!empId) {
             document.getElementById('days_worked').value = 0;
+            document.getElementById('late_deduction').value = '0.00';
+            summaryMessage.textContent = '';
+            excessiveLateDays = [];
+            renderAttendanceValidationWarning();
             calculateRegularPay();
             return;
         }
 
-        fetch(`config/Payroll_API.php?action=get_attendance&employee_id=${empId}&pay_period=${period}&pay_date=${payDate}`)
-            .then(res => res.json())
+        const params = new URLSearchParams({
+            action: 'get_attendance',
+            employee_id: empId,
+            pay_period: period,
+            pay_date: payDate,
+            daily_rate: dailyRate
+        });
+        fetch(`config/Payroll_API.php?${params.toString()}`)
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error(`Attendance lookup failed (${res.status}).`);
+                }
+                return res.json();
+            })
             .then(data => {
-            if (data && data.days_worked !== undefined) {
-                document.getElementById('days_worked').value = data.days_worked;
-            } else {
-                document.getElementById('days_worked').value = 0;
+            if (requestId !== attendanceSummaryRequest) {
+                return;
             }
+            if (data.status !== 'success') {
+                throw new Error(data.message || 'Could not calculate attendance payroll.');
+            }
+            document.getElementById('days_worked').value = data.days_worked;
+            document.getElementById('late_deduction').value = Number(data.late_deduction).toFixed(2);
+            summaryMessage.textContent = `${data.late_minutes} late minute(s) included in the deduction.`;
+            excessiveLateDays = data.excessive_late_days || [];
+            renderAttendanceValidationWarning();
             calculateRegularPay();
             })
-            .catch(() => {
+            .catch(error => {
+            if (requestId !== attendanceSummaryRequest) {
+                return;
+            }
+            console.error(error);
             document.getElementById('days_worked').value = 0;
+            document.getElementById('late_deduction').value = '0.00';
+            excessiveLateDays = [];
+            renderAttendanceValidationWarning();
             calculateRegularPay();
+            summaryMessage.textContent = 'Could not load attendance calculations. Please try again.';
             });
         }
 
-        document.querySelector('input[name="pay_date"]').addEventListener('change', fetchEmployeeAttendance);
+        function renderAttendanceValidationWarning() {
+            const warning = document.getElementById('attendance-validation-warning');
+            if (!excessiveLateDays.length) {
+                warning.textContent = '';
+                warning.classList.add('hidden');
+                return;
+            }
+
+            const flaggedDates = excessiveLateDays
+                .map(day => `${day.date}: ${day.late_minutes} minutes`)
+                .join('; ');
+            warning.textContent = `Review attendance records before saving. More than 240 late minutes: ${flaggedDates}. Time In after 12:00 PM is counted as 0.5 day and excluded from the late deduction.`;
+            warning.classList.remove('hidden');
+        }
+
+        document.querySelector('input[name="pay_date"]').addEventListener('change', refreshEligibleEmployees);
+        document.getElementById('daily_rate').addEventListener('change', fetchEmployeeAttendance);
+        refreshEligibleEmployees();
 
     function printPayslip(data) {
       let periodLabel = data.pay_period === 'Kinsenas' ? '1st Half' : '2nd Half';
@@ -786,7 +989,7 @@ while ($r = $payrolls->fetch_assoc()) {
           <table>
             <tr><td><b>Employee:</b> ${name}</td><td class="right"><b>Pay Date:</b> ${data.pay_date}</td></tr>
             <tr><td><b>ID:</b> #${data.employee_id}</td><td class="right"><b>Status:</b> ${data.status}</td></tr>
-            <tr><td><b>Days Worked:</b> ${daysWorked} day/s</td><td class="right"><b>Daily Rate:</b> ₱${parseFloat(data.daily_rate || 750).toFixed(2)}</td></tr>
+            <tr><td><b>Days Worked:</b> ${daysWorked} day/s</td><td class="right"><b>Daily Rate:</b> ₱${parseFloat(data.daily_rate || 755).toFixed(2)}</td></tr>
           </table>
           <hr style="margin: 15px 0;">
           <table>
@@ -827,7 +1030,7 @@ while ($r = $payrolls->fetch_assoc()) {
           data: {
             labels: ['Nasahuran Na (Paid)', 'Pending'],
             datasets: [{
-              data: [<?php echo $paid_count; ?>, <?php echo$pending_count; ?>],
+              data: [<?php echo $monthly_status_counts['Paid']; ?>, <?php echo $monthly_status_counts['Pending']; ?>],
               backgroundColor: ['#10B981', '#F59E0B']
             }]
           },
@@ -840,15 +1043,32 @@ while ($r = $payrolls->fetch_assoc()) {
         new Chart(ctxBar, {
           type: 'bar',
           data: {
-            labels: ['Disbursed', 'Pending'],
+            labels: ['1st Half (Kinsenas)', '2nd Half (Katapusan)', 'Monthly Salary Expense'],
             datasets: [{
-              label: 'Amount Credited (₱)',
-              data: [<?php echo $total_disbursed; ?>, <?php echo$total_pending_pay; ?>],
-              backgroundColor: ['#10B981', '#F59E0B']
+              label: 'Amount (₱)',
+              data: [<?php echo json_encode($period_payroll_totals['Kinsenas']); ?>, <?php echo json_encode($period_payroll_totals['Katapusan']); ?>, <?php echo json_encode($monthly_salary_expense); ?>],
+              backgroundColor: ['#10B981', '#0F766E', '#3B82F6']
             }]
           },
-          options: { responsive: true, maintainAspectRatio: false }
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              y: {
+                beginAtZero: true,
+                max: 1000000,
+                ticks: {
+                  callback: value => `₱${Number(value).toLocaleString()}`
+                }
+              }
+            }
+          }
         });
+      }
+
+      if (sessionStorage.getItem('payrollTabAfterReload') === 'employees') {
+        sessionStorage.removeItem('payrollTabAfterReload');
+        switchTab('employees');
       }
     });
   </script>

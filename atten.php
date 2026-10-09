@@ -1,36 +1,13 @@
 <?php
 require_once 'config/connection.php';
+require_once 'config/attendance_helpers.php';
 
 // Set Timezone sa Philippine Time
 date_default_timezone_set('Asia/Manila');
 
 $currentDate = date('Y-m-d');
 $currentTime = date('H:i:s');
-
-// =========================================================
-// AUTO-MARK ABSENT TRIGGER PAGPATAK NG 5:01 PM (17:01:00)
-// =========================================================
-if ($currentTime >= '17:01:00') {
-    $autoAbsentStmt = $conn->prepare("
-        INSERT INTO attendance (employee_id, username, attendance_date, status)
-        SELECT 
-            e.employee_id, 
-            COALESCE(NULLIF(e.username, ''), CONCAT('Employee #', e.employee_id)), 
-            ?, 
-            'Absent'
-        FROM employee e
-        WHERE e.employee_id NOT IN (
-            SELECT employee_id 
-            FROM attendance 
-            WHERE attendance_date = ?
-        )
-    ");
-    if ($autoAbsentStmt) {
-        $autoAbsentStmt->bind_param('ss', $currentDate, $currentDate);
-        $autoAbsentStmt->execute();
-        $autoAbsentStmt->close();
-    }
-}
+finalizeDailyAttendance($conn, $currentDate, $currentTime);
 
 // Get GET parameters
 $selectedDate = isset($_GET['date']) ? trim($_GET['date']) : '';
@@ -43,6 +20,7 @@ $count = 0;
 $totalPresent = 0;
 $totalLate    = 0;
 $totalAbsent  = 0;
+$totalHalfDay = 0;
 
 // =========================================================
 // FETCH ATTENDANCE WITH USER & EMPLOYEE DETAILS + SEARCH
@@ -57,6 +35,7 @@ $query = "
         a.time_in_2, 
         a.time_out_2, 
         a.status,
+        a.is_late,
         COALESCE(u.name, e.username, a.username, 'N/A') AS display_name,
         COALESCE(u.email, e.email, '') AS user_email,
         COALESCE(u.role, e.position, 'N/A') AS user_role
@@ -107,15 +86,22 @@ if ($stmt) {
                 $st = (strtotime($rec['time_in']) > strtotime('08:00:00')) ? 'late' : 'present';
             }
 
+            $isLate = !empty($rec['is_late']) || $st === 'late';
             $rec['display_status'] = !empty($st) ? ucfirst($st) : 'N/A';
+            if ($st === 'half day' && $isLate) {
+                $rec['display_status'] = 'Half Day (Late)';
+            }
 
             // Increment summary counts
             if ($st === 'present') {
                 $totalPresent++;
-            } elseif ($st === 'late') {
-                $totalLate++;
             } elseif ($st === 'absent') {
                 $totalAbsent++;
+            } elseif ($st === 'half day') {
+                $totalHalfDay++;
+            }
+            if ($isLate) {
+                $totalLate++;
             }
 
             $records[] = $rec;
@@ -206,6 +192,7 @@ function formatTime($timeStr) {
         .summary-card.present { border-left-color: #198754; }
         .summary-card.late { border-left-color: #ffc107; }
         .summary-card.absent { border-left-color: #dc3545; }
+        .summary-card.half-day { border-left-color: #0dcaf0; }
         .summary-card h4 { margin: 0 0 5px 0; font-size: 12px; text-transform: uppercase; color: #6c757d; }
         .summary-card .number { font-size: 22px; font-weight: bold; margin: 0; }
 
@@ -235,6 +222,7 @@ function formatTime($timeStr) {
         .status-present { background-color: #d1e7dd; color: #0f5132; }
         .status-absent { background-color: #f8d7da; color: #842029; }
         .status-late { background-color: #fff3cd; color: #664d03; }
+        .status-half-day { background-color: #cff4fc; color: #055160; }
         .status-default { background-color: #e2e3e5; color: #41464b; }
         
         .sub-text {
@@ -314,6 +302,10 @@ function formatTime($timeStr) {
             <h4>Absent</h4>
             <p class="number" style="color: #dc3545;"><?= $totalAbsent; ?></p>
         </div>
+        <div class="summary-card half-day">
+            <h4>Half Day</h4>
+            <p class="number" style="color: #055160;"><?= $totalHalfDay; ?></p>
+        </div>
     </div>
 
     <?php if ($count > 0): ?>
@@ -356,6 +348,7 @@ function formatTime($timeStr) {
                                     'present' => 'status-present',
                                     'absent'  => 'status-absent',
                                     'late'    => 'status-late',
+                                    'half day', 'half day (late)' => 'status-half-day',
                                     default   => 'status-default',
                                 };
                             ?>
