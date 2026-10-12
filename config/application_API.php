@@ -362,6 +362,7 @@ if (isset($_POST['save_interview'])) {
         $status = 'Hired';
     }
     $normalized_status = strtolower(trim($status));
+    $submitted_outcome = $normalized_status;
     $normalized_type = strtolower(trim(preg_replace('/\s+/', ' ', str_replace('_', ' ', $interview_type))));
     if ($normalized_type === 'technical interview') {
         $normalized_type = 'training';
@@ -521,12 +522,9 @@ if (isset($_POST['save_interview'])) {
             $app_contact = $app_data['contact_number'] ?? '';
             $app_position = !empty($app_data['position_applied']) ? $app_data['position_applied'] : ($app_data['position'] ?? 'New Hire');
             $full_address = trim(($app_data['house_number'] ?? '') . ' ' . ($app_data['street'] ?? '') . ' ' . ($app_data['barangay'] ?? '') . ' ' . ($app_data['city'] ?? ''));
-            $department = trim((string)($app_data['department'] ?? '')) ?: 'General';
-
-            $emp_stmt = $conn->prepare("INSERT INTO employee (username, department, position, contact_number, address, email)
-                VALUES (?, ?, ?, ?, ?, ?)
+            $emp_stmt = $conn->prepare("INSERT INTO employee (username, position, contact_number, address, email)
+                VALUES (?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE
-                department = VALUES(department),
                 position = VALUES(position),
                 contact_number = VALUES(contact_number),
                 address = VALUES(address)");
@@ -534,7 +532,7 @@ if (isset($_POST['save_interview'])) {
                 $conn->rollback();
                 $fail_schedule("Unable to prepare employee transfer: " . $conn->error);
             }
-            $emp_stmt->bind_param("ssssss", $full_name, $department, $app_position, $app_contact, $full_address, $app_email);
+            $emp_stmt->bind_param("sssss", $full_name, $app_position, $app_contact, $full_address, $app_email);
             if (!$emp_stmt->execute()) {
                 $error = $emp_stmt->error;
                 $emp_stmt->close();
@@ -576,6 +574,16 @@ if (isset($_POST['save_interview'])) {
             );
         }
 
+        if (
+            !empty($interview_schedule_mode)
+            && in_array($submitted_outcome, ['passed', 'failed'], true)
+        ) {
+            $_SESSION['interview_schedule_outcome'] = $submitted_outcome === 'passed'
+                ? 'passed'
+                : 'rejected';
+            $_SESSION['interview_schedule_outcome_name'] = $username;
+        }
+
         if ($progression_message !== '') {
             $_SESSION['interview_schedule_message'] = $progression_message
                 . ($notification_sent ? ' An email update was sent to the applicant.' : ' The status was saved, but the email update could not be sent; check the mail settings and server log.');
@@ -589,7 +597,11 @@ if (isset($_POST['save_interview'])) {
                 ? "Applicant hired and transferred to the employee directory."
                 : ($transfer_to_employee
                     ? "Applicant transferred to the employee directory."
-                    : "Interview schedule saved successfully."));
+                    : ($normalized_status === 'passed'
+                        ? "Applicant marked as Passed."
+                        : ($normalized_status === 'failed'
+                            ? "Applicant marked as Failed."
+                            : "Interview schedule saved successfully."))));
             if ($notification_sent !== null) {
                 $_SESSION['applicant_message'] .= $notification_sent
                     ? ' An email update was sent to the applicant.'
@@ -605,7 +617,11 @@ if (isset($_POST['save_interview'])) {
                 ? "Applicant hired and transferred to the employee directory."
                 : ($transfer_to_employee
                     ? "Applicant transferred to the employee directory."
-                    : "Interview schedule saved successfully."));
+                    : ($normalized_status === 'passed'
+                        ? "Applicant marked as Passed."
+                        : ($normalized_status === 'failed'
+                            ? "Applicant marked as Failed."
+                            : "Interview schedule saved successfully."))));
             if ($notification_sent !== null) {
                 $_SESSION['interview_schedule_message'] .= $notification_sent
                     ? ' An email update was sent to the applicant.'

@@ -1,6 +1,8 @@
 <?php
 include('config/connection.php');
 session_start();
+require_once __DIR__ . '/config/account_access.php';
+requireActiveAccount($conn);
 
 if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'payroll') {
     header("Location: index.php");
@@ -94,7 +96,7 @@ $monthly_salary_expense = array_sum($period_payroll_totals);
 
 // Fetch Payroll Records with Employee Details
 $payrolls = $conn->query("
-    SELECT p.*, e.employee_id, e.tin_no, e.sss_no, e.hdmf_no, e.position, e.department, e.username, e.username 
+    SELECT p.*, e.employee_id, e.tin_no, e.sss_no, e.hdmf_no, e.position, e.username
     FROM payroll p 
     JOIN employee e ON p.employee_id = e.employee_id 
     ORDER BY p.payroll_id DESC
@@ -119,6 +121,9 @@ while ($r = $payrolls->fetch_assoc()) {
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/table-scroll.css?v=<?= filemtime(__DIR__ . '/css/table-scroll.css'); ?>">
+  <link rel="stylesheet" href="css/calendar-picker.css?v=<?= filemtime(__DIR__ . '/css/calendar-picker.css'); ?>">
+  <link rel="stylesheet" href="css/role-form-controls.css?v=<?= filemtime(__DIR__ . '/css/role-form-controls.css'); ?>">
+  <link rel="stylesheet" href="css/select-control.css?v=<?= filemtime(__DIR__ . '/css/select-control.css'); ?>">
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -341,6 +346,7 @@ while ($r = $payrolls->fetch_assoc()) {
   </style>
 </head>
 <body class="font-sans antialiased text-slate-800">
+<?php include __DIR__ . '/config/notification_bell.php'; ?>
 
   <!-- App Wrapper -->
   <div class="flex h-screen overflow-hidden">
@@ -511,7 +517,7 @@ while ($r = $payrolls->fetch_assoc()) {
                     name="chart_month"
                     value="<?php echo htmlspecialchars($chartMonth, ENT_QUOTES, 'UTF-8'); ?>"
                     onchange="this.form.submit()"
-                    class="rounded-lg border border-zinc-200 px-2 py-1.5 text-xs"
+                    class="calendar-control rounded-lg border border-zinc-200 px-2 py-1.5 text-xs"
                   >
                 </form>
               </div>
@@ -626,7 +632,7 @@ while ($r = $payrolls->fetch_assoc()) {
                 </div>
                 <div>
                   <label class="block text-xs font-bold text-zinc-800 mb-1">Pay Date</label>
-                  <input type="date" name="pay_date" required value="<?php echo date('Y-m-d'); ?>" class="w-full px-3 py-2 border rounded-xl text-xs bg-white outline-none">
+                  <input type="date" name="pay_date" required value="<?php echo date('Y-m-d'); ?>" class="calendar-control w-full px-3 py-2 border rounded-xl text-xs bg-white outline-none">
                 </div>
               </div>
 
@@ -1079,5 +1085,7 @@ while ($r = $payrolls->fetch_assoc()) {
     });
   </script>
   <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
+  <script src="js/calendar-picker.js?v=<?= filemtime(__DIR__ . '/js/calendar-picker.js'); ?>"></script>
+  <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
 </body>
 </html>

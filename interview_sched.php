@@ -35,7 +35,15 @@ foreach ($scheduledApplicants as $applicant) {
 
 $pageMessage = $_SESSION['interview_schedule_message'] ?? '';
 $pageError = $_SESSION['interview_schedule_error'] ?? '';
-unset($_SESSION['interview_schedule_message'], $_SESSION['interview_schedule_error']);
+$outcome = $_SESSION['interview_schedule_outcome'] ?? '';
+$outcomeName = $_SESSION['interview_schedule_outcome_name'] ?? '';
+unset(
+    $_SESSION['interview_schedule_message'],
+    $_SESSION['interview_schedule_error'],
+    $_SESSION['interview_schedule_outcome'],
+    $_SESSION['interview_schedule_outcome_name']
+);
+$outcome = in_array($outcome, ['passed', 'rejected'], true) ? $outcome : '';
 $escape = static fn($value) => htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 $styleVersion = file_exists('css/applicant_admin.css') ? filemtime('css/applicant_admin.css') : time();
 $selectedStage = $selected_status ?? 'all';
@@ -49,24 +57,49 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Interview Schedule | TaskTrack</title>
+    <link rel="stylesheet" href="css/HR.css?v=<?= filemtime(__DIR__ . '/css/HR.css'); ?>">
     <link rel="stylesheet" href="css/applicant_admin.css?v=<?= $styleVersion ?>">
     <link rel="stylesheet" href="css/table-scroll.css?v=<?= filemtime(__DIR__ . '/css/table-scroll.css'); ?>">
+    <link rel="stylesheet" href="css/calendar-picker.css?v=<?= filemtime(__DIR__ . '/css/calendar-picker.css'); ?>">
+    <link rel="stylesheet" href="css/select-control.css?v=<?= filemtime(__DIR__ . '/css/select-control.css'); ?>">
 </head>
 <body>
-<div class="app-shell">
-    <aside class="app-sidebar" aria-label="HR navigation">
-        <a class="app-brand" href="HR.php" aria-label="TaskTrack HR home"><span class="brand-mark" aria-hidden="true">T</span><span class="brand-name">TASKTRACK</span></a>
-        <nav class="app-nav" aria-label="HR navigation">
-            <a href="HR.php"><span class="nav-icon" aria-hidden="true">▦</span><span class="nav-label">Employees</span></a>
-            <a href="register.php"><span class="nav-icon" aria-hidden="true">＋</span><span class="nav-label">Register User</span></a>
-            <a href="atten.php"><span class="nav-icon" aria-hidden="true">◷</span><span class="nav-label">Attendance</span></a>
-            <a href="application_form.php"><span class="nav-icon" aria-hidden="true">▤</span><span class="nav-label">Applicants</span></a>
-            <a class="active" href="interview_sched.php" aria-current="page"><span class="nav-icon" aria-hidden="true">▣</span><span class="nav-label">Interview Schedule</span></a>
+<div class="hr-shell">
+    <aside class="hr-sidebar" aria-label="HR navigation">
+        <a class="hr-brand" href="HR.php" aria-label="TaskTrack HR home">
+            <span class="hr-brand-mark" aria-hidden="true">T</span>
+            <span class="hr-brand-name">TASKTRACK</span>
+        </a>
+        <nav class="hr-nav">
+            <a class="hr-nav-link" href="HR.php">
+                <span class="hr-nav-icon" aria-hidden="true">▦</span>
+                <span class="hr-nav-label">Employees</span>
+            </a>
+            <a class="hr-nav-link" href="atten.php">
+                <span class="hr-nav-icon" aria-hidden="true">◷</span>
+                <span class="hr-nav-label">Attendance</span>
+            </a>
+            <a class="hr-nav-link" href="application_form.php">
+                <span class="hr-nav-icon" aria-hidden="true">▤</span>
+                <span class="hr-nav-label">Applicants</span>
+            </a>
+            <a class="hr-nav-link is-active" href="interview_sched.php" aria-current="page">
+                <span class="hr-nav-icon" aria-hidden="true">▣</span>
+                <span class="hr-nav-label">Interview Schedule</span>
+            </a>
+            <a class="hr-nav-link" href="office_employee.php">
+                <span class="hr-nav-icon" aria-hidden="true">☑</span>
+                <span class="hr-nav-label">My Tasks</span>
+            </a>
         </nav>
-        <a class="logout-link" href="logout.php"><span class="nav-icon" aria-hidden="true">↪</span><span class="nav-label">Log out</span></a>
+        <a class="hr-nav-link hr-logout" href="logout.php">
+            <span class="hr-nav-icon" aria-hidden="true">↪</span>
+            <span class="hr-nav-label">Log out</span>
+        </a>
     </aside>
+    <?php include __DIR__ . '/config/notification_bell.php'; ?>
 
-    <main class="app-main">
+    <main class="hr-main">
         <header class="page-header">
             <div>
                 <p class="eyebrow">TALENT MANAGEMENT</p>
@@ -76,7 +109,7 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
             <a class="primary-button" href="application_form.php">▤ <span>View applicants</span></a>
         </header>
 
-        <?php if ($pageMessage !== ''): ?>
+        <?php if ($pageMessage !== '' && $outcome === ''): ?>
             <div class="notice success-notice" role="status"><?= $escape($pageMessage) ?></div>
         <?php endif; ?>
         <?php if ($pageError !== ''): ?>
@@ -238,10 +271,37 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
                                 <small class="cell-secondary"><?= $escape($interviewType !== '' ? $interviewType : 'Interview') ?><?= $interviewMode !== '' ? ' · ' . $escape($interviewMode) : '' ?></small>
                             </td>
                             <td class="row-actions">
-                                <?php if ($statusKey === 'failed'): ?>
+                                <?php if (in_array($statusKey, ['failed', 'hired'], true)): ?>
                                     <span class="muted">Closed</span>
+                                <?php elseif ($timestamp): ?>
+                                    <form method="post" class="outcome-form" data-outcome="Passed" data-applicant-name="<?= $escape($fullName) ?>">
+                                        <input type="hidden" name="save_interview" value="1">
+                                        <input type="hidden" name="applicant_id" value="<?= $id ?>">
+                                        <input type="hidden" name="username" value="<?= $escape($fullName) ?>">
+                                        <input type="hidden" name="email" value="<?= $escape($email) ?>">
+                                        <input type="hidden" name="interview_type" value="<?= $escape($interviewType) ?>">
+                                        <input type="hidden" name="interview_mode" value="<?= $escape($interviewMode) ?>">
+                                        <input type="hidden" name="interview_date" value="<?= $escape($interviewDate) ?>">
+                                        <input type="hidden" name="status" value="Passed">
+                                        <button class="outcome-action passed-action" type="submit">
+                                            Passed
+                                        </button>
+                                    </form>
+                                    <form method="post" class="outcome-form" data-outcome="Failed" data-applicant-name="<?= $escape($fullName) ?>">
+                                        <input type="hidden" name="save_interview" value="1">
+                                        <input type="hidden" name="applicant_id" value="<?= $id ?>">
+                                        <input type="hidden" name="username" value="<?= $escape($fullName) ?>">
+                                        <input type="hidden" name="email" value="<?= $escape($email) ?>">
+                                        <input type="hidden" name="interview_type" value="<?= $escape($interviewType) ?>">
+                                        <input type="hidden" name="interview_mode" value="<?= $escape($interviewMode) ?>">
+                                        <input type="hidden" name="interview_date" value="<?= $escape($interviewDate) ?>">
+                                        <input type="hidden" name="status" value="Failed">
+                                        <button class="outcome-action failed-action" type="submit">
+                                            Failed
+                                        </button>
+                                    </form>
                                 <?php else: ?>
-                                    <button class="icon-button schedule-action" type="button" data-schedule="<?= $escape(json_encode($record, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT)) ?>"><?= $timestamp ? 'Reschedule' : 'Set schedule' ?></button>
+                                    <button class="icon-button schedule-action" type="button" data-schedule="<?= $escape(json_encode($record, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT)) ?>">Ready to Schedule</button>
                                 <?php endif; ?>
                             </td>
                         </tr>
@@ -258,17 +318,81 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
     </main>
 </div>
 
+<?php if ($outcome !== ''): ?>
+<div class="modal-backdrop outcome-backdrop" id="outcomeModal" role="dialog" aria-modal="true" aria-labelledby="outcomeTitle">
+    <section class="modal-card outcome-modal">
+        <div class="outcome-stamp <?= $outcome === 'passed' ? 'stamp-passed' : 'stamp-rejected' ?>" aria-hidden="true">
+            <?= $outcome === 'passed' ? 'PASSED' : 'REJECTED' ?>
+        </div>
+        <h2 id="outcomeTitle"><?= $outcome === 'passed' ? 'Interview Passed' : 'Applicant Rejected' ?></h2>
+        <p class="outcome-applicant"><?= $escape($outcomeName !== '' ? $outcomeName : 'Applicant') ?></p>
+        <p class="outcome-description"><?= $escape($pageMessage) ?></p>
+        <button class="primary-button" type="button" data-outcome-close>Done</button>
+    </section>
+</div>
+<?php endif; ?>
+
+<div class="modal-backdrop hidden" id="outcomeConfirmModal" role="dialog" aria-modal="true" aria-labelledby="outcomeConfirmTitle">
+    <section class="modal-card outcome-confirm-card">
+        <div class="modal-kicker">CONFIRM INTERVIEW RESULT</div>
+        <h2 id="outcomeConfirmTitle">Confirm decision</h2>
+        <p class="modal-subtitle" id="outcomeConfirmMessage"></p>
+        <div class="modal-actions">
+            <button class="secondary-button" type="button" id="cancelOutcomeButton">Cancel</button>
+            <button class="primary-button" type="button" id="confirmOutcomeButton">Confirm result</button>
+        </div>
+    </section>
+</div>
+
+<div class="submission-overlay hidden" id="submissionOverlay" role="status" aria-live="polite" aria-hidden="true">
+    <div class="submission-card">
+        <span class="submission-spinner" aria-hidden="true"></span>
+        <strong id="submissionMessage">Saving interview result...</strong>
+        <span>Please wait while we save your changes.</span>
+    </div>
+</div>
+
 <div class="modal-backdrop hidden" id="scheduleModal" role="dialog" aria-modal="true" aria-labelledby="scheduleTitle">
     <section class="modal-card compact-modal schedule-card">
         <button class="modal-close" type="button" data-close aria-label="Close">×</button>
         <div class="modal-kicker">INTERVIEW</div>
         <h2 id="scheduleTitle">Set interview schedule</h2>
         <p class="modal-subtitle">Update interview details for <strong id="scheduleApplicantName"></strong>.</p>
-        <form method="post" class="schedule-form">
+        <form method="post" class="schedule-form" id="interviewScheduleForm">
             <input type="hidden" name="applicant_id" id="scheduleApplicantId">
             <input type="hidden" name="username" id="scheduleApplicantHiddenName">
             <input type="hidden" name="email" id="scheduleApplicantEmail">
-            <label>Interview date and time<input type="datetime-local" name="interview_date" id="scheduleDate" required></label>
+            <input type="hidden" name="interview_date" id="scheduleDateTime">
+            <div class="schedule-datetime-control">
+                <label class="schedule-date-field">Interview date
+                    <input type="date" class="calendar-control" id="scheduleDate" required>
+                </label>
+                <div class="schedule-time-fields">
+                    <label>Hour
+                        <select id="scheduleHour" required>
+                            <option value="">Hour</option>
+                            <?php for ($hour = 1; $hour <= 12; $hour++): ?>
+                                <option value="<?= sprintf('%02d', $hour) ?>"><?= $hour ?></option>
+                            <?php endfor; ?>
+                        </select>
+                    </label>
+                    <label>Minute
+                        <select id="scheduleMinute" required>
+                            <option value="">Minute</option>
+                            <?php for ($minute = 0; $minute < 60; $minute++): ?>
+                                <option value="<?= sprintf('%02d', $minute) ?>"><?= sprintf('%02d', $minute) ?></option>
+                            <?php endfor; ?>
+                        </select>
+                    </label>
+                    <label>Period
+                        <select id="schedulePeriod" required>
+                            <option value="">AM/PM</option>
+                            <option value="AM">AM</option>
+                            <option value="PM">PM</option>
+                        </select>
+                    </label>
+                </div>
+            </div>
             <div class="form-row">
                 <label>Interview type
                     <select name="interview_type" id="scheduleType" required>
@@ -280,7 +404,7 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
                 </label>
             </div>
             <label>Application status
-                <select name="status" id="scheduleStatus" required><option value="Scheduled">Scheduled</option><option value="Pending">Pending</option><option value="Passed">Passed</option><option value="Failed">Failed</option><option value="Hired">Hired</option></select>
+                <select name="status" id="scheduleStatus" required><option value="Scheduled">Scheduled</option><option value="Pending">Pending</option><option value="Hired">Hired</option></select>
             </label>
             <p class="stage-guidance" id="stageGuidance" aria-live="polite"></p>
             <div class="modal-actions">
@@ -299,6 +423,9 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
     const visibleCount = document.getElementById('visibleCount');
     const noResults = document.getElementById('noScheduleResults');
     const modal = document.getElementById('scheduleModal');
+    const outcomeConfirmModal = document.getElementById('outcomeConfirmModal');
+    const submissionOverlay = document.getElementById('submissionOverlay');
+    let pendingOutcomeForm = null;
     const normalizeStage = (value) => {
         const stage = (value || '').trim().replace(/_/g, ' ').replace(/\s+/g, ' ').toLowerCase();
         return stage === 'technical interview' ? 'training' : stage;
@@ -320,6 +447,85 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
 
     search.addEventListener('input', filterRows);
     statusFilter.addEventListener('change', filterRows);
+    document.querySelectorAll('.outcome-form').forEach((form) => {
+        form.addEventListener('submit', (event) => {
+            if (form.dataset.confirmed !== 'true') {
+                event.preventDefault();
+                pendingOutcomeForm = form;
+                const applicantName = form.dataset.applicantName || 'this applicant';
+                const outcome = form.dataset.outcome || 'this outcome';
+                document.getElementById('outcomeConfirmTitle').textContent =
+                    outcome === 'Passed' ? 'Mark interview as passed?' : 'Reject this applicant?';
+                document.getElementById('outcomeConfirmMessage').textContent =
+                    outcome === 'Passed'
+                        ? `${applicantName} will be marked as Passed for this interview.`
+                        : `${applicantName} will be marked as Failed and removed from the active interview queue.`;
+                outcomeConfirmModal.classList.remove('hidden');
+                return;
+            }
+            form.dataset.confirmed = 'false';
+            document.getElementById('submissionMessage').textContent =
+                `Saving ${form.dataset.outcome === 'Passed' ? 'passed' : 'rejected'} result...`;
+            submissionOverlay.classList.remove('hidden');
+            submissionOverlay.setAttribute('aria-hidden', 'false');
+            form.querySelector('button[type="submit"]').disabled = true;
+        });
+    });
+    const scheduleForm = document.getElementById('interviewScheduleForm');
+    scheduleForm.addEventListener('submit', (event) => {
+        const date = document.getElementById('scheduleDate');
+        const hour = document.getElementById('scheduleHour');
+        const minute = document.getElementById('scheduleMinute');
+        const period = document.getElementById('schedulePeriod');
+        const requiredSelects = [
+            document.getElementById('scheduleType'),
+            document.getElementById('scheduleMode'),
+            document.getElementById('scheduleStatus')
+        ];
+        const pickerTrigger = date.closest('.calendar-picker')?.querySelector('.calendar-picker__trigger');
+        const missingSelect = requiredSelects.find((select) => !select.value);
+        if (!date.value || !hour.value || !minute.value || !period.value || missingSelect) {
+            event.preventDefault();
+            if (!date.value) {
+                pickerTrigger?.setAttribute('aria-invalid', 'true');
+                pickerTrigger?.focus();
+            } else if (!hour.value || !minute.value || !period.value) {
+                (!hour.value ? hour : !minute.value ? minute : period).focus();
+            } else {
+                const trigger = missingSelect.closest('.select-control')?.querySelector('.select-control__trigger');
+                (trigger || missingSelect).focus();
+            }
+            return;
+        }
+        let hour24 = Number(hour.value) % 12;
+        if (period.value === 'PM') hour24 += 12;
+        document.getElementById('scheduleDateTime').value =
+            `${date.value} ${String(hour24).padStart(2, '0')}:${minute.value}:00`;
+        document.getElementById('submissionMessage').textContent = 'Saving interview schedule...';
+        submissionOverlay.classList.remove('hidden');
+        submissionOverlay.setAttribute('aria-hidden', 'false');
+    });
+    document.getElementById('cancelOutcomeButton').addEventListener('click', () => {
+        pendingOutcomeForm = null;
+        outcomeConfirmModal.classList.add('hidden');
+    });
+    document.getElementById('confirmOutcomeButton').addEventListener('click', () => {
+        if (!pendingOutcomeForm) return;
+        const form = pendingOutcomeForm;
+        pendingOutcomeForm = null;
+        form.dataset.confirmed = 'true';
+        outcomeConfirmModal.classList.add('hidden');
+        if (typeof form.requestSubmit === 'function') {
+            form.requestSubmit();
+        } else {
+            form.dataset.confirmed = 'false';
+            document.getElementById('submissionMessage').textContent =
+                `Saving ${form.dataset.outcome === 'Passed' ? 'passed' : 'rejected'} result...`;
+            submissionOverlay.classList.remove('hidden');
+            submissionOverlay.setAttribute('aria-hidden', 'false');
+            form.submit();
+        }
+    });
 
     let activeApplicant = null;
     const stageOptions = Array.from(document.getElementById('scheduleType').options);
@@ -386,10 +592,23 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
             document.getElementById('scheduleApplicantEmail').value = applicant.email || '';
             document.getElementById('scheduleApplicantName').textContent = applicant.name || 'this applicant';
             document.getElementById('scheduleTitle').textContent = applicant.dateInput ? 'Update interview schedule' : 'Set interview schedule';
-            document.getElementById('scheduleDate').value = applicant.dateInput || '';
+            const [scheduleDay, scheduleTime] = (applicant.dateInput || '').split('T');
+            document.getElementById('scheduleDate').value = scheduleDay || '';
+            document.getElementById('scheduleDate').dispatchEvent(new Event('change', { bubbles: true }));
+            const [hour24, minute] = (scheduleTime || '').split(':');
+            if (hour24 && minute) {
+                const numericHour = Number(hour24);
+                document.getElementById('scheduleHour').value = String(numericHour % 12 || 12).padStart(2, '0');
+                document.getElementById('scheduleMinute').value = minute;
+                document.getElementById('schedulePeriod').value = numericHour >= 12 ? 'PM' : 'AM';
+            } else {
+                document.getElementById('scheduleHour').value = '';
+                document.getElementById('scheduleMinute').value = '';
+                document.getElementById('schedulePeriod').value = '';
+            }
             document.getElementById('scheduleType').value = applicant.interviewType || '';
             document.getElementById('scheduleMode').value = applicant.interviewMode || '';
-            document.getElementById('scheduleStatus').value = ['Scheduled', 'Pending', 'Passed', 'Failed', 'Hired'].includes(applicant.status) ? applicant.status : 'Scheduled';
+            document.getElementById('scheduleStatus').value = ['Scheduled', 'Pending', 'Hired'].includes(applicant.status) ? applicant.status : 'Scheduled';
             const currentType = normalizeStage(applicant.interviewType);
             const passed = (applicant.status || '').trim().toLowerCase() === 'passed';
             if (passed && currentType === 'initial interview') {
@@ -400,6 +619,9 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
                 document.getElementById('scheduleStatus').value = 'Scheduled';
             }
             updateStageChoices();
+            document.getElementById('scheduleType').dispatchEvent(new Event('change', { bubbles: true }));
+            document.getElementById('scheduleMode').dispatchEvent(new Event('change', { bubbles: true }));
+            document.getElementById('scheduleStatus').dispatchEvent(new Event('change', { bubbles: true }));
             modal.classList.remove('hidden');
         });
     });
@@ -407,13 +629,29 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
     document.querySelectorAll('[data-close]').forEach((button) => {
         button.addEventListener('click', () => modal.classList.add('hidden'));
     });
+    const outcomeModal = document.getElementById('outcomeModal');
+    if (outcomeModal) {
+        outcomeModal.querySelectorAll('[data-outcome-close]').forEach((button) => {
+            button.addEventListener('click', () => outcomeModal.remove());
+        });
+        outcomeModal.addEventListener('click', (event) => {
+            if (event.target === outcomeModal) outcomeModal.remove();
+        });
+    }
     modal.addEventListener('click', (event) => {
         if (event.target === modal) modal.classList.add('hidden');
     });
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') modal.classList.add('hidden');
+        if (event.key === 'Escape' && outcomeModal) outcomeModal.remove();
+        if (event.key === 'Escape' && !outcomeConfirmModal.classList.contains('hidden')) {
+            pendingOutcomeForm = null;
+            outcomeConfirmModal.classList.add('hidden');
+        }
     });
 })();
 </script>
+<script src="js/calendar-picker.js?v=<?= filemtime(__DIR__ . '/js/calendar-picker.js'); ?>"></script>
+<script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
 </body>
 </html>

@@ -45,24 +45,49 @@ $styleVersion = file_exists('css/applicant_admin.css') ? filemtime('css/applican
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Applicants | TaskTrack</title>
+    <link rel="stylesheet" href="css/HR.css?v=<?= filemtime(__DIR__ . '/css/HR.css'); ?>">
     <link rel="stylesheet" href="css/applicant_admin.css?v=<?= $styleVersion ?>">
     <link rel="stylesheet" href="css/table-scroll.css?v=<?= filemtime(__DIR__ . '/css/table-scroll.css'); ?>">
+    <link rel="stylesheet" href="css/calendar-picker.css?v=<?= filemtime(__DIR__ . '/css/calendar-picker.css'); ?>">
+    <link rel="stylesheet" href="css/select-control.css?v=<?= filemtime(__DIR__ . '/css/select-control.css'); ?>">
 </head>
 <body>
-<div class="app-shell">
-    <aside class="app-sidebar" aria-label="HR navigation">
-        <a class="app-brand" href="HR.php" aria-label="TaskTrack HR home"><span class="brand-mark" aria-hidden="true">T</span><span class="brand-name">TASKTRACK</span></a>
-        <nav class="app-nav" aria-label="HR navigation">
-            <a href="HR.php"><span class="nav-icon" aria-hidden="true">▦</span><span class="nav-label">Employees</span></a>
-            <a href="register.php"><span class="nav-icon" aria-hidden="true">＋</span><span class="nav-label">Register User</span></a>
-            <a href="atten.php"><span class="nav-icon" aria-hidden="true">◷</span><span class="nav-label">Attendance</span></a>
-            <a class="active" href="application_form.php" aria-current="page"><span class="nav-icon" aria-hidden="true">▤</span><span class="nav-label">Applicants</span></a>
-            <a href="interview_sched.php"><span class="nav-icon" aria-hidden="true">▣</span><span class="nav-label">Interview Schedule</span></a>
+<div class="hr-shell">
+    <aside class="hr-sidebar" aria-label="HR navigation">
+        <a class="hr-brand" href="HR.php" aria-label="TaskTrack HR home">
+            <span class="hr-brand-mark" aria-hidden="true">T</span>
+            <span class="hr-brand-name">TASKTRACK</span>
+        </a>
+        <nav class="hr-nav">
+            <a class="hr-nav-link" href="HR.php">
+                <span class="hr-nav-icon" aria-hidden="true">▦</span>
+                <span class="hr-nav-label">Employees</span>
+            </a>
+            <a class="hr-nav-link" href="atten.php">
+                <span class="hr-nav-icon" aria-hidden="true">◷</span>
+                <span class="hr-nav-label">Attendance</span>
+            </a>
+            <a class="hr-nav-link is-active" href="application_form.php" aria-current="page">
+                <span class="hr-nav-icon" aria-hidden="true">▤</span>
+                <span class="hr-nav-label">Applicants</span>
+            </a>
+            <a class="hr-nav-link" href="interview_sched.php">
+                <span class="hr-nav-icon" aria-hidden="true">▣</span>
+                <span class="hr-nav-label">Interview Schedule</span>
+            </a>
+            <a class="hr-nav-link" href="office_employee.php">
+                <span class="hr-nav-icon" aria-hidden="true">☑</span>
+                <span class="hr-nav-label">My Tasks</span>
+            </a>
         </nav>
-        <a class="logout-link" href="logout.php"><span class="nav-icon" aria-hidden="true">↪</span><span class="nav-label">Log out</span></a>
+        <a class="hr-nav-link hr-logout" href="logout.php">
+            <span class="hr-nav-icon" aria-hidden="true">↪</span>
+            <span class="hr-nav-label">Log out</span>
+        </a>
     </aside>
+    <?php include __DIR__ . '/config/notification_bell.php'; ?>
 
-    <main class="app-main">
+    <main class="hr-main">
         <header class="page-header">
             <div>
                 <p class="eyebrow">TALENT MANAGEMENT</p>
@@ -286,11 +311,41 @@ $styleVersion = file_exists('css/applicant_admin.css') ? filemtime('css/applican
         <div class="modal-kicker">INTERVIEW</div>
         <h2 id="scheduleTitle">Schedule interview</h2>
         <p class="modal-subtitle">Set an interview date and details for <strong id="scheduleApplicantName"></strong>.</p>
-        <form method="post" class="schedule-form">
+        <form method="post" class="schedule-form" id="applicantScheduleForm">
             <input type="hidden" name="applicant_id" id="scheduleApplicantId">
             <input type="hidden" name="username" id="scheduleApplicantHiddenName">
             <input type="hidden" name="email" id="scheduleApplicantEmail">
-            <label>Interview date and time<input type="datetime-local" name="interview_date" required></label>
+            <input type="hidden" name="interview_date" id="scheduleDateTime">
+            <div class="schedule-datetime-control">
+                <label class="schedule-date-field">Interview date
+                    <input type="date" class="calendar-control" id="scheduleDate" required>
+                </label>
+                <div class="schedule-time-fields">
+                    <label>Hour
+                        <select id="scheduleHour" required>
+                            <option value="">Hour</option>
+                            <?php for ($hour = 1; $hour <= 12; $hour++): ?>
+                                <option value="<?= sprintf('%02d', $hour) ?>"><?= $hour ?></option>
+                            <?php endfor; ?>
+                        </select>
+                    </label>
+                    <label>Minute
+                        <select id="scheduleMinute" required>
+                            <option value="">Minute</option>
+                            <?php for ($minute = 0; $minute < 60; $minute++): ?>
+                                <option value="<?= sprintf('%02d', $minute) ?>"><?= sprintf('%02d', $minute) ?></option>
+                            <?php endfor; ?>
+                        </select>
+                    </label>
+                    <label>Period
+                        <select id="schedulePeriod" required>
+                            <option value="">AM/PM</option>
+                            <option value="AM">AM</option>
+                            <option value="PM">PM</option>
+                        </select>
+                    </label>
+                </div>
+            </div>
             <div class="form-row">
                 <label>Interview type
                     <select name="interview_type" required><option value="">Choose type</option><option value="Initial Interview">Initial Interview</option></select>
@@ -300,7 +355,7 @@ $styleVersion = file_exists('css/applicant_admin.css') ? filemtime('css/applican
                 </label>
             </div>
             <label>Application status
-                <select name="status" required><option value="Scheduled">Scheduled</option><option value="Pending">Pending</option><option value="Passed">Passed</option></select>
+                <select name="status" required><option value="Scheduled">Scheduled</option><option value="Pending">Pending</option></select>
             </label>
             <div class="modal-actions">
                 <button class="secondary-button" type="button" data-close>Cancel</button>
@@ -422,6 +477,11 @@ $styleVersion = file_exists('css/applicant_admin.css') ? filemtime('css/applican
             if (!applicant) return;
             activeApplicant = applicant;
             fillSchedule(applicant);
+            document.getElementById('scheduleDate').value = '';
+            document.getElementById('scheduleDate').dispatchEvent(new Event('change', { bubbles: true }));
+            document.getElementById('scheduleHour').value = '';
+            document.getElementById('scheduleMinute').value = '';
+            document.getElementById('schedulePeriod').value = '';
             showModal('scheduleModal');
         });
     });
@@ -450,8 +510,35 @@ $styleVersion = file_exists('css/applicant_admin.css') ? filemtime('css/applican
     document.getElementById('openSchedule').addEventListener('click', () => {
         if (!activeApplicant) return;
         fillSchedule(activeApplicant);
+        document.getElementById('scheduleDate').value = '';
+        document.getElementById('scheduleDate').dispatchEvent(new Event('change', { bubbles: true }));
+        document.getElementById('scheduleHour').value = '';
+        document.getElementById('scheduleMinute').value = '';
+        document.getElementById('schedulePeriod').value = '';
         hideModal(document.getElementById('detailsModal'));
         showModal('scheduleModal');
+    });
+
+    document.getElementById('applicantScheduleForm').addEventListener('submit', (event) => {
+        const date = document.getElementById('scheduleDate');
+        const hour = document.getElementById('scheduleHour');
+        const minute = document.getElementById('scheduleMinute');
+        const period = document.getElementById('schedulePeriod');
+        const pickerTrigger = date.closest('.calendar-picker')?.querySelector('.calendar-picker__trigger');
+        if (!date.value || !hour.value || !minute.value || !period.value) {
+            event.preventDefault();
+            if (!date.value) {
+                pickerTrigger?.setAttribute('aria-invalid', 'true');
+                pickerTrigger?.focus();
+            } else {
+                (!hour.value ? hour : !minute.value ? minute : period).focus();
+            }
+            return;
+        }
+        let hour24 = Number(hour.value) % 12;
+        if (period.value === 'PM') hour24 += 12;
+        document.getElementById('scheduleDateTime').value =
+            `${date.value} ${String(hour24).padStart(2, '0')}:${minute.value}:00`;
     });
 
     document.querySelectorAll('[data-close]').forEach((button) => {
@@ -467,5 +554,7 @@ $styleVersion = file_exists('css/applicant_admin.css') ? filemtime('css/applican
     });
 })();
 </script>
+<script src="js/calendar-picker.js?v=<?= filemtime(__DIR__ . '/js/calendar-picker.js'); ?>"></script>
+<script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
 </body>
 </html>

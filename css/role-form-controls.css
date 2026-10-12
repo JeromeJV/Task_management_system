@@ -1,0 +1,160 @@
+body :is(
+    input:not([type="hidden"], [type="checkbox"], [type="radio"], [type="submit"], [type="button"], [type="reset"], [type="image"], [type="file"], [type="color"]),
+    select,
+    textarea
+) {
+    box-sizing: border-box;
+    min-height: 46px;
+    max-width: 100%;
+    padding: 11px 13px;
+    border: 1px solid #d5e0d9;
+    border-radius: 10px;
+    background-color: #fff;
+    color: #27372e;
+    font: inherit;
+    font-size: 13px;
+    box-shadow: 0 2px 7px rgba(32, 65, 46, 0.045);
+    transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+body select:not([multiple]) {
+    padding-right: 36px;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m5 7.5 5 5 5-5' stroke='%23596960' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+}
+
+body textarea:not(:disabled),
+body textarea:disabled {
+    min-height: 90px;
+}
+
+body textarea {
+    resize: vertical;
+}
+
+body :is(
+    input:not([type="hidden"], [type="checkbox"], [type="radio"], [type="submit"], [type="button"], [type="reset"], [type="image"], [type="file"], [type="color"]),
+    select,
+    textarea
+):not(:disabled):not([readonly]):not(.is-invalid):not([aria-invalid="true"]):hover {
+    border-color: #78a58b;
+    background-color: #f4f9f5;
+    transform: translateY(-1px);
+}
+
+body :is(
+    input:not([type="hidden"], [type="checkbox"], [type="radio"], [type="submit"], [type="button"], [type="reset"], [type="image"], [type="file"], [type="color"]),
+    select,
+    textarea
+):not(.is-invalid):not([aria-invalid="true"]):focus-visible {
+    outline: 3px solid rgba(31, 110, 74, 0.16);
+    outline-offset: 1px;
+    border-color: #28794f;
+    box-shadow: 0 0 0 1px #28794f;
+}
+
+body :is(input[type="date"], input[type="datetime-local"], input[type="month"], input[type="time"]) {
+    accent-color: #28794f;
+    color-scheme: light;
+}
+
+body :is(
+    input:not([type="hidden"], [type="checkbox"], [type="radio"], [type="submit"], [type="button"], [type="reset"], [type="image"], [type="file"], [type="color"]),
+    select,
+    textarea
+):disabled,
+body :is(
+    input:not([type="hidden"], [type="checkbox"], [type="radio"], [type="submit"], [type="button"], [type="reset"], [type="image"], [type="file"], [type="color"]),
+    select,
+    textarea
+)[readonly] {
+    cursor: not-allowed;
+    background-color: #f1f4f2;
+    color: #69766f;
+    box-shadow: none;
+}
+
+body :is(
+    input:not([type="hidden"], [type="checkbox"], [type="radio"], [type="submit"], [type="button"], [type="reset"], [type="image"], [type="file"], [type="color"]),
+    select,
+    textarea
+).is-invalid,
+body :is(
+    input:not([type="hidden"], [type="checkbox"], [type="radio"], [type="submit"], [type="button"], [type="reset"], [type="image"], [type="file"], [type="color"]),
+    select,
+    textarea
+)[aria-invalid="true"] {
+    border-color: #dc3545;
+}
+
+body :is(
+    input:not([type="hidden"], [type="checkbox"], [type="radio"], [type="submit"], [type="button"], [type="reset"], [type="image"], [type="file"], [type="color"]),
+    select,
+    textarea
+).is-invalid:focus-visible,
+body :is(
+    input:not([type="hidden"], [type="checkbox"], [type="radio"], [type="submit"], [type="button"], [type="reset"], [type="image"], [type="file"], [type="color"]),
+    select,
+    textarea
+)[aria-invalid="true"]:focus-visible {
+    outline-color: rgba(220, 53, 69, 0.18);
+    border-color: #dc3545;
+    box-shadow: 0 0 0 1px #dc3545;
+}
+
+body input::placeholder,
+body textarea::placeholder {
+    color: #7a877f;
+    opacity: 1;
+}
+
+body .production-filters input:not(.calendar-picker__native),
+body .production-filters select,
+body .production-report-filters input:not(.calendar-picker__native) {
+    min-height: 46px;
+    padding: 11px 13px;
+    border: 1px solid #d5e0d9;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #fff 0%, #f7faf8 100%);
+    color: #27372e;
+    font-size: 13px;
+    box-shadow: 0 2px 7px rgba(32, 65, 46, 0.045);
+}
+
+body .production-filters select {
+    padding-right: 36px;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m5 7.5 5 5 5-5' stroke='%23596960' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+}
+
+body .production-filters input:not(.calendar-picker__native):not(:disabled):hover,
+body .production-filters select:not(:disabled):hover,
+body .production-report-filters input:not(.calendar-picker__native):not(:disabled):hover {
+    border-color: #78a58b;
+    background-color: #f4f9f5;
+    transform: translateY(-1px);
+}
+
+body .production-filters input:not(.calendar-picker__native):focus-visible,
+body .production-filters select:focus-visible,
+body .production-report-filters input:not(.calendar-picker__native):focus-visible {
+    outline: 3px solid rgba(31, 110, 74, 0.16);
+    outline-offset: 1px;
+    border-color: #28794f;
+    box-shadow: 0 0 0 1px #28794f;
+}
+
+body .production-filters .calendar-picker__trigger,
+body .production-report-filters .calendar-picker__trigger {
+    min-height: 46px;
+    padding: 11px 13px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #fff 0%, #f7faf8 100%);
+    color: #27372e;
+    font-size: 13px;
+    box-shadow: 0 2px 7px rgba(32, 65, 46, 0.045);
+}

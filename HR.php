@@ -2,11 +2,15 @@
 session_start();
 include('config/connection.php');
 include('config/autoLog.php');
-include('config/employee_API.php');
 
 if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'HR') {
     header("Location: index.php");
     exit();
+}
+include('config/employee_API.php');
+
+if (empty($_SESSION['employee_edit_csrf'])) {
+    $_SESSION['employee_edit_csrf'] = bin2hex(random_bytes(32));
 }
 
 $applicant_result = mysqli_query(
@@ -73,14 +77,6 @@ while ($attendance_row = mysqli_fetch_assoc($attendance_result)) {
     ) ? 'present' : 'absent';
 }
 
-$departments = [];
-foreach ($records as $row) {
-    $department = trim($row['department'] ?? '');
-    if ($department !== '') {
-        $departments[$department] = $department;
-    }
-}
-natcasesort($departments);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -89,6 +85,8 @@ natcasesort($departments);
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HR Management Dashboard - TASKTRACK</title>
     <link rel="stylesheet" href="css/HR.css?v=<?= filemtime(__DIR__ . '/css/HR.css'); ?>">
+    <link rel="stylesheet" href="css/role-form-controls.css?v=<?= filemtime(__DIR__ . '/css/role-form-controls.css'); ?>">
+    <link rel="stylesheet" href="css/select-control.css?v=<?= filemtime(__DIR__ . '/css/select-control.css'); ?>">
 </head>
 <body>
     <div class="hr-shell">
@@ -103,10 +101,6 @@ natcasesort($departments);
                     <span class="hr-nav-icon" aria-hidden="true">▦</span>
                     <span class="hr-nav-label">Employees</span>
                 </a>
-                <a class="hr-nav-link" href="register.php">
-                    <span class="hr-nav-icon" aria-hidden="true">＋</span>
-                    <span class="hr-nav-label">Register User</span>
-                </a>
                 <a class="hr-nav-link" href="atten.php">
                     <span class="hr-nav-icon" aria-hidden="true">◷</span>
                     <span class="hr-nav-label">Attendance</span>
@@ -119,10 +113,6 @@ natcasesort($departments);
                     <span class="hr-nav-icon" aria-hidden="true">▣</span>
                     <span class="hr-nav-label">Interview Schedule</span>
                 </a>
-                <a class="hr-nav-link" href="employee.php">
-                    <span class="hr-nav-icon" aria-hidden="true">✓</span>
-                    <span class="hr-nav-label">Assign Tasks</span>
-                </a>
                 <a class="hr-nav-link" href="office_employee.php">
                     <span class="hr-nav-icon" aria-hidden="true">☑</span>
                     <span class="hr-nav-label">My Tasks</span>
@@ -134,6 +124,7 @@ natcasesort($departments);
                 <span class="hr-nav-label">Log out</span>
             </a>
         </aside>
+        <?php include __DIR__ . '/config/notification_bell.php'; ?>
 
         <main class="hr-main">
             <header class="hr-greeting">
@@ -185,15 +176,6 @@ natcasesort($departments);
                         <span class="visually-hidden">Search employees</span>
                         <input type="search" id="employeeSearch" placeholder="Search employee name" autocomplete="off">
                     </label>
-                    <label class="visually-hidden" for="departmentFilter">Filter by department</label>
-                    <select id="departmentFilter" class="hr-filter-select">
-                        <option value="">All departments</option>
-                        <?php foreach ($departments as $department): ?>
-                            <option value="<?= htmlspecialchars(strtolower($department), ENT_QUOTES, 'UTF-8'); ?>">
-                                <?= htmlspecialchars($department); ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
                     <label class="visually-hidden" for="attendanceFilter">Filter by attendance</label>
                     <select id="attendanceFilter" class="hr-filter-select">
                         <option value="">All attendance</option>
@@ -217,11 +199,9 @@ natcasesort($departments);
                         <?php foreach ($records as $row): ?>
                             <?php
                                 $employee_id = (string) ($row['employee_id'] ?? '');
-                                $department = trim($row['department'] ?? '');
                                 $attendance_status = $attendance_by_employee[$employee_id] ?? 'absent';
                                 $search_text = strtolower(implode(' ', [
                                     $row['username'] ?? '',
-                                    $department,
                                     $row['position'] ?? '',
                                     $row['contact_number'] ?? '',
                                     $row['email'] ?? '',
@@ -231,7 +211,6 @@ natcasesort($departments);
                             <article
                                 class="hr-employee-card"
                                 data-search="<?= htmlspecialchars($search_text, ENT_QUOTES, 'UTF-8'); ?>"
-                                data-department="<?= htmlspecialchars(strtolower($department), ENT_QUOTES, 'UTF-8'); ?>"
                                 data-attendance="<?= htmlspecialchars($attendance_status, ENT_QUOTES, 'UTF-8'); ?>"
                             >
                                 <div class="hr-employee-card-top">
@@ -244,10 +223,6 @@ natcasesort($departments);
                                     </span>
                                 </div>
                                 <h3><?= htmlspecialchars($row['username'] ?? 'Unnamed employee'); ?></h3>
-                                <p class="hr-employee-department">
-                                    <span>Department</span>
-                                    <?= htmlspecialchars($department !== '' ? $department : 'Not specified'); ?>
-                                </p>
                                 <p class="hr-employee-position">
                                     <span>Position</span>
                                     <?= htmlspecialchars(($row['position'] ?? '') !== '' ? $row['position'] : 'Not specified'); ?>
@@ -272,11 +247,10 @@ natcasesort($departments);
                                         class="hr-action-button is-view"
                                         data-employee-id="<?= htmlspecialchars($employee_id, ENT_QUOTES, 'UTF-8'); ?>"
                                         data-employee-name="<?= htmlspecialchars($row['username'] ?? 'Unnamed employee', ENT_QUOTES, 'UTF-8'); ?>"
-                                        data-department="<?= htmlspecialchars($department !== '' ? $department : 'Not specified', ENT_QUOTES, 'UTF-8'); ?>"
-                                        data-position="<?= htmlspecialchars(($row['position'] ?? '') !== '' ? $row['position'] : 'Not specified', ENT_QUOTES, 'UTF-8'); ?>"
-                                        data-contact="<?= htmlspecialchars(($row['contact_number'] ?? '') !== '' ? $row['contact_number'] : 'Not provided', ENT_QUOTES, 'UTF-8'); ?>"
-                                        data-email="<?= htmlspecialchars(($row['email'] ?? '') !== '' ? $row['email'] : 'Not provided', ENT_QUOTES, 'UTF-8'); ?>"
-                                        data-address="<?= htmlspecialchars(($row['address'] ?? '') !== '' ? $row['address'] : 'Not provided', ENT_QUOTES, 'UTF-8'); ?>"
+                                        data-position="<?= htmlspecialchars($row['position'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                        data-contact="<?= htmlspecialchars($row['contact_number'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                        data-email="<?= htmlspecialchars($row['email'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                        data-address="<?= htmlspecialchars($row['address'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                                         data-attendance="<?= htmlspecialchars(ucfirst($attendance_status), ENT_QUOTES, 'UTF-8'); ?>"
                                         onclick="openEmployeeModal(this)"
                                     >View</button>
@@ -296,8 +270,7 @@ natcasesort($departments);
                     <div class="hr-empty-state">
                         <span class="hr-empty-icon" aria-hidden="true">＋</span>
                         <h3>No employee records yet</h3>
-                        <p>Register an employee or hire an applicant to see their profile here.</p>
-                        <a class="hr-primary-link" href="register.php">Register User</a>
+                        <p>Hire an applicant to add an employee profile. An administrator creates system accounts.</p>
                     </div>
                 <?php endif; ?>
             </section>
@@ -326,10 +299,6 @@ natcasesort($departments);
                             <dd id="modalEmployeeEmail"></dd>
                         </div>
                         <div>
-                            <dt>Department</dt>
-                            <dd id="modalEmployeeDepartment"></dd>
-                        </div>
-                        <div>
                             <dt>Contact Number</dt>
                             <dd id="modalEmployeeContact"></dd>
                         </div>
@@ -343,9 +312,51 @@ natcasesort($departments);
                         </div>
                     </dl>
                     <div class="hr-modal-actions">
-                        <a class="hr-action-button is-edit" id="editEmployeeLink" href="#">Edit Details</a>
+                        <button type="button" class="hr-action-button is-edit" id="editEmployeeButton">Edit Details</button>
                         <button type="button" class="hr-action-button is-close" onclick="closeEmployeeModal()">Close</button>
                     </div>
+                </section>
+            </div>
+
+            <div class="hr-modal-backdrop" id="editEmployeeModal" hidden>
+                <section
+                    class="hr-employee-modal hr-edit-employee-modal"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="editEmployeeTitle"
+                >
+                    <button type="button" class="hr-modal-close" aria-label="Close employee editor" onclick="closeEditEmployeeModal()">×</button>
+                    <h2 id="editEmployeeTitle">Edit Employee Details</h2>
+                    <form action="HR.php" method="post" class="hr-edit-employee-form">
+                        <input type="hidden" name="employee_id" id="editEmployeeId">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['employee_edit_csrf'], ENT_QUOTES, 'UTF-8'); ?>">
+                        <input type="hidden" name="is_update" value="1">
+                        <input type="hidden" name="submit" value="1">
+                        <label>
+                            <span>Full name</span>
+                            <input type="text" name="username" id="editEmployeeName" maxlength="100" required>
+                        </label>
+                        <label>
+                            <span>Position</span>
+                            <input type="text" name="position" id="editEmployeePosition" maxlength="100">
+                        </label>
+                        <label>
+                            <span>Contact number</span>
+                            <input type="text" name="contact_number" id="editEmployeeContact" maxlength="20" inputmode="numeric">
+                        </label>
+                        <label>
+                            <span>Email address</span>
+                            <input type="email" name="email" id="editEmployeeEmail" maxlength="255">
+                        </label>
+                        <label class="hr-edit-address">
+                            <span>Address</span>
+                            <input type="text" name="address" id="editEmployeeAddress" maxlength="255">
+                        </label>
+                        <div class="hr-modal-actions hr-edit-actions">
+                            <button type="button" class="hr-action-button is-close" onclick="closeEditEmployeeModal()">Cancel</button>
+                            <button type="submit" class="hr-action-button is-view">Save Changes</button>
+                        </div>
+                    </form>
                 </section>
             </div>
         </main>
@@ -353,16 +364,18 @@ natcasesort($departments);
 
     <script>
         const employeeModal = document.getElementById('employeeModal');
-        const editEmployeeLink = document.getElementById('editEmployeeLink');
+        const editEmployeeModal = document.getElementById('editEmployeeModal');
+        const editEmployeeButton = document.getElementById('editEmployeeButton');
+        let selectedEmployeeButton = null;
 
         function openEmployeeModal(button) {
+            selectedEmployeeButton = button;
             document.getElementById('modalEmployeeName').textContent = button.dataset.employeeName;
             document.getElementById('modalEmployeeId').textContent = button.dataset.employeeId;
-            document.getElementById('modalEmployeeEmail').textContent = button.dataset.email;
-            document.getElementById('modalEmployeeDepartment').textContent = button.dataset.department;
-            document.getElementById('modalEmployeeContact').textContent = button.dataset.contact;
-            document.getElementById('modalEmployeePosition').textContent = button.dataset.position;
-            document.getElementById('modalEmployeeAddress').textContent = button.dataset.address;
+            document.getElementById('modalEmployeeEmail').textContent = button.dataset.email || 'Not provided';
+            document.getElementById('modalEmployeeContact').textContent = button.dataset.contact || 'Not provided';
+            document.getElementById('modalEmployeePosition').textContent = button.dataset.position || 'Not specified';
+            document.getElementById('modalEmployeeAddress').textContent = button.dataset.address || 'Not provided';
             document.getElementById('modalAttendanceText').textContent = button.dataset.attendance;
             document.getElementById('modalAttendanceStatus').classList.toggle(
                 'is-present',
@@ -372,11 +385,31 @@ natcasesort($departments);
                 'is-absent',
                 button.dataset.attendance.toLowerCase() !== 'present'
             );
-            editEmployeeLink.href = `register.php?edit_id=${encodeURIComponent(button.dataset.employeeId)}`;
             employeeModal.hidden = false;
             document.body.classList.add('hr-modal-open');
             document.querySelector('.hr-modal-close').focus();
         }
+
+        function openEditEmployeeModal() {
+            if (!selectedEmployeeButton) return;
+            const employee = selectedEmployeeButton.dataset;
+            document.getElementById('editEmployeeId').value = employee.employeeId;
+            document.getElementById('editEmployeeName').value = employee.employeeName;
+            document.getElementById('editEmployeePosition').value = employee.position;
+            document.getElementById('editEmployeeContact').value = employee.contact;
+            document.getElementById('editEmployeeEmail').value = employee.email;
+            document.getElementById('editEmployeeAddress').value = employee.address;
+            employeeModal.hidden = true;
+            editEmployeeModal.hidden = false;
+            document.querySelector('#editEmployeeModal .hr-modal-close').focus();
+        }
+
+        function closeEditEmployeeModal() {
+            editEmployeeModal.hidden = true;
+            document.body.classList.remove('hr-modal-open');
+        }
+
+        editEmployeeButton.addEventListener('click', openEditEmployeeModal);
 
         function closeEmployeeModal() {
             employeeModal.hidden = true;
@@ -386,13 +419,16 @@ natcasesort($departments);
         employeeModal.addEventListener('click', (event) => {
             if (event.target === employeeModal) closeEmployeeModal();
         });
+        editEmployeeModal.addEventListener('click', (event) => {
+            if (event.target === editEmployeeModal) closeEditEmployeeModal();
+        });
 
         document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape' && !employeeModal.hidden) closeEmployeeModal();
+            if (event.key === 'Escape' && !editEmployeeModal.hidden) closeEditEmployeeModal();
+            else if (event.key === 'Escape' && !employeeModal.hidden) closeEmployeeModal();
         });
 
         const employeeSearch = document.getElementById('employeeSearch');
-        const departmentFilter = document.getElementById('departmentFilter');
         const attendanceFilter = document.getElementById('attendanceFilter');
         const employeeCards = Array.from(document.querySelectorAll('.hr-employee-card'));
         const employeeResultCount = document.getElementById('employeeResultCount');
@@ -400,15 +436,13 @@ natcasesort($departments);
 
         function filterEmployees() {
             const searchTerm = employeeSearch.value.trim().toLowerCase();
-            const selectedDepartment = departmentFilter.value;
             const selectedAttendance = attendanceFilter.value;
             let visibleCount = 0;
 
             employeeCards.forEach((card) => {
                 const matchesSearch = card.dataset.search.includes(searchTerm);
-                const matchesDepartment = !selectedDepartment || card.dataset.department === selectedDepartment;
                 const matchesAttendance = !selectedAttendance || card.dataset.attendance === selectedAttendance;
-                const isVisible = matchesSearch && matchesDepartment && matchesAttendance;
+                const isVisible = matchesSearch && matchesAttendance;
 
                 card.hidden = !isVisible;
                 if (isVisible) visibleCount += 1;
@@ -421,9 +455,9 @@ natcasesort($departments);
         }
 
         employeeSearch.addEventListener('input', filterEmployees);
-        departmentFilter.addEventListener('change', filterEmployees);
         attendanceFilter.addEventListener('change', filterEmployees);
     </script>
+    <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
     <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

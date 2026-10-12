@@ -52,7 +52,7 @@ function renderEmployees() {
   const body = document.getElementById("employeeBody");
 
   const filtered = employees.filter(e =>
-    e.name.toLowerCase().includes(q) || e.dept.toLowerCase().includes(q) || e.role.toLowerCase().includes(q)
+    e.name.toLowerCase().includes(q) || e.role.toLowerCase().includes(q)
   );
 
   if (body) {
@@ -62,7 +62,6 @@ function renderEmployees() {
           <div class="emp-name">${e.name.toUpperCase()}</div>
           <div class="emp-role">${e.role}</div>
         </td>
-        <td>${e.dept}</td>
       </tr>
     `).join("");
   }
@@ -155,7 +154,6 @@ function showEmployeeDetail(i) {
     <div class="panel">
       <h3>${e.name}</h3>
       <div class="row"><span>Position</span><span>${e.role}</span></div>
-      <div class="row"><span>Department</span><span>${e.dept}</span></div>
       <div class="row"><span>Status</span><span>${e.status || 'Active'}</span></div>
     </div>
     <div class="panel">
@@ -172,7 +170,6 @@ function renderTasks() {
     <tr>
       <td>${t.who}</td>
       <td>${t.task}</td>
-      <td>${t.dept}</td>
       <td>${t.due}</td>
       <td>${t.status}</td>
     </tr>

@@ -7,7 +7,7 @@ let productPieChart;
 let chartRequestId = 0;
 
 function showPage(page) {
-    const pages = ['dashboard', 'task', 'employee'];
+    const pages = ['dashboard', 'task'];
     pages.forEach(pageName => {
         const pageElement = document.getElementById(`page-${pageName}`);
         if (pageElement) {

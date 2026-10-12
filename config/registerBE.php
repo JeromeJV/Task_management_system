@@ -3,6 +3,16 @@
 //               Database Connection
 // -----------------------------------------------------
 include('config/connection.php');
+require_once __DIR__ . '/system_audit.php';
+require_once __DIR__ . '/account_access.php';
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
+if (!isset($_SESSION['id'], $_SESSION['role']) || $_SESSION['role'] !== 'HR') {
+    http_response_code(403);
+    exit('HR access is required to manage employee records.');
+}
+requireActiveAccount($conn);
 
 // Siguraduhing tama ang timezone
 date_default_timezone_set('Asia/Manila');
@@ -47,7 +57,6 @@ if (isset($_POST['hire_applicant_id']) || isset($_POST['applicant_id'])) {
             if (empty($fullname)) {$fullname = $app_data['username'] ?? $app_data['name'] ?? 'New Employee';
             }
 
-            $dept    = !empty($app_data['department']) ?$app_data['department'] : 'General';
             $pos     = !empty($app_data['position_applied']) ? $app_data['position_applied'] : ($app_data['position'] ?? 'Employee');
             $contact =$app_data['contact_number'] ?? $app_data['phone'] ?? '';$address = trim(($app_data['house_number'] ?? '') . ' ' . ($app_data['street'] ?? '') . ' ' . ($app_data['barangay'] ?? '') . ' ' . ($app_data['city'] ?? ''));
             if (empty(trim($address))) {
@@ -55,14 +64,13 @@ if (isset($_POST['hire_applicant_id']) || isset($_POST['applicant_id'])) {
             }
             $email   =$app_data['email'] ?? '';
 
-            $safe_name    = mysqli_real_escape_string($conn, $fullname);$safe_dept    = mysqli_real_escape_string($conn,$dept);
+            $safe_name    = mysqli_real_escape_string($conn, $fullname);
             $safe_pos     = mysqli_real_escape_string($conn, $pos);$safe_contact = mysqli_real_escape_string($conn,$contact);
             $safe_addr    = mysqli_real_escape_string($conn, $address);$safe_email   = mysqli_real_escape_string($conn,$email);
 
-            $hire_sql = "INSERT INTO employee (username, department, position, contact_number, address, email) 
-                         VALUES ('$safe_name', '$safe_dept', '$safe_pos', '$safe_contact', '$safe_addr', '$safe_email')
+            $hire_sql = "INSERT INTO employee (username, position, contact_number, address, email)
+                         VALUES ('$safe_name', '$safe_pos', '$safe_contact', '$safe_addr', '$safe_email')
                          ON DUPLICATE KEY UPDATE 
-                            department = VALUES(department),
                             position = VALUES(position),
                             contact_number = VALUES(contact_number),
                             address = VALUES(address),
@@ -76,9 +84,18 @@ if (isset($_POST['hire_applicant_id']) || isset($_POST['applicant_id'])) {
                         $new_emp_id =$r['employee_id'];
                     }
                 }
-                
+
                 if ($new_emp_id) {
                     registerEmployeeToAttendance($conn, $new_emp_id,$fullname);
+                    recordSystemAudit(
+                        $conn,
+                        (int) ($_SESSION['id'] ?? 0) ?: null,
+                        (string) ($_SESSION['name'] ?? 'HR user'),
+                        'employee_hired',
+                        'employee',
+                        (int) $new_emp_id,
+                        'Added employee profile for ' . $fullname . '.'
+                    );
                 }
 
                 $hire_message = "Applicant successfully hired, added to Employee database, and connected to Attendance.";
@@ -98,7 +115,6 @@ if (isset($_POST['hire_applicant_id']) || isset($_POST['applicant_id'])) {
 // -----------------------------------------------------
 if (isset($_POST['submit']) && !isset($_POST['is_update'])) { 
     $username       =$_POST['username'] ?? '';
-    $department     =$_POST['department'] ?? '';
     $position       =$_POST['position'] ?? '';
     $contact_number =$_POST['contact_number'] ?? '';
     $address        =$_POST['address'] ?? '';
@@ -118,17 +134,30 @@ if (isset($_POST['submit']) && !isset($_POST['is_update'])) {
         $isValid = false;
     }
 
-    if ($isValid) {$safe_user_name      = mysqli_real_escape_string($conn,$username);
-        $safe_department     = mysqli_real_escape_string($conn, $department);$safe_position       = mysqli_real_escape_string($conn,$position);
-        $safe_contact_number = mysqli_real_escape_string($conn, $contact_number);$safe_address        = mysqli_real_escape_string($conn,$address);
-        $safe_email          = mysqli_real_escape_string($conn, $email);$sql = "INSERT INTO employee (username, department, position, contact_number, address, email) 
-                VALUES ('$safe_user_name', '$safe_department', '$safe_position', '$safe_contact_number', '$safe_address', '$safe_email')";
+    if ($isValid) {
+        $safe_user_name      = mysqli_real_escape_string($conn, $username);
+        $safe_position       = mysqli_real_escape_string($conn,$position);
+        $safe_contact_number = mysqli_real_escape_string($conn, $contact_number);
+        $safe_address        = mysqli_real_escape_string($conn, $address);
+        $safe_email          = mysqli_real_escape_string($conn, $email);
+        $sql = "INSERT INTO employee (username, position, contact_number, address, email)
+                VALUES ('$safe_user_name', '$safe_position', '$safe_contact_number', '$safe_address', '$safe_email')";
         
         $query = mysqli_query($conn,$sql);
 
         if ($query) {
             $inserted_emp_id = mysqli_insert_id($conn);
-            registerEmployeeToAttendance($conn,$inserted_emp_id, $username);$message = "New Employee added successfully and registered to Attendance system.";
+            registerEmployeeToAttendance($conn,$inserted_emp_id, $username);
+            recordSystemAudit(
+                $conn,
+                (int) ($_SESSION['id'] ?? 0) ?: null,
+                (string) ($_SESSION['name'] ?? 'HR user'),
+                'employee_created',
+                'employee',
+                (int) $inserted_emp_id,
+                'Created employee profile for ' . $username . '.'
+            );
+            $message = "New Employee added successfully and registered to Attendance system.";
         } else {
             $message = "Error: " . mysqli_error($conn);
         }
@@ -144,25 +173,35 @@ $password_err = '';$cpassword_err = '';
 $role_err = '';
 
 if (isset($_POST['register_user'])) {
-    $employee_id =$_POST['employee_id'] ?? '';
+    $employee_id = filter_var($_POST['employee_id'] ?? null, FILTER_VALIDATE_INT);
     $password    =$_POST['password'] ?? '';
     $cpassword   =$_POST['cpassword'] ?? '';
-    $role        =$_POST['role'] ?? 'user';
+    $roleValue   = $_POST['role'] ?? '';
+    $role        = is_string($roleValue) ? trim($roleValue) : '';
 
     $isValid = true;
-    if (!in_array($role, ['HR', 'payroll', 'log', 'super', 'pro', 'employee'], true)) {
-        $role_err = 'Please select a valid system role.';
+    if ($role !== 'employee') {
+        $role_err = 'HR may create employee accounts. Ask an administrator to assign elevated system roles.';
+        $msg = $role_err;
         $isValid = false;
     }
 
-    if (empty($employee_id)) {$name_err = "Please select an employee.";
+    if (!$employee_id || $employee_id < 1) {$name_err = "Please select an employee.";
         $isValid = false;
     } else {
-        // Kunin ang detalye ng napiling Employee
-        $safe_emp_id = mysqli_real_escape_string($conn,$employee_id);
-        $emp_query = mysqli_query($conn, "SELECT username, email FROM employee WHERE employee_id = '$safe_emp_id'");
-        
-        if ($emp_row = mysqli_fetch_assoc($emp_query)) {
+        $emp_query = $conn->prepare('SELECT username, email FROM employee WHERE employee_id = ?');
+        if (!$emp_query) {
+            throw new RuntimeException('Unable to prepare employee account lookup: ' . $conn->error);
+        }
+        $emp_query->bind_param('i', $employee_id);
+        if (!$emp_query->execute()) {
+            $error = $emp_query->error;
+            $emp_query->close();
+            throw new RuntimeException('Unable to look up selected employee: ' . $error);
+        }
+        $emp_row = $emp_query->get_result()->fetch_assoc();
+        $emp_query->close();
+        if ($emp_row) {
             $name  =$emp_row['username'];
             $email =$emp_row['email'];
         } else {
@@ -193,15 +232,29 @@ if (isset($_POST['register_user'])) {
 
     // I-save sa `users` table
     if ($isValid) {
-        $safe_name     = mysqli_real_escape_string($conn, $name);$safe_email    = mysqli_real_escape_string($conn,$email);
-        $safe_password = mysqli_real_escape_string($conn, $password);$safe_role     = mysqli_real_escape_string($conn,$role);
-
-        $insert_user = "INSERT INTO `users` (`name`, `email`, `password`, `role`) 
-                        VALUES ('$safe_name', '$safe_email', '$safe_password', '$safe_role')";
-        
-        if (mysqli_query($conn, $insert_user)) {$msg = "System User Account successfully created and linked to " . htmlspecialchars($name) . "!";
+        $insert_user = $conn->prepare(
+            'INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)'
+        );
+        if (!$insert_user) {
+            throw new RuntimeException('Unable to prepare account creation: ' . $conn->error);
+        }
+        $insert_user->bind_param('ssss', $name, $email, $password, $role);
+        if (!$insert_user->execute()) {
+            $error = $insert_user->error;
+            $insert_user->close();
+            $msg = 'Something went wrong: ' . $error;
         } else {
-            $msg = "Something went wrong: " . mysqli_error($conn);
+            $insert_user->close();
+            recordSystemAudit(
+                $conn,
+                (int) ($_SESSION['id'] ?? 0) ?: null,
+                (string) ($_SESSION['name'] ?? 'HR user'),
+                'account_created',
+                'user',
+                (int) $conn->insert_id,
+                'Created employee account for ' . $name . ' (' . $email . ').'
+            );
+            $msg = 'System User Account successfully created and linked to ' . htmlspecialchars($name) . '!';
         }
     }
 }
@@ -213,17 +266,27 @@ $passid = $_POST['idno'] ?? $_POST['user_id'] ?? null;
 $view_data = null;
 
 // A. DELETE SYSTEM USER ACCOUNT (Mula sa Table sa Ibaba)
-if (isset($_POST['delete_user']) && !empty($_POST['user_id'])) {
-    $user_id = mysqli_real_escape_string($conn, $_POST['user_id']);$delete_sql = "DELETE FROM `users` WHERE id = '$user_id'";
-    if (mysqli_query($conn, $delete_sql)) {$delete_message = "User Account Deleted Successfully.";
-    } else {
-        $delete_message = "Error deleting record: " . mysqli_error($conn);
-    }
+if (isset($_POST['update_user_role']) || isset($_POST['delete_user'])) {
+    $delete_message = "Error: Only administrators can change account roles or delete system accounts.";
 
 // B. DELETE EMPLOYEE RECORD
 } elseif (isset($_POST['del']) && !empty($passid)) {
     $safe_passid = mysqli_real_escape_string($conn, $passid);$sql = "DELETE FROM employee WHERE employee_id = '$safe_passid'";
-    $result = mysqli_query($conn, $sql);$delete_message = "Employee Record Deleted Successfully.";
+    $result = mysqli_query($conn, $sql);
+    if ($result) {
+        recordSystemAudit(
+            $conn,
+            (int) ($_SESSION['id'] ?? 0) ?: null,
+            (string) ($_SESSION['name'] ?? 'HR user'),
+            'employee_deleted',
+            'employee',
+            (int) $passid,
+            'Deleted employee record #' . (int) $passid . '.'
+        );
+        $delete_message = "Employee Record Deleted Successfully.";
+    } else {
+        $delete_message = 'Error deleting employee record: ' . mysqli_error($conn);
+    }
 
 // C. FETCH EMPLOYEE FOR UPDATE
 } elseif (isset($_POST['upd']) && !empty($passid)) {
@@ -234,7 +297,6 @@ if (isset($_POST['delete_user']) && !empty($_POST['user_id'])) {
     if ($row) {$view_data = [
             'employee_id'    => $safe_passid,
             'username'       => $row['username'],
-            'department'     => $row['department'],
             'position'       => $row['position'],
             'contact_number' => $row['contact_number'],
             'address'        => $row['address'],
@@ -246,20 +308,18 @@ if (isset($_POST['delete_user']) && !empty($_POST['user_id'])) {
 if (isset($_POST['submit']) && isset($_POST['is_update'])) {
     $employee_id    =$_POST['employee_id'] ?? '';
     $username       =$_POST['username'] ?? '';
-    $department     =$_POST['department'] ?? '';
     $position       =$_POST['position'] ?? '';
     $contact_number =$_POST['contact_number'] ?? '';
     $address        =$_POST['address'] ?? '';
     $email          =$_POST['email'] ?? '';
 
     $safe_employee_id    = mysqli_real_escape_string($conn,$employee_id);
-    $safe_user_name      = mysqli_real_escape_string($conn, $username);$safe_department     = mysqli_real_escape_string($conn,$department);
+    $safe_user_name      = mysqli_real_escape_string($conn, $username);
     $safe_position       = mysqli_real_escape_string($conn, $position);$safe_contact_number = mysqli_real_escape_string($conn,$contact_number);
     $safe_address        = mysqli_real_escape_string($conn, $address);$safe_email          = mysqli_real_escape_string($conn,$email);
 
     $sql = "UPDATE employee 
             SET username = '$safe_user_name', 
-                department = '$safe_department',
                 position = '$safe_position',
                 contact_number = '$safe_contact_number',
                 address = '$safe_address',
@@ -267,6 +327,15 @@ if (isset($_POST['submit']) && isset($_POST['is_update'])) {
             WHERE employee_id = '$safe_employee_id'";
 
     if (mysqli_query($conn,$sql)) {
+        recordSystemAudit(
+            $conn,
+            (int) ($_SESSION['id'] ?? 0) ?: null,
+            (string) ($_SESSION['name'] ?? 'HR user'),
+            'employee_updated',
+            'employee',
+            (int) $employee_id,
+            'Updated employee profile for ' . $username . '.'
+        );
         // I-update din sa attendance
         $updateAtt =$conn->prepare("UPDATE attendance SET username = ? WHERE employee_id = ?");
         $updateAtt->bind_param("si", $safe_user_name, $safe_employee_id);$updateAtt->execute();

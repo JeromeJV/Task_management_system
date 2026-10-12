@@ -47,11 +47,28 @@ function getPayrollAttendanceSummary(mysqli $conn, int $employeeId, string $star
     }
 
     $statement = $conn->prepare("
-        SELECT attendance_date, status, time_in
-        FROM attendance
-        WHERE (employee_id = ? OR user_id = ?)
-          AND attendance_date BETWEEN ? AND ?
-        ORDER BY attendance_date ASC, attendance_id ASC
+        SELECT a.attendance_date,
+               a.status,
+               a.time_in,
+               a.time_out,
+               CASE
+                   WHEN LOWER(TRIM(COALESCE(e.position, ''))) IN ('log', 'logistic', 'logistics', 'driver', 'delivery driver')
+                     OR EXISTS (
+                         SELECT 1
+                         FROM users u
+                         WHERE u.role = 'log'
+                           AND (
+                               u.id = a.user_id
+                               OR LOWER(TRIM(u.name)) = LOWER(TRIM(e.username))
+                           )
+                     )
+                   THEN 1 ELSE 0
+               END AS is_logistics
+        FROM attendance a
+        LEFT JOIN employee e ON e.employee_id = a.employee_id
+        WHERE (a.employee_id = ? OR a.user_id = ?)
+          AND a.attendance_date BETWEEN ? AND ?
+        ORDER BY a.attendance_date ASC, a.attendance_id ASC
     ");
     if (!$statement) {
         throw new RuntimeException('Failed to prepare payroll attendance query: ' . $conn->error);
@@ -69,11 +86,18 @@ function getPayrollAttendanceSummary(mysqli $conn, int $employeeId, string $star
     while ($row = $result->fetch_assoc()) {
         $date = $row['attendance_date'];
         $status = strtolower(trim($row['status'] ?? ''));
-        $dayFraction = match ($status) {
-            'present', 'late' => 1.0,
-            'half day' => 0.5,
-            default => 0.0
-        };
+        $isLogistics = (bool) ($row['is_logistics'] ?? false);
+        $timeIn = $row['time_in'] ?? '';
+        $timeOut = $row['time_out'] ?? '';
+        $hasTimeIn = $timeIn !== '' && $timeIn !== '00:00:00';
+        $hasTimeOut = $timeOut !== '' && $timeOut !== '00:00:00';
+        $dayFraction = $isLogistics
+            ? ($hasTimeIn ? ($hasTimeOut ? 1.0 : 0.5) : 0.0)
+            : match ($status) {
+                'present', 'late' => 1.0,
+                'half day' => 0.5,
+                default => 0.0
+            };
 
         if (!isset($dailyAttendance[$date])) {
             $dailyAttendance[$date] = [
@@ -87,12 +111,11 @@ function getPayrollAttendanceSummary(mysqli $conn, int $employeeId, string $star
             $dailyAttendance[$date]['days_worked'] = max($dailyAttendance[$date]['days_worked'], $dayFraction);
         }
 
-        $timeIn = $row['time_in'] ?? '';
-        if ($timeIn !== '' && $timeIn !== '00:00:00' && $timeIn > '12:00:00') {
+        if (!$isLogistics && $hasTimeIn && $timeIn > '12:00:00') {
             $dailyAttendance[$date]['time_in_after_noon'] = true;
         }
 
-        if ($timeIn !== '' && $timeIn !== '00:00:00' && $timeIn > '08:01:00') {
+        if ($hasTimeIn && $timeIn > '08:01:00') {
             $lateSeconds = strtotime($timeIn) - strtotime('08:01:00');
             $rawLateMinutes = intdiv($lateSeconds, 60);
             $dailyAttendance[$date]['raw_late_minutes'] = max($dailyAttendance[$date]['raw_late_minutes'], $rawLateMinutes);

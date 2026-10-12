@@ -8,7 +8,7 @@ $_REQUEST['module'] = 'factory';
 include('config/Supervisor_API.php');
 
 // Tiyaking Production Worker ang naka-login
-if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'pro') {
+if (!isset($_SESSION['email']) || !in_array($_SESSION['role'] ?? '', ['pro', 'cooking', 'packaging'], true)) {
     header("Location: index.php");
     exit();
 }
@@ -580,8 +580,10 @@ $active_tab = $_GET['tab'] ?? 'main';
             }
         }
     </style>
+    <link rel="stylesheet" href="css/role-form-controls.css?v=<?= filemtime(__DIR__ . '/css/role-form-controls.css'); ?>">
 </head>
 <body>
+<?php include __DIR__ . '/config/notification_bell.php'; ?>
 
 <div class="container">
     <!-- Header Navigation -->
@@ -640,7 +642,7 @@ $active_tab = $_GET['tab'] ?? 'main';
                             <?php 
                             $first_item = reset($pending_records);
                             foreach ($pending_records as $index => $row): 
-                                $is_done = (($row['product_status'] ?? '') === 'product done');
+                                $is_done = (($row['assigned_work_status'] ?? '') === 'Done');
                             ?>
                                 <tr class="selectable-row <?= $index === 0 ? 'selected-row' : ''; ?>" 
                                     onclick="selectTask(this)"
@@ -656,7 +658,7 @@ $active_tab = $_GET['tab'] ?? 'main';
                                             <div class="item-icon">GT</div>
                                             <div>
                                                 <strong><?= htmlspecialchars($row['product_name'] ?? 'N/A'); ?></strong><br>
-                                                <small style="color:#aaa; font-size:10px;"><?= $is_done ? 'Completed' : 'Selected for review'; ?></small>
+                                                <small style="color:#aaa; font-size:10px;"><?= $is_done ? 'Completed' : 'In Progress'; ?></small>
                                             </div>
                                         </div>
                                     </td>
@@ -669,7 +671,7 @@ $active_tab = $_GET['tab'] ?? 'main';
                                         <?php if ($is_done): ?>
                                             <span class="badge badge-done">Done</span>
                                         <?php else: ?>
-                                            <span class="badge badge-pending">Pending</span>
+                                            <span class="badge badge-pending">In Progress</span>
                                         <?php endif; ?>
                                     </td>
                                 </tr>
@@ -726,8 +728,8 @@ $active_tab = $_GET['tab'] ?? 'main';
                     </div>
 
                     <div id="actionContainer">
-                        <?php if (($first_item['product_status'] ?? '') !== 'product done'): ?>
-                            <button type="button" class="btn-continue" onclick="openModal()">Continue</button>
+                        <?php if (($first_item['assigned_work_status'] ?? 'Pending') !== 'Done'): ?>
+                            <button type="button" class="btn-continue" onclick="openModal()">Complete <?= htmlspecialchars($first_item['assigned_work_type'] ?? 'Stage'); ?></button>
                         <?php else: ?>
                             <button type="button" class="btn-continue" style="background:#ccc; cursor:not-allowed;" disabled>Completed</button>
                         <?php endif; ?>
@@ -738,13 +740,13 @@ $active_tab = $_GET['tab'] ?? 'main';
                         <div class="modal-card">
                             <div class="modal-icon">?</div>
                             <h3 style="font-size: 16px; margin-bottom: 8px;">Are you sure you want to continue?</h3>
-                            <p style="font-size: 12px; color: #666;">This will mark the selected item as completed in the production flow.</p>
+                            <p id="completionMessage" style="font-size: 12px; color: #666;">This will complete the selected work area.</p>
                             
                             <form id="productionCompletionForm" action="production.php" method="post">
                                 <input type="hidden" name="idno" id="modalInputId" value="<?= htmlspecialchars($first_item['production_id']); ?>">
                                 <div class="modal-actions">
                                     <button type="button" class="btn-modal-cancel" onclick="closeModal()">Cancel</button>
-                                    <button type="submit" name="mark_done" class="btn-modal-submit">Continue</button>
+                                    <button type="submit" name="mark_done" class="btn-modal-submit">Complete Stage</button>
                                 </div>
                             </form>
                         </div>
@@ -789,7 +791,7 @@ $active_tab = $_GET['tab'] ?? 'main';
                                     <td><?= htmlspecialchars($row['Stock_number'] ?? ''); ?></td>
                                     <td><?= htmlspecialchars($row['due_date'] ?? ''); ?></td>
                                     <td><?= htmlspecialchars($row['assigned_work_type'] ?? ''); ?></td>
-                                    <td><span class="badge badge-done">• Completed</span></td>
+                                    <td><span class="badge badge-done">• <?= htmlspecialchars($row['assigned_work_status'] ?? 'Completed'); ?></span></td>
                                     <td>
                                         <form action="factory_task.php" method="post" style="display:inline;">
                                             <input type="hidden" name="idno" value="<?= htmlspecialchars($row['production_id'] ?? ''); ?>">
@@ -863,6 +865,10 @@ function selectTask(rowElement) {
     document.getElementById('detailBoxTarget').innerText = target;
     document.getElementById('detailBoxDue').innerText = due;
     document.getElementById('detailBoxWorkType').innerText = workType;
+    document.getElementById('completionMessage').innerText =
+        workType === 'Packaging'
+            ? 'This will complete Packaging and finish the production task.'
+            : 'This will complete Cooking and make Packaging available next.';
 
     // i-Update ang hidden ID sa Modal
     document.getElementById('modalInputId').value = id;
@@ -872,7 +878,7 @@ function selectTask(rowElement) {
     if (status === 'done') {
         actionContainer.innerHTML = '<button type="button" class="btn-continue" style="background:#ccc; cursor:not-allowed;" disabled>Completed</button>';
     } else {
-        actionContainer.innerHTML = '<button type="button" class="btn-continue" onclick="openModal()">Continue</button>';
+        actionContainer.innerHTML = `<button type="button" class="btn-continue" onclick="openModal()">Complete ${workType}</button>`;
     }
 }
 

@@ -12,6 +12,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Application Form</title>
     <link rel="stylesheet" href="../CSS/Applicants.css" />
+    <link rel="stylesheet" href="css/select-control.css?v=<?= filemtime(__DIR__ . '/css/select-control.css'); ?>" />
 </head>
 <body>
 
@@ -231,5 +232,6 @@
     </form>
 
     <script src="../JS/Applicants.js"></script>
+    <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
 </body>
 </html>

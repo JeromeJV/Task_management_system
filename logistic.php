@@ -15,6 +15,8 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'log') {
 // Fallback arrays kung sakaling walang laman
 $pending_records = $pending_records ?? [];
 $history_records = $history_records ?? [];
+$delivery_error = $_SESSION['delivery_error'] ?? '';
+unset($_SESSION['delivery_error']);
 
 // Calculate Dashboard Stats
 $completed_today_count = 0;
@@ -36,8 +38,8 @@ foreach ($pending_records as $rec) {
 }
 
 foreach ($history_records as $hrec) {
-    $h_date = date('Y-m-d', strtotime($hrec['delivery_date'] ?? 'now'));
-    if ($h_date === $today_date || strtolower($hrec['status'] ?? '') === 'delivered') {
+    $completed_at = $hrec['delivered_at'] ?? null;
+    if ($completed_at && date('Y-m-d', strtotime($completed_at)) === $today_date) {
         $completed_today_count++;
     }
 }
@@ -49,6 +51,8 @@ foreach ($history_records as $hrec) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Logistic Portal - Driver Dashboard</title>
     <link rel="stylesheet" href="css/table-scroll.css?v=<?= filemtime(__DIR__ . '/css/table-scroll.css'); ?>">
+    <link rel="stylesheet" href="css/calendar-picker.css?v=<?= filemtime(__DIR__ . '/css/calendar-picker.css'); ?>">
+    <link rel="stylesheet" href="css/select-control.css?v=<?= filemtime(__DIR__ . '/css/select-control.css'); ?>">
     <style>
         :root {
             --bg-color: #f4f6f5;
@@ -634,6 +638,145 @@ foreach ($history_records as $hrec) {
         }
 
         .hidden { display: none !important; }
+        .delivery-error { margin: 16px 20px; padding: 12px 16px; border: 1px solid #f1aeb5; border-radius: 8px; background: #f8d7da; color: #842029; }
+        .delivery-filters { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 20px 18px; }
+        .delivery-filters input, .delivery-filters select { min-height: 40px; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px; }
+        .container .delivery-filters .calendar-picker {
+            width: auto;
+            min-width: 170px;
+            flex: 0 1 190px;
+        }
+
+        .container .delivery-filters .calendar-picker__trigger {
+            min-height: 44px;
+            padding: 10px 13px;
+            border-color: #d9e5dc;
+            border-radius: 11px;
+            background: #ffffff;
+            color: #263b2e;
+            box-shadow: 0 3px 10px rgba(31, 76, 47, 0.06);
+        }
+
+        .container .delivery-filters .calendar-picker__trigger:hover:not(:disabled) {
+            border-color: #7eae8d;
+            background: #f6faf7;
+        }
+
+        .container .delivery-filters .calendar-picker__icon {
+            border-color: var(--primary-green);
+        }
+
+        .container .delivery-filters .calendar-picker__icon::before {
+            background: var(--primary-green);
+        }
+
+        .container .delivery-filters .calendar-picker__icon::after {
+            border-color: var(--primary-green);
+        }
+
+        .container .delivery-filters .calendar-picker__popover {
+            z-index: 1350;
+            width: min(340px, calc(100vw - 32px));
+            padding: 16px;
+            border-color: #dce8df;
+            border-radius: 17px;
+            box-shadow: 0 20px 48px rgba(22, 54, 33, 0.2), 0 4px 12px rgba(22, 54, 33, 0.08);
+        }
+
+        .container .delivery-filters .calendar-picker__header {
+            gap: 10px;
+            margin: -2px -2px 13px;
+            padding: 9px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #236b42, #358a55);
+        }
+
+        .container .delivery-filters .calendar-picker__title {
+            color: #ffffff;
+            font-size: 14px;
+        }
+
+        .container .delivery-filters .calendar-picker__nav {
+            border-color: rgba(255, 255, 255, 0.24);
+            background: rgba(255, 255, 255, 0.12);
+            color: #ffffff;
+        }
+
+        .container .delivery-filters .calendar-picker__nav:hover,
+        .container .delivery-filters .calendar-picker__nav:focus-visible {
+            border-color: rgba(255, 255, 255, 0.55);
+            background: rgba(255, 255, 255, 0.22);
+        }
+
+        .container .delivery-filters .calendar-picker__grid {
+            gap: 5px;
+        }
+
+        .container .delivery-filters .calendar-picker__weekday {
+            height: 29px;
+            color: #7c8a80;
+            font-size: 10px;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .container .delivery-filters .calendar-picker__cell {
+            height: 37px;
+            border-radius: 10px;
+            font-size: 12px;
+        }
+
+        .container .delivery-filters .calendar-picker__cell:hover:not(:disabled),
+        .container .delivery-filters .calendar-picker__cell:focus-visible {
+            border-color: #c5ddcc;
+            background: #edf6ef;
+            color: #236b42;
+        }
+
+        .container .delivery-filters .calendar-picker__cell.is-today {
+            border-color: #7eae8d;
+            background: #f1f8f3;
+            color: #236b42;
+        }
+
+        .container .delivery-filters .calendar-picker__cell[aria-pressed="true"] {
+            border-color: #236b42;
+            background: linear-gradient(135deg, #236b42, #358a55);
+            color: #ffffff;
+            box-shadow: 0 4px 9px rgba(35, 107, 66, 0.22);
+        }
+
+        .container .delivery-filters .calendar-picker__footer {
+            margin-top: 13px;
+            padding-top: 11px;
+            border-color: #e8eee9;
+        }
+
+        .container .delivery-filters .calendar-picker__text-action {
+            padding: 7px 9px;
+            border-radius: 8px;
+        }
+
+        .container .delivery-filters .calendar-picker__text-action--primary {
+            background: #edf6ef;
+            color: #236b42;
+        }
+
+        .container .delivery-filters .calendar-picker--month .calendar-picker__cell {
+            height: 40px;
+        }
+
+        .delivery-due-badge { display: inline-block; margin-top: 7px; padding: 4px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 700; }
+        .delivery-due-overdue { background: var(--badge-red-bg); color: var(--badge-red-text); }
+        .delivery-due-soon { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
+        .delivery-due-normal { background: #e9ecef; color: #495057; }
+        .delivery-activity-btn { padding: 7px 10px; border: 1px solid var(--primary-green); border-radius: 6px; background: white; color: var(--primary-green); cursor: pointer; }
+        .delivery-activity-list { padding-left: 22px; }
+        .delivery-activity-list li { margin: 12px 0; }
+        .delivery-activity-list time { display: block; margin-top: 4px; color: var(--text-muted); font-size: 0.82rem; }
+        .delivery-report-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; padding: 20px; }
+        .delivery-report-card { padding: 18px; border: 1px solid var(--border-color); border-radius: 10px; background: white; }
+        .delivery-report-card strong { display: block; margin-top: 7px; font-size: 1.5rem; }
 
         /* Mobile Adjustments (Smartphones) */
         @media (max-width: 576px) {
@@ -657,6 +800,11 @@ foreach ($history_records as $hrec) {
                 flex: 1;
                 text-align: center;
                 padding: 8px 12px;
+            }
+
+            .container .delivery-filters .calendar-picker {
+                min-width: min(100%, 170px);
+                flex: 1 1 145px;
             }
 
             .hero-section {
@@ -691,8 +839,10 @@ foreach ($history_records as $hrec) {
             }
         }
     </style>
+    <link rel="stylesheet" href="css/role-form-controls.css?v=<?= filemtime(__DIR__ . '/css/role-form-controls.css'); ?>">
 </head>
 <body>
+<?php include __DIR__ . '/config/notification_bell.php'; ?>
 
 <div class="container">
     <!-- Header -->
@@ -703,6 +853,7 @@ foreach ($history_records as $hrec) {
         <div class="nav-tabs">
             <button class="tab-btn active" id="tabMainBtn" onclick="switchTab('main')">Main</button>
             <button class="tab-btn" id="tabHistoryBtn" onclick="switchTab('history')">HISTORY</button>
+            <button class="tab-btn" id="tabReportsBtn" onclick="switchTab('reports')">REPORTS</button>
             <a href="logout.php" class="logout-icon-btn" title="Logout">
                 &#x21AA;
             </a>
@@ -714,6 +865,9 @@ foreach ($history_records as $hrec) {
         <h1>Hello, Welcome to the logistics portal</h1>
         <p>"Delivering faster than ever" &bull; Logged in as: <strong><?= htmlspecialchars($_SESSION['email']); ?></strong></p>
     </div>
+    <?php if ($delivery_error !== ''): ?>
+        <div class="delivery-error" role="alert"><?= htmlspecialchars($delivery_error, ENT_QUOTES, 'UTF-8'); ?></div>
+    <?php endif; ?>
 
     <!-- Dashboard Metrics Top Cards -->
     <div class="metrics-grid">
@@ -743,9 +897,17 @@ foreach ($history_records as $hrec) {
     <div id="mainView">
         <div class="section-header">
             <div class="section-title">Active Shipments</div>
-            <div class="filter-controls">
-                <input type="text" id="cardSearchInput" class="search-input" placeholder="Search shipments..." onkeyup="filterCards()">
-            </div>
+        </div>
+        <div class="delivery-filters">
+            <input type="search" id="cardSearchInput" placeholder="Search ID, product, destination..." oninput="filterCards()">
+            <select id="cardStatusFilter" onchange="filterCards()">
+                <option value="">All statuses</option>
+                <?php foreach (array_unique(array_map(static fn($record) => (string) ($record['status'] ?? 'Pending'), $pending_records)) as $status_option): ?>
+                    <option value="<?= htmlspecialchars(strtolower($status_option), ENT_QUOTES, 'UTF-8'); ?>"><?= htmlspecialchars($status_option, ENT_QUOTES, 'UTF-8'); ?></option>
+                <?php endforeach; ?>
+            </select>
+            <input type="date" id="cardDueFrom" class="calendar-control" aria-label="Due from" onchange="filterCards()">
+            <input type="date" id="cardDueTo" class="calendar-control" aria-label="Due to" onchange="filterCards()">
         </div>
 
         <?php if (!empty($pending_records)): ?>
@@ -758,6 +920,10 @@ foreach ($history_records as $hrec) {
                     $stock = htmlspecialchars($row['stock'] ?? 'N/A');
                     $date = htmlspecialchars($row['delivery_date'] ?? 'N/A');
                     $status = htmlspecialchars($row['status'] ?? 'Pending');
+                    $due_date = $row['delivery_date'] ?? '';
+                    $days_until_due = $due_date ? (int) floor((strtotime($due_date) - strtotime($today_date)) / 86400) : null;
+                    $due_label = $days_until_due === null ? '' : ($days_until_due < 0 ? 'Overdue by ' . abs($days_until_due) . ' day(s)' : ($days_until_due <= 2 ? ($days_until_due === 0 ? 'Due today' : 'Due in ' . $days_until_due . ' day(s)') : 'Scheduled'));
+                    $due_class = $days_until_due !== null && $days_until_due < 0 ? 'delivery-due-overdue' : ($days_until_due !== null && $days_until_due <= 2 ? 'delivery-due-soon' : 'delivery-due-normal');
                 ?>
                     <div class="shipment-card" 
                          data-id="<?= $del_id; ?>"
@@ -766,7 +932,8 @@ foreach ($history_records as $hrec) {
                          data-pieces="<?= $pieces; ?>"
                          data-stock="<?= $stock; ?>"
                          data-date="<?= $date; ?>"
-                         data-status="<?= $status; ?>"
+                         data-status="<?= htmlspecialchars(strtolower($status), ENT_QUOTES, 'UTF-8'); ?>"
+                         data-due-date="<?= htmlspecialchars((string) $due_date, ENT_QUOTES, 'UTF-8'); ?>"
                          onclick="openDetailModal(this)">
                         
                         <div class="card-header">
@@ -780,12 +947,15 @@ foreach ($history_records as $hrec) {
                             <div><strong>&bull; Product:</strong> <?= $prod_name; ?></div>
                             <div><strong>&bull; Destination:</strong> <?= $route; ?></div>
                             <div><strong>&bull; Date:</strong> <?= $date; ?></div>
+                            <?php if ($due_label !== ''): ?><span class="delivery-due-badge <?= $due_class; ?>"><?= htmlspecialchars($due_label, ENT_QUOTES, 'UTF-8'); ?></span><?php endif; ?>
                         </div>
 
                         <button class="btn-view-details" type="button" onclick="event.stopPropagation(); openDetailModal(this.parentElement)">View Details</button>
+                        <button class="delivery-activity-btn" type="button" data-activity-id="<?= $del_id; ?>" data-activity-product="<?= $prod_name; ?>">Activity</button>
                     </div>
                 <?php endforeach; ?>
             </div>
+            <p id="activeFilterEmpty" hidden style="padding: 0 20px 20px; color: var(--text-muted);">No shipments match these filters.</p>
         <?php else: ?>
             <p style="padding: 0 20px 20px; color: var(--text-muted);">No active shipment records found.</p>
         <?php endif; ?>
@@ -795,16 +965,18 @@ foreach ($history_records as $hrec) {
     <div id="historyView" class="hidden">
         <div class="section-header">
             <div class="section-title">History Records</div>
-            <div class="filter-controls">
-                <input type="text" id="tableSearchInput" class="search-input" placeholder="Search history..." onkeyup="filterTable()">
-            </div>
+        </div>
+        <div class="delivery-filters">
+            <input type="search" id="tableSearchInput" placeholder="Search ID, product, destination..." oninput="filterTable()">
+            <input type="date" id="historyDueFrom" class="calendar-control" aria-label="Delivery date from" onchange="filterTable()">
+            <input type="date" id="historyDueTo" class="calendar-control" aria-label="Delivery date to" onchange="filterTable()">
         </div>
 
         <div class="table-container table-scroll">
             <?php if (!empty($history_records)): ?>
                 <table class="custom-table" id="historyTable">
                     <thead>
-                        <tr>
+                        <tr data-delivery-date="<?= htmlspecialchars((string) ($row['delivery_date'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
                             <th>Shipment ID</th>
                             <th>Product</th>
                             <th>Destination</th>
@@ -841,6 +1013,7 @@ foreach ($history_records as $hrec) {
                                                 data-date="<?= $date; ?>"
                                                 data-status="Completed"
                                                 onclick="openDetailModal(this, true)">View Details</button>
+                                        <button type="button" class="delivery-activity-btn" data-activity-id="<?= $del_id; ?>" data-activity-product="<?= $prod_name; ?>">Activity</button>
                                         
                                         <form action="delivery_main.php" method="post" onsubmit="return confirm('Are you sure you want to delete this history record?');">
                                             <input type="hidden" name="idno" value="<?= $del_id; ?>">
@@ -852,10 +1025,39 @@ foreach ($history_records as $hrec) {
                         <?php endforeach; ?>
                     </tbody>
                 </table>
+                <p id="historyFilterEmpty" hidden style="color: var(--text-muted);">No history records match these filters.</p>
             <?php else: ?>
                 <p style="color: var(--text-muted);">No delivery history yet.</p>
             <?php endif; ?>
         </div>
+    </div>
+
+    <div id="reportsView" class="hidden">
+        <div class="section-header"><div class="section-title">Monthly Delivery Report</div></div>
+        <form class="delivery-filters" method="get" action="logistic.php">
+            <label for="deliveryReportMonth">Report month</label>
+            <input type="month" id="deliveryReportMonth" class="calendar-control" name="report_month" value="<?= htmlspecialchars($delivery_report_month, ENT_QUOTES, 'UTF-8'); ?>">
+            <button type="submit" class="btn-view-details">View report</button>
+        </form>
+        <?php if ($delivery_report_error !== ''): ?><p class="delivery-error" role="alert"><?= htmlspecialchars($delivery_report_error, ENT_QUOTES, 'UTF-8'); ?></p><?php endif; ?>
+        <p style="padding: 0 20px;">Report for <?= htmlspecialchars($delivery_report_label, ENT_QUOTES, 'UTF-8'); ?></p>
+        <div class="delivery-report-grid">
+            <div class="delivery-report-card">Total assigned<strong><?= $delivery_report['total']; ?></strong></div>
+            <div class="delivery-report-card">Delivered<strong><?= $delivery_report['completed']; ?></strong></div>
+            <div class="delivery-report-card">Pending<strong><?= $delivery_report['pending']; ?></strong></div>
+            <div class="delivery-report-card">Overdue<strong><?= $delivery_report['overdue']; ?></strong></div>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="deliveryActivityModal" role="dialog" aria-modal="true" aria-labelledby="deliveryActivityTitle">
+    <div class="modal-card" style="max-width: 620px;">
+        <div class="modal-header">
+            <h3 id="deliveryActivityTitle">Delivery Activity</h3>
+            <button type="button" class="close-btn" onclick="closeDeliveryActivity()" aria-label="Close">&times;</button>
+        </div>
+        <p id="deliveryActivityProduct" style="margin: 12px 0;"></p>
+        <div id="deliveryActivityContent" aria-live="polite">Loading activity history...</div>
     </div>
 </div>
 
@@ -999,20 +1201,16 @@ foreach ($history_records as $hrec) {
     function switchTab(tabName) {
         const mainView = document.getElementById('mainView');
         const historyView = document.getElementById('historyView');
+        const reportsView = document.getElementById('reportsView');
         const tabMainBtn = document.getElementById('tabMainBtn');
         const tabHistoryBtn = document.getElementById('tabHistoryBtn');
-
-        if (tabName === 'main') {
-            mainView.classList.remove('hidden');
-            historyView.classList.add('hidden');
-            tabMainBtn.classList.add('active');
-            tabHistoryBtn.classList.remove('active');
-        } else {
-            mainView.classList.add('hidden');
-            historyView.classList.remove('hidden');
-            tabHistoryBtn.classList.add('active');
-            tabMainBtn.classList.remove('active');
-        }
+        const tabReportsBtn = document.getElementById('tabReportsBtn');
+        mainView.classList.toggle('hidden', tabName !== 'main');
+        historyView.classList.toggle('hidden', tabName !== 'history');
+        reportsView.classList.toggle('hidden', tabName !== 'reports');
+        tabMainBtn.classList.toggle('active', tabName === 'main');
+        tabHistoryBtn.classList.toggle('active', tabName === 'history');
+        tabReportsBtn.classList.toggle('active', tabName === 'reports');
     }
 
     // Dynamic Modal Opener
@@ -1123,35 +1321,108 @@ foreach ($history_records as $hrec) {
 
     // Filter Logic para sa Active Cards
     function filterCards() {
-        const searchValue = document.getElementById('cardSearchInput').value.toLowerCase();
+        const searchValue = document.getElementById('cardSearchInput').value.trim().toLowerCase();
+        const statusValue = document.getElementById('cardStatusFilter').value;
+        const dueFrom = document.getElementById('cardDueFrom').value;
+        const dueTo = document.getElementById('cardDueTo').value;
         const cards = document.querySelectorAll('#shipmentsGrid .shipment-card');
-
+        let visibleCount = 0;
         cards.forEach(card => {
-            const text = card.innerText.toLowerCase();
-            if (text.includes(searchValue)) {
-                card.style.display = 'block';
-            } else {
-                card.style.display = 'none';
-            }
+            const dueDate = card.dataset.dueDate || '';
+            const visible = card.innerText.toLowerCase().includes(searchValue)
+                && (!statusValue || card.dataset.status.toLowerCase() === statusValue)
+                && (!dueFrom || dueDate >= dueFrom)
+                && (!dueTo || dueDate <= dueTo);
+            card.style.display = visible ? 'block' : 'none';
+            if (visible) visibleCount++;
         });
+        const emptyMessage = document.getElementById('activeFilterEmpty');
+        emptyMessage.hidden = cards.length === 0 || visibleCount > 0;
     }
 
     // Filter Logic para sa History Table
     function filterTable() {
-        const searchValue = document.getElementById('tableSearchInput').value.toLowerCase();
+        const searchValue = document.getElementById('tableSearchInput').value.trim().toLowerCase();
+        const dueFrom = document.getElementById('historyDueFrom').value;
+        const dueTo = document.getElementById('historyDueTo').value;
         const rows = document.querySelectorAll('#historyTable tbody tr');
-
+        let visibleCount = 0;
         rows.forEach(row => {
-            const text = row.innerText.toLowerCase();
-            if (text.includes(searchValue)) {
-                row.style.display = '';
-            } else {
-                row.style.display = 'none';
-            }
+            const dueDate = row.dataset.deliveryDate || '';
+            const visible = row.innerText.toLowerCase().includes(searchValue)
+                && (!dueFrom || dueDate >= dueFrom)
+                && (!dueTo || dueDate <= dueTo);
+            row.style.display = visible ? '' : 'none';
+            if (visible) visibleCount++;
         });
+        const emptyMessage = document.getElementById('historyFilterEmpty');
+        emptyMessage.hidden = rows.length === 0 || visibleCount > 0;
+    }
+
+    document.querySelectorAll('[data-activity-id]').forEach(button => {
+        button.addEventListener('click', event => {
+            event.stopPropagation();
+            openDeliveryActivity(button.dataset.activityId, button.dataset.activityProduct);
+        });
+    });
+
+    async function openDeliveryActivity(deliveryId, productName) {
+        const modal = document.getElementById('deliveryActivityModal');
+        const content = document.getElementById('deliveryActivityContent');
+        document.getElementById('deliveryActivityProduct').textContent =
+            `Delivery #${deliveryId} — ${productName}`;
+        content.textContent = 'Loading activity history...';
+        modal.style.display = 'flex';
+
+        try {
+            const response = await fetch(`logistic.php?activity_log=${encodeURIComponent(deliveryId)}`, {
+                headers: { Accept: 'application/json' }
+            });
+            const result = await response.json();
+            if (!response.ok || result.error) {
+                throw new Error(result.error || 'Unable to load activity history.');
+            }
+            content.replaceChildren();
+            if (result.activities.length === 0) {
+                content.textContent = 'No recorded activity for this delivery yet.';
+                return;
+            }
+            const list = document.createElement('ol');
+            list.className = 'delivery-activity-list';
+            result.activities.forEach(activity => {
+                const item = document.createElement('li');
+                const summary = document.createElement('strong');
+                const eventMessages = {
+                    delivery_assigned: `${activity.actor_name} assigned this delivery.`,
+                    driver_reassigned: `${activity.actor_name} reassigned this delivery.`,
+                    delivery_updated: `${activity.actor_name} updated the delivery details.`,
+                    delivery_completed: `${activity.actor_name} confirmed delivery.`
+                };
+                summary.textContent = eventMessages[activity.event_type] || `${activity.actor_name} updated this delivery.`;
+                const time = document.createElement('time');
+                time.dateTime = activity.occurred_at.replace(' ', 'T');
+                time.textContent = activity.occurred_at;
+                item.append(summary, time);
+                list.appendChild(item);
+            });
+            content.appendChild(list);
+        } catch (error) {
+            content.textContent = error.message || 'Unable to load activity history.';
+        }
+    }
+
+    function closeDeliveryActivity() {
+        document.getElementById('deliveryActivityModal').style.display = 'none';
+    }
+
+    if (new URLSearchParams(window.location.search).has('report_month')
+        || new URLSearchParams(window.location.search).has('report_year')) {
+        switchTab('reports');
     }
 </script>
 <!-- try -->
+<script src="js/calendar-picker.js?v=<?= filemtime(__DIR__ . '/js/calendar-picker.js'); ?>"></script>
+<script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
 <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

@@ -2,11 +2,15 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+require_once __DIR__ . '/connection.php';
+require_once __DIR__ . '/account_access.php';
 
 // Kaya siya 900 kase seconds siya so bali 15 * 60 is 900
 $inactivity_limit = 900;
 
 if (isset($_SESSION['id'])) {
+    requireActiveAccount($conn);
+
     if (isset($_SESSION['last_activity'])) {
         // Iti-track neto kung kelan naging active ung nasa dashboard
         $elapsed_time = time() - $_SESSION['last_activity'];

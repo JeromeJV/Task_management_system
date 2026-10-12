@@ -42,39 +42,68 @@ $total_completed = ($prod_data['completed'] ?? 0) + ($del_data['completed'] ?? 0
 $total_pending   = ($prod_data['pending'] ?? 0) + ($del_data['pending'] ?? 0);
 $total_overdue   = ($prod_data['overdue'] ?? 0) + ($del_data['overdue'] ?? 0);
 
-// Ensure production assignment storage exists before loading the dashboard task list.
-$assignment_table_sql = "CREATE TABLE IF NOT EXISTS production_assignments (
-                            production_id VARCHAR(64) NOT NULL,
-                            employee_id INT NOT NULL,
-                            work_type ENUM('Cooking', 'Packaging') NOT NULL,
-                            assigned_by INT DEFAULT NULL,
-                            assigned_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                            PRIMARY KEY (production_id),
-                            KEY idx_production_assignments_employee (employee_id)
-                         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
-if (!mysqli_query($conn, $assignment_table_sql)) {
-    throw new RuntimeException('Unable to initialize production task assignments: ' . mysqli_error($conn));
-}
+require_once __DIR__ . '/config/production_assignment_schema.php';
+ensureProductionAssignmentSchema($conn);
 
 // Active assigned production tasks
 $active_tasks = [];
 $production_tasks_query = mysqli_query($conn, "
-    SELECT p.product_name AS task_name,
+    SELECT CONCAT(p.product_name, ' - ', pa.work_type) AS task_name,
            e.username AS assigned_to,
            p.due_date AS due_date,
-           COALESCE(NULLIF(p.product_status, ''), 'Pending') AS task_status,
-           'Production' AS department
+           'In Progress' AS task_status,
+           CONCAT('Production - ', pa.work_type) AS task_type
     FROM production p
     INNER JOIN production_assignments pa
         ON pa.production_id = CAST(p.production_id AS CHAR)
     INNER JOIN employee e ON e.employee_id = pa.employee_id
     WHERE (p.product_status != 'product done' OR p.product_status IS NULL)
+      AND pa.work_status = 'Pending'
+      AND (pa.work_type = 'Cooking'
+           OR NOT EXISTS (
+               SELECT 1
+               FROM production_assignments legacy_cooking
+               WHERE legacy_cooking.production_id = pa.production_id
+                 AND legacy_cooking.work_type = 'Cooking'
+           )
+           OR EXISTS (
+          SELECT 1
+          FROM production_assignments cooking
+          WHERE cooking.production_id = pa.production_id
+            AND cooking.work_type = 'Cooking'
+            AND cooking.work_status = 'Done'
+      ))
     ORDER BY p.due_date ASC, p.production_id DESC
 ");
 if (!$production_tasks_query) {
     throw new RuntimeException('Unable to load active production assignments: ' . mysqli_error($conn));
 }
 while ($task = mysqli_fetch_assoc($production_tasks_query)) {
+    $active_tasks[] = $task;
+}
+
+$ready_packaging_query = mysqli_query($conn, "
+    SELECT CONCAT(p.product_name, ' - Packaging') AS task_name,
+           'Unassigned' AS assigned_to,
+           p.due_date AS due_date,
+           'Waiting for Packaging' AS task_status,
+           'Production - Packaging' AS task_type
+    FROM production p
+    INNER JOIN production_assignments cooking
+        ON cooking.production_id = CAST(p.production_id AS CHAR)
+       AND cooking.work_type = 'Cooking'
+       AND cooking.work_status = 'Done'
+    LEFT JOIN production_assignments packaging
+        ON packaging.production_id = CAST(p.production_id AS CHAR)
+       AND packaging.work_type = 'Packaging'
+    WHERE packaging.production_id IS NULL
+      AND (p.product_status != 'product done' OR p.product_status IS NULL)
+    ORDER BY p.due_date ASC, p.production_id DESC
+");
+if (!$ready_packaging_query) {
+    throw new RuntimeException('Unable to load production tasks ready for packaging: ' . mysqli_error($conn));
+}
+while ($task = mysqli_fetch_assoc($ready_packaging_query)) {
     $active_tasks[] = $task;
 }
 
@@ -85,7 +114,7 @@ $logistics_tasks_query = mysqli_query($conn, "
            u.name AS assigned_to,
            d.delivery_date AS due_date,
            COALESCE(NULLIF(d.status, ''), 'Pending') AS task_status,
-           'Logistics' AS department
+           'Logistics' AS task_type
     FROM delivery d
     INNER JOIN users u ON u.id = d.driver_id
     LEFT JOIN production p ON p.production_id = d.production_id
@@ -129,6 +158,7 @@ $quantity_err = $quantity_err ?? '';
     <link rel="stylesheet" href="css/supervisor.css?v=20261009-logistics-route">
     <link rel="stylesheet" href="css/tasktrack_sidebar.css?v=<?= filemtime(__DIR__ . '/css/tasktrack_sidebar.css'); ?>">
     <link rel="stylesheet" href="css/table-scroll.css?v=<?= filemtime(__DIR__ . '/css/table-scroll.css'); ?>">
+    <link rel="stylesheet" href="css/select-control.css?v=<?= filemtime(__DIR__ . '/css/select-control.css'); ?>">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
@@ -211,7 +241,7 @@ $quantity_err = $quantity_err ?? '';
           <div class="active-task-heading">
             <div>
               <h3>ACTIVE TASKS</h3>
-              <p>Currently assigned tasks for Production and Logistics</p>
+              <p>Assigned production and logistics tasks, plus production stages ready for assignment.</p>
             </div>
             <span class="active-task-count"><?= count($active_tasks); ?> active</span>
           </div>
@@ -219,11 +249,11 @@ $quantity_err = $quantity_err ?? '';
           <?php if ($active_tasks): ?>
             <div class="active-task-list">
               <?php foreach ($active_tasks as $task): ?>
-                <?php $department_class = strtolower($task['department']) === 'logistics' ? 'is-logistics' : 'is-production'; ?>
-                <article class="active-task-card <?= $department_class; ?>">
+                <?php $task_type_class = strtolower($task['task_type']) === 'logistics' ? 'is-logistics' : 'is-production'; ?>
+                <article class="active-task-card <?= $task_type_class; ?>">
                   <div class="active-task-card-main">
                     <span class="active-task-card-mark" aria-hidden="true">
-                      <?= $department_class === 'is-logistics' ? '↗' : '✓'; ?>
+                      <?= $task_type_class === 'is-logistics' ? '↗' : '✓'; ?>
                     </span>
                     <div class="active-task-card-copy">
                       <h4><?= htmlspecialchars($task['task_name'] ?? 'N/A'); ?></h4>
@@ -231,7 +261,7 @@ $quantity_err = $quantity_err ?? '';
                     </div>
                   </div>
                   <div class="active-task-card-meta">
-                    <span class="active-task-department <?= $department_class; ?>"><?= htmlspecialchars($task['department']); ?></span>
+                    <span class="active-task-type <?= $task_type_class; ?>"><?= htmlspecialchars($task['task_type']); ?></span>
                     <span class="active-task-date">Due <?= htmlspecialchars($task['due_date'] ?? 'N/A'); ?></span>
                     <span class="active-task-status"><?= htmlspecialchars($task['task_status'] ?? 'Pending'); ?></span>
                   </div>
@@ -251,7 +281,7 @@ $quantity_err = $quantity_err ?? '';
       <div class="green-table-panel table-scroll">
         <table class="green-table">
           <thead>
-            <tr><th>Employee</th><th>Task</th><th>Department</th><th>Due date</th><th>Status</th></tr>
+            <tr><th>Employee</th><th>Task</th><th>Task type</th><th>Due date</th><th>Status</th></tr>
           </thead>
           <tbody>
             <?php if ($active_tasks): ?>
@@ -259,7 +289,7 @@ $quantity_err = $quantity_err ?? '';
                 <tr>
                   <td><?= htmlspecialchars($task['assigned_to'] ?? 'N/A'); ?></td>
                   <td><?= htmlspecialchars($task['task_name'] ?? 'N/A'); ?></td>
-                  <td><?= htmlspecialchars($task['department'] ?? 'N/A'); ?></td>
+                  <td><?= htmlspecialchars($task['task_type'] ?? 'N/A'); ?></td>
                   <td><?= htmlspecialchars($task['due_date'] ?? 'N/A'); ?></td>
                   <td><?= htmlspecialchars($task['task_status'] ?? 'Pending'); ?></td>
                 </tr>
@@ -272,20 +302,10 @@ $quantity_err = $quantity_err ?? '';
       </div>
     </div>
 
-    <!-- EMPLOYEE -->
-    <div id="page-employee" class="page" style="display:none;">
-      <div class="employee-layout">
-        <div class="employee-list">
-          <h4>Employee's</h4>
-          <div id="employeeCards"></div>
-        </div>
-        <div class="employee-detail" id="employeeDetail"></div>
-      </div>
-    </div>
-
   </div>
 </div>
 <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 <script src="js/supervisor.js?v=20261009-supervisor-fixes"></script>
+<script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
 </body>
 </html>

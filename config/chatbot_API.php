@@ -12,11 +12,15 @@ function chatbotRespond(string $reply, int $status = 200): void
 if (!isset($_SESSION['email'], $_SESSION['role'])) {
     chatbotRespond('Mag-login muna para magamit ang assistant.', 401);
 }
+require_once __DIR__ . '/connection.php';
+require_once __DIR__ . '/account_access.php';
+requireActiveAccount($conn, true);
 
 $role = (string) $_SESSION['role'];
 $validatedUserId = filter_var($_SESSION['id'] ?? null, FILTER_VALIDATE_INT);
 $userId = $validatedUserId === false ? null : $validatedUserId;
-$allowedRoles = ['super', 'pro', 'log', 'HR', 'payroll'];
+$productionRoles = ['pro', 'cooking', 'packaging'];
+$allowedRoles = array_merge(['super', 'log', 'HR', 'payroll'], $productionRoles);
 
 if (!in_array($role, $allowedRoles, true)) {
     chatbotRespond('Hindi available ang assistant para sa account na ito.', 403);
@@ -39,7 +43,7 @@ if (preg_match('/\b(assign|update|delete|remove|mark|create|add|save|change|i-as
     chatbotRespond('Read-only ang assistant. Maaari itong sumagot tungkol sa live records pero hindi ito gumagawa o nagbabago ng records.');
 }
 
-include __DIR__ . '/connection.php';
+require_once __DIR__ . '/connection.php';
 $conn->set_charset('utf8mb4');
 
 function chatbotFetchRows(mysqli $conn, string $sql, string $types = '', array $params = []): array
@@ -76,6 +80,20 @@ function chatbotFormatDetails(string $title, array $fields): string
     return trim($reply);
 }
 
+function chatbotIsProductionRole(string $role): bool
+{
+    return in_array($role, ['pro', 'cooking', 'packaging'], true);
+}
+
+function chatbotProductionWorkType(string $role): ?string
+{
+    return match ($role) {
+        'cooking' => 'Cooking',
+        'packaging' => 'Packaging',
+        default => null,
+    };
+}
+
 function chatbotRecordDetails(
     mysqli $conn,
     string $recordType,
@@ -85,26 +103,36 @@ function chatbotRecordDetails(
     ?int $userId
 ): string {
     if ($recordType === 'production') {
-        if (!in_array($role, ['super', 'pro'], true)) {
+        if (!in_array($role, ['super', 'pro', 'cooking', 'packaging'], true)) {
             return 'Hindi available ang production data sa role mo.';
         }
-        if ($role === 'pro' && $employeeId === null) {
+        if (chatbotIsProductionRole($role) && $employeeId === null) {
             return 'Hindi makita ang employee record na naka-link sa production account mo.';
         }
 
         $sql = "SELECT p.production_id, p.product_name, p.target_pcs, p.quantity,
                        p.Stock_number, p.due_date, p.product_status,
-                       pa.work_type, e.username AS assigned_employee
+                       (SELECT GROUP_CONCAT(DISTINCT CONCAT(stage.work_type, ': ', assigned.username, ' (', stage.work_status, ')')
+                                            ORDER BY stage.work_type SEPARATOR ', ')
+                        FROM production_assignments stage
+                        LEFT JOIN employee assigned ON assigned.employee_id = stage.employee_id
+                        WHERE stage.production_id = CAST(p.production_id AS CHAR)) AS assignment_summary,
+                       pa.work_type, pa.work_status, e.username AS assigned_employee
                 FROM production p
                 LEFT JOIN production_assignments pa ON pa.production_id = CAST(p.production_id AS CHAR)
                 LEFT JOIN employee e ON e.employee_id = pa.employee_id
                 WHERE p.production_id = ?";
         $types = 's';
         $params = [$recordId];
-        if ($role === 'pro') {
+        if (chatbotIsProductionRole($role)) {
             $sql .= ' AND pa.employee_id = ?';
             $types .= 'i';
             $params[] = $employeeId;
+            if ($work_type = chatbotProductionWorkType($role)) {
+                $sql .= ' AND pa.work_type = ?';
+                $types .= 's';
+                $params[] = $work_type;
+            }
         }
         $row = chatbotScalar($conn, $sql . ' LIMIT 1', $types, $params);
         if (!$row) {
@@ -113,14 +141,15 @@ function chatbotRecordDetails(
         $fields = [
             'Product' => $row['product_name'],
             'Status' => $row['product_status'] ?: 'Pending',
-            'Work area' => $row['work_type'],
+            'Work area' => chatbotIsProductionRole($role) ? $row['work_type'] : 'Cooking then Packaging',
+            'Work area status' => chatbotIsProductionRole($role) ? $row['work_status'] : ($row['product_status'] ?: 'Pending'),
             'Quantity' => $row['quantity'],
             'Target PCS' => $row['target_pcs'],
             'Stock number' => $row['Stock_number'],
             'Due date' => $row['due_date'],
         ];
         if ($role === 'super') {
-            $fields['Assigned employee'] = $row['assigned_employee'];
+            $fields['Stage assignments'] = $row['assignment_summary'];
         }
         return chatbotFormatDetails('Production #' . $row['production_id'], $fields);
     }
@@ -170,7 +199,7 @@ function chatbotRecordDetails(
         }
         $row = chatbotScalar(
             $conn,
-            "SELECT employee_id, username, department, position, contact_number, email, address
+            "SELECT employee_id, username, position, contact_number, email, address
              FROM employee
              WHERE employee_id = ?
              LIMIT 1",
@@ -182,7 +211,6 @@ function chatbotRecordDetails(
         }
         return chatbotFormatDetails('Employee #' . $row['employee_id'], [
             'Name' => $row['username'],
-            'Department' => $row['department'],
             'Position' => $row['position'],
             'Contact number' => $row['contact_number'],
             'Email' => $row['email'],
@@ -346,7 +374,7 @@ function chatbotListRecords(
     string $search = ''
 ): string {
     $allowed = [
-        'production' => ['super', 'pro'],
+        'production' => ['super', 'pro', 'cooking', 'packaging'],
         'delivery' => ['super', 'log'],
         'employee' => ['super', 'HR'],
         'applicant' => ['super', 'HR'],
@@ -356,7 +384,7 @@ function chatbotListRecords(
     if (!isset($allowed[$recordType]) || !in_array($role, $allowed[$recordType], true)) {
         return 'Hindi available ang record type na iyan sa role mo.';
     }
-    if ($recordType === 'production' && $role === 'pro' && $employeeId === null) {
+    if ($recordType === 'production' && chatbotIsProductionRole($role) && $employeeId === null) {
         return 'Hindi makita ang employee record na naka-link sa production account mo.';
     }
     if ($recordType === 'delivery' && $role === 'log' && $userId === null) {
@@ -373,14 +401,19 @@ function chatbotListRecords(
     switch ($recordType) {
         case 'production':
             $sql = "SELECT p.production_id AS record_id, p.product_name AS item,
-                           COALESCE(NULLIF(p.product_status, ''), 'Pending') AS status,
+                           COALESCE(NULLIF(pa.work_status, ''), NULLIF(p.product_status, ''), 'Pending') AS status,
                            p.due_date AS date_value, p.quantity, pa.work_type
                     FROM production p
                     LEFT JOIN production_assignments pa ON pa.production_id = CAST(p.production_id AS CHAR)";
-            if ($role === 'pro') {
+            if (chatbotIsProductionRole($role)) {
                 $sql .= ' WHERE pa.employee_id = ?';
                 $types .= 'i';
                 $params[] = $employeeId;
+                if ($work_type = chatbotProductionWorkType($role)) {
+                    $sql .= ' AND pa.work_type = ?';
+                    $types .= 's';
+                    $params[] = $work_type;
+                }
                 if ($search !== '') {
                     $sql .= ' AND (p.product_name LIKE ? OR p.product_status LIKE ? OR pa.work_type LIKE ?)';
                     $types .= 'sss';
@@ -421,13 +454,12 @@ function chatbotListRecords(
 
         case 'employee':
             $sql = "SELECT employee_id AS record_id, username AS item,
-                           COALESCE(NULLIF(department, ''), 'Unassigned') AS detail_one,
                            position AS detail_two
                     FROM employee";
             if ($search !== '') {
-                $sql .= ' WHERE username LIKE ? OR department LIKE ? OR position LIKE ?';
-                $types = 'sss';
-                $params = [$searchTerm, $searchTerm, $searchTerm];
+                $sql .= ' WHERE username LIKE ? OR position LIKE ?';
+                $types = 'ss';
+                $params = [$searchTerm, $searchTerm];
             }
             $sql .= ' ORDER BY employee_id DESC';
             $title = 'Employee';
@@ -555,20 +587,21 @@ function chatbotListRecords(
 
 function chatbotProduction(mysqli $conn, string $role, ?int $employeeId): string
 {
-    if ($role === 'pro') {
+    if (chatbotIsProductionRole($role)) {
         if ($employeeId === null) {
             return 'Hindi makita ang employee record na naka-link sa production account mo.';
         }
+        $workTypeFilter = chatbotProductionWorkType($role);
         $rows = chatbotFetchRows(
             $conn,
-            "SELECT p.production_id, p.product_name, p.product_status, p.due_date, pa.work_type
+            "SELECT p.production_id, p.product_name, p.product_status, p.due_date, pa.work_type, pa.work_status
              FROM production_assignments pa
              INNER JOIN production p ON p.production_id = pa.production_id
-             WHERE pa.employee_id = ?
+             WHERE pa.employee_id = ?" . ($workTypeFilter === null ? '' : " AND pa.work_type = ?") . "
              ORDER BY p.production_id DESC
              LIMIT 5",
-            'i',
-            [$employeeId]
+            $workTypeFilter === null ? 'i' : 'is',
+            $workTypeFilter === null ? [$employeeId] : [$employeeId, $workTypeFilter]
         );
         $title = 'Mga production task mo';
     } else {
@@ -592,7 +625,7 @@ function chatbotProduction(mysqli $conn, string $role, ?int $employeeId): string
             "#%s %s | %s%s\n",
             $row['production_id'],
             $row['product_name'],
-            $row['product_status'] ?: 'Pending',
+            $row['work_status'] ?: ($row['product_status'] ?: 'Pending'),
             empty($row['work_type']) ? '' : ' | ' . $row['work_type']
         );
     }
@@ -649,22 +682,7 @@ function chatbotDelivery(mysqli $conn, string $role, ?int $userId): string
 function chatbotEmployeeSummary(mysqli $conn): string
 {
     $totals = chatbotScalar($conn, 'SELECT COUNT(*) AS total FROM employee');
-    $departments = chatbotFetchRows(
-        $conn,
-        "SELECT COALESCE(NULLIF(department, ''), 'Unassigned') AS department, COUNT(*) AS total
-         FROM employee
-         GROUP BY department
-         ORDER BY total DESC
-         LIMIT 8"
-    );
-
     $reply = 'Employee records: ' . (int) ($totals['total'] ?? 0);
-    if ($departments) {
-        $reply .= "\nBy department:\n";
-        foreach ($departments as $row) {
-            $reply .= $row['department'] . ': ' . (int) $row['total'] . "\n";
-        }
-    }
     return trim($reply);
 }
 
@@ -768,19 +786,20 @@ function chatbotOverview(mysqli $conn, string $role, ?int $employeeId, ?int $use
             (int) ($payroll['pending'] ?? 0)
         );
     }
-    if ($role === 'pro') {
+    if (chatbotIsProductionRole($role)) {
         if ($employeeId === null) {
             return 'Hindi makita ang employee record na naka-link sa production account mo.';
         }
+        $workTypeFilter = chatbotProductionWorkType($role);
         $row = chatbotScalar(
             $conn,
             "SELECT COUNT(*) AS total,
-                    SUM(CASE WHEN p.product_status = 'product done' THEN 1 ELSE 0 END) AS completed
+                   SUM(CASE WHEN pa.work_status = 'Done' THEN 1 ELSE 0 END) AS completed
              FROM production_assignments pa
              INNER JOIN production p ON p.production_id = pa.production_id
-             WHERE pa.employee_id = ?",
-            'i',
-            [$employeeId]
+             WHERE pa.employee_id = ?" . ($workTypeFilter === null ? '' : " AND pa.work_type = ?"),
+            $workTypeFilter === null ? 'i' : 'is',
+            $workTypeFilter === null ? [$employeeId] : [$employeeId, $workTypeFilter]
         );
         return sprintf(
             "Production overview mo:\nAssigned tasks: %d\nCompleted: %d\nIn progress: %d",
@@ -817,12 +836,20 @@ function chatbotOverview(mysqli $conn, string $role, ?int $employeeId, ?int $use
 
 try {
     $employeeId = null;
-    if ($role === 'pro') {
+    if (chatbotIsProductionRole($role)) {
         $employee = chatbotScalar(
             $conn,
             "SELECT e.employee_id
              FROM users u
-             INNER JOIN employee e ON (e.username = u.name OR (e.email IS NOT NULL AND e.email = u.email))
+             INNER JOIN employee e
+                 ON (e.username = u.name
+                     OR (e.email IS NOT NULL AND e.email = u.email)
+                     OR EXISTS (
+                         SELECT 1
+                         FROM attendance employee_user_link
+                         WHERE employee_user_link.employee_id = e.employee_id
+                           AND employee_user_link.user_id = u.id
+                     ))
              WHERE u.id = ?
              ORDER BY (e.email = u.email) DESC, e.employee_id ASC
              LIMIT 1",
@@ -897,6 +924,30 @@ try {
                 '',
                 'Next page:',
                 'page 2 production',
+            ]),
+            'cooking' => implode("\n", [
+                'Maaari kang magtanong tungkol sa sarili mong Cooking tasks.',
+                '',
+                'List records:',
+                'list production',
+                '',
+                'Search:',
+                'search production turmeric',
+                '',
+                'Record details:',
+                'details production 123',
+            ]),
+            'packaging' => implode("\n", [
+                'Maaari kang magtanong tungkol sa sarili mong Packaging tasks.',
+                '',
+                'List records:',
+                'list production',
+                '',
+                'Search:',
+                'search production turmeric',
+                '',
+                'Record details:',
+                'details production 123',
             ]),
             'log' => implode("\n", [
                 'Maaari kang magtanong tungkol sa deliveries na naka-assign sa iyo.',
@@ -991,6 +1042,8 @@ try {
         $available = [
             'super' => 'production, delivery, employees, applicants, payroll, attendance',
             'pro' => 'production',
+            'cooking' => 'production',
+            'packaging' => 'production',
             'log' => 'delivery',
             'HR' => 'employees, applicants, attendance',
             'payroll' => 'payroll, attendance',
@@ -1002,7 +1055,7 @@ try {
     }
 
     if (preg_match('/\b(production|production task|production status|my tasks|task status)\b/u', $message)) {
-        if (!in_array($role, ['super', 'pro'], true)) {
+        if (!in_array($role, ['super', 'pro', 'cooking', 'packaging'], true)) {
             chatbotRespond('Hindi available ang production data sa role mo.');
         }
         chatbotRespond(chatbotProduction($conn, $role, $employeeId));
@@ -1029,7 +1082,7 @@ try {
         chatbotRespond(chatbotAttendanceSummary($conn));
     }
 
-    if (preg_match('/\b(employee|employees|staff|headcount|department)\b/u', $message)) {
+    if (preg_match('/\b(employee|employees|staff|headcount)\b/u', $message)) {
         if (!in_array($role, ['super', 'HR'], true)) {
             chatbotRespond('Hindi available ang employee summary sa role mo.');
         }

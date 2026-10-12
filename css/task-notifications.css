@@ -1,0 +1,199 @@
+.task-notification {
+    position: fixed;
+    z-index: 25000;
+    right: 24px;
+    bottom: 24px;
+    color: #1f2d25;
+    font-family: Inter, "Segoe UI", Arial, sans-serif;
+}
+
+.task-notification__toggle {
+    position: relative;
+    display: grid;
+    width: 52px;
+    height: 52px;
+    place-items: center;
+    border: 1px solid #d6e6dc;
+    border-radius: 50%;
+    background: #fff;
+    color: #1f754c;
+    box-shadow: 0 6px 22px rgba(27, 58, 40, .2);
+    cursor: pointer;
+    transition: transform .18s ease, background-color .18s ease, box-shadow .18s ease;
+}
+
+.task-notification__toggle:hover {
+    transform: translateY(-2px);
+    background: #f2faf5;
+    box-shadow: 0 9px 25px rgba(27, 58, 40, .24);
+}
+
+.task-notification__toggle svg {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.8;
+}
+
+.task-notification__count {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    display: grid;
+    min-width: 20px;
+    height: 20px;
+    place-items: center;
+    padding: 0 5px;
+    border: 2px solid #fff;
+    border-radius: 99px;
+    background: #e53935;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+}
+
+.task-notification__count[hidden],
+.task-notification__panel[hidden] {
+    display: none;
+}
+
+.task-notification__panel {
+    position: absolute;
+    right: 0;
+    bottom: 64px;
+    width: min(370px, calc(100vw - 32px));
+    max-height: min(510px, calc(100vh - 120px));
+    overflow: hidden;
+    border: 1px solid #e1e9e3;
+    border-radius: 15px;
+    background: #fff;
+    box-shadow: 0 16px 48px rgba(23, 44, 31, .2);
+}
+
+.task-notification__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px;
+    border-bottom: 1px solid #edf1ee;
+}
+
+.task-notification__header > div {
+    display: grid;
+    gap: 3px;
+}
+
+.task-notification__header strong {
+    font-size: 15px;
+}
+
+.task-notification__header span {
+    color: #748078;
+    font-size: 11px;
+}
+
+.task-notification__header button {
+    padding: 5px 7px;
+    border: 0;
+    background: transparent;
+    color: #24774f;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.task-notification__list {
+    max-height: 420px;
+    overflow: auto;
+    padding: 5px;
+}
+
+.task-notification__item {
+    display: grid;
+    grid-template-columns: 9px minmax(0, 1fr);
+    gap: 10px;
+    padding: 12px 10px;
+    border-radius: 9px;
+    color: inherit;
+    text-decoration: none;
+}
+
+.task-notification__item:hover {
+    background: #f5f9f6;
+}
+
+.task-notification__item.is-unread {
+    background: #f0f8f2;
+}
+
+.task-notification__dot {
+    width: 8px;
+    height: 8px;
+    margin-top: 5px;
+    border-radius: 50%;
+    background: transparent;
+}
+
+.is-unread .task-notification__dot {
+    background: #1f9a62;
+}
+
+.task-notification__item-copy {
+    min-width: 0;
+}
+
+.task-notification__item-copy strong {
+    display: block;
+    margin-bottom: 3px;
+    font-size: 12px;
+}
+
+.task-notification__item-copy span {
+    display: block;
+    color: #637168;
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+.task-notification__item-copy time {
+    display: block;
+    margin-top: 5px;
+    color: #929d95;
+    font-size: 10px;
+}
+
+.task-notification__empty,
+.task-notification__error {
+    padding: 22px 14px;
+    color: #78847c;
+    font-size: 12px;
+    line-height: 1.5;
+    text-align: center;
+}
+
+.task-notification__error {
+    color: #a63320;
+}
+
+@media (max-width: 560px) {
+    .task-notification {
+        right: 15px;
+        bottom: 15px;
+    }
+
+    .task-notification__toggle {
+        width: 48px;
+        height: 48px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .task-notification__toggle {
+        transition-duration: .01ms;
+    }
+}

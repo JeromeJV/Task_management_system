@@ -10,6 +10,10 @@ $is_ajax_login = $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_log
 // Dto na pupunta ung auto logout pag inactive
 if (isset($_GET['error']) && $_GET['error'] === 'session_expired') {
     $msg = "You have been logged out due to inactivity.";
+} elseif (isset($_GET['error']) && $_GET['error'] === 'account_disabled') {
+    $msg = "This account has been disabled. Contact an administrator.";
+} elseif (isset($_GET['error']) && $_GET['error'] === 'account_changed') {
+    $msg = "Your account access changed. Please sign in again.";
 }
 
 if (isset($_POST['Submit'])) { 
@@ -40,7 +44,9 @@ if (isset($_POST['Submit'])) {
             $current_time = date('Y-m-d H:i:s');
 
             // i-check kung naka lockout ung user
-            if ($row1['lockout_time'] !== null && strtotime($row1['lockout_time']) > strtotime($current_time)) {
+            if ((int) $row1['is_active'] !== 1) {
+                $msg = "This account has been disabled. Contact an administrator.";
+            } elseif ($row1['lockout_time'] !== null && strtotime($row1['lockout_time']) > strtotime($current_time)) {
                 $remaining_seconds = strtotime($row1['lockout_time']) - strtotime($current_time);
                 $remaining_minutes = ceil($remaining_seconds / 60);
                 $msg = "Your account is temporarily locked. Please try again after $remaining_minutes minutes.";
@@ -62,13 +68,18 @@ if (isset($_POST['Submit'])) {
                     $_SESSION['last_activity'] = time();
 
                     switch ($row1['role']) {
+                        case 'admin':
+                            $redirect_url = 'admin.php';
+                            break;
                         case 'HR': 
                             $redirect_url = 'HR.php';
                             break;
                         case 'payroll': 
                             $redirect_url = 'payroll.php';
                             break;
-                        case 'pro': 
+                        case 'pro':
+                        case 'cooking':
+                        case 'packaging':
                             $redirect_url = 'production.php';
                             break;
                         case 'log': 
@@ -84,7 +95,7 @@ if (isset($_POST['Submit'])) {
                             $redirect_url = 'employee.php';
                             break;
                     }
-// pasa
+// pasa 1
                     if ($is_ajax_login) {
                         header('Content-Type: application/json; charset=utf-8');
                         echo json_encode([

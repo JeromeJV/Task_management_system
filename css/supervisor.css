@@ -1070,7 +1070,7 @@ textarea {
     gap: 9px;
 }
 
-.active-task-department,
+.active-task-type,
 .active-task-status {
     display: inline-flex;
     align-items: center;
@@ -1085,7 +1085,7 @@ textarea {
     white-space: nowrap;
 }
 
-.active-task-department.is-logistics {
+.active-task-type.is-logistics {
     border-color: #D8E8FA;
     background: #EFF6FF;
     color: #2563A6;

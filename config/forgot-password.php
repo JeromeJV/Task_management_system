@@ -1,13 +1,6 @@
 <?php
 include 'config/connection.php'; 
-
-// Manu-manong i-load ang PHPMailer files mula sa folder natin
-require 'PHPMailer/Exception.php';
-require 'PHPMailer/PHPMailer.php';
-require 'PHPMailer/SMTP.php';
-
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception;
+require_once __DIR__ . '/mailer.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = filter_var($_POST['email'], FILTER_SANITIZE_EMAIL);
@@ -32,43 +25,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Dto ung link papuntang rest-password.php
         $resetLink = "http://localhost/task%20management%20system/reset-pass.php?token=" . $token; 
         
-        $mail = new PHPMailer(true);
-
         try {
-            // Configuration para sa Gmail SMTP
-            $mail->isSMTP();
-            $mail->Host       = 'smtp.gmail.com';
-            $mail->SMTPAuth   = true;
-            $mail->Username   = 'tasktrack74@gmail.com'; // Acc na ginagamit para mag send ng Verification
-            $mail->Password   = 'wukj ciyu ihsm xpqt';      // Pass sa Google app
-            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-            $mail->Port       = 587;
-
-            // Para hindi harangin ni xammp ung pass na galing Google
-            $mail->SMTPOptions = array(
-                'ssl' => array(
-                    'verify_peer' => false,
-                    'verify_peer_name' => false,
-                    'allow_self_signed' => true
-                )
-            );
-
-            // Sino ang nag-send at sino ang makakatanggap
-            $mail->setFrom('tasktrack74@gmail.com', 'Task Management System'); // Gmail ng nag send
-            $mail->addAddress($email); 
-
-            // Eto ung formal sa gmail
-            $mail->isHTML(true);
-            $mail->Subject = 'Password Reset Request';
-            $mail->Body    = "<h3>Forgot your password?</h3>
+            $htmlBody = "<h3>Forgot your password?</h3>
                               <p>click the link below to change password. you only have 30 mins.</p>
                               <p><a href='{$resetLink}'>{$resetLink}</a></p>";
-
-            $mail->send();
+            sendTaskTrackEmail(
+                $email,
+                'Password Reset Request',
+                $htmlBody,
+                "Click this link to reset your password within 30 minutes:\n{$resetLink}"
+            );
             echo "A reset link has been sent to your email.";
             
-        } catch (Exception $e) {
-            echo "email not sent. Mailer Error: {$mail->ErrorInfo}";
+        } catch (RuntimeException $mailError) {
+            echo "Email not sent. " . htmlspecialchars($mailError->getMessage(), ENT_QUOTES, 'UTF-8');
         }
 
     } else {
@@ -76,4 +46,3 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 ?>
-

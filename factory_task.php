@@ -28,6 +28,8 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'super') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Document</title>
+    <link rel="stylesheet" href="css/calendar-picker.css?v=<?= filemtime(__DIR__ . '/css/calendar-picker.css'); ?>">
+    <link rel="stylesheet" href="css/role-form-controls.css?v=<?= filemtime(__DIR__ . '/css/role-form-controls.css'); ?>">
 </head>
 <body> 
         <h1>Record System</h1>
@@ -63,7 +65,7 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'super') {
         <br><br>
 
         <label>Due Date:</label>
-        <input type="date" name="due_date" class="form-control <?= (!empty($due_date_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['due_date'] ?? $view_data['due_date'] ?? '') ?>" required>
+        <input type="date" name="due_date" class="calendar-control form-control <?= (!empty($due_date_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['due_date'] ?? $view_data['due_date'] ?? '') ?>" required>
         <?php if (!empty($due_date_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($due_date_err) ?></div><?php endif; ?>
 
         <br><br>
@@ -73,5 +75,6 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'super') {
     </form>
 
     <button><a href="factory_main.php">Back</a></button>
+<script src="js/calendar-picker.js?v=<?= filemtime(__DIR__ . '/js/calendar-picker.js'); ?>"></script>
 </body>
 </html>

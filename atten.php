@@ -123,12 +123,12 @@ function formatTime($timeStr) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Attendance Records</title>
+    <link rel="stylesheet" href="css/HR.css?v=<?= filemtime(__DIR__ . '/css/HR.css'); ?>">
     <link rel="stylesheet" href="css/table-scroll.css?v=<?= filemtime(__DIR__ . '/css/table-scroll.css'); ?>">
+    <link rel="stylesheet" href="css/calendar-picker.css?v=<?= filemtime(__DIR__ . '/css/calendar-picker.css'); ?>">
     <style>
-        body {
+        .attendance-main {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 20px;
-            background-color: #f8f9fa;
             color: #333;
         }
         .header-actions {
@@ -140,18 +140,54 @@ function formatTime($timeStr) {
             flex-wrap: wrap;
         }
         .filter-card {
+            display: grid;
+            width: min(100%, 720px);
+            grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) auto;
+            align-items: end;
             background: #ffffff;
             padding: 12px 20px;
             border-radius: 8px;
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-            display: flex;
-            align-items: center;
             gap: 10px;
-            flex-wrap: wrap;
         }
-        .filter-card label {
+        .filter-card .attendance-filter-field {
+            display: grid;
+            gap: 6px;
+            min-width: 0;
+        }
+        .filter-card .attendance-filter-field > span {
             font-weight: bold;
             font-size: 14px;
+        }
+        .filter-card .calendar-picker {
+            width: 100%;
+        }
+        .attendance-filter-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .attendance-filter-actions .btn-clear-placeholder {
+            visibility: hidden;
+            pointer-events: none;
+        }
+        @media (max-width: 720px) {
+            .filter-card {
+                width: 100%;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .attendance-filter-actions {
+                grid-column: 1 / -1;
+            }
+        }
+        @media (max-width: 480px) {
+            .filter-card {
+                grid-template-columns: minmax(0, 1fr);
+            }
+            .attendance-filter-actions {
+                grid-column: auto;
+                flex-wrap: wrap;
+            }
         }
         input[type="date"], input[type="text"] {
             padding: 6px 10px;
@@ -232,39 +268,79 @@ function formatTime($timeStr) {
             color: #6c757d;
         }
     </style>
+    <link rel="stylesheet" href="css/role-form-controls.css?v=<?= filemtime(__DIR__ . '/css/role-form-controls.css'); ?>">
 </head>
 <body>
+    <div class="hr-shell">
+        <aside class="hr-sidebar" aria-label="HR navigation">
+            <a class="hr-brand" href="HR.php" aria-label="TaskTrack HR home">
+                <span class="hr-brand-mark" aria-hidden="true">T</span>
+                <span class="hr-brand-name">TASKTRACK</span>
+            </a>
+            <nav class="hr-nav">
+                <a class="hr-nav-link" href="HR.php">
+                    <span class="hr-nav-icon" aria-hidden="true">▦</span>
+                    <span class="hr-nav-label">Employees</span>
+                </a>
+                <a class="hr-nav-link is-active" href="atten.php" aria-current="page">
+                    <span class="hr-nav-icon" aria-hidden="true">◷</span>
+                    <span class="hr-nav-label">Attendance</span>
+                </a>
+                <a class="hr-nav-link" href="application_form.php">
+                    <span class="hr-nav-icon" aria-hidden="true">▤</span>
+                    <span class="hr-nav-label">Applicants</span>
+                </a>
+                <a class="hr-nav-link" href="interview_sched.php">
+                    <span class="hr-nav-icon" aria-hidden="true">▣</span>
+                    <span class="hr-nav-label">Interview Schedule</span>
+                </a>
+                <a class="hr-nav-link" href="office_employee.php">
+                    <span class="hr-nav-icon" aria-hidden="true">☑</span>
+                    <span class="hr-nav-label">My Tasks</span>
+                </a>
+            </nav>
+            <a class="hr-nav-link hr-logout" href="logout.php">
+                <span class="hr-nav-icon" aria-hidden="true">↪</span>
+                <span class="hr-nav-label">Log out</span>
+            </a>
+        </aside>
+        <?php include __DIR__ . '/config/notification_bell.php'; ?>
 
+        <main class="hr-main attendance-main">
     <div class="header-actions">
-        <!-- Back Button -->
-        <a href="HR.php" class="btn btn-secondary">&larr; Back to HR</a>
-
         <!-- Filter & Search Form -->
         <form method="GET" action="" class="filter-card">
-            <!-- Name / Email Search -->
-            <label for="search">Search Employee:</label>
-            <input 
-                type="text" 
-                id="search" 
-                name="search" 
-                placeholder="Name or Email..."
-                value="<?= htmlspecialchars($searchName); ?>"
-            >
+            <label class="attendance-filter-field attendance-search-field" for="search">
+                <span>Search Employee:</span>
+                <input
+                    type="text"
+                    id="search"
+                    name="search"
+                    placeholder="Name or Email..."
+                    value="<?= htmlspecialchars($searchName); ?>"
+                >
+            </label>
 
-            <!-- Date Filter -->
-            <label for="date">Date:</label>
-            <input 
-                type="date" 
-                id="date" 
-                name="date" 
-                value="<?= htmlspecialchars($selectedDate); ?>" 
-            >
+            <label class="attendance-filter-field attendance-date-field" for="date">
+                <span>Date:</span>
+                <input
+                    type="date"
+                    class="calendar-control"
+                    id="date"
+                    name="date"
+                    value="<?= htmlspecialchars($selectedDate); ?>"
+                >
+            </label>
 
-            <button type="submit" class="btn btn-primary">Search / Filter</button>
-            
-            <?php if (!empty($selectedDate) || !empty($searchName)): ?>
-                <a href="atten.php" class="btn btn-outline">Clear Filter</a>
-            <?php endif; ?>
+            <div class="attendance-filter-actions">
+                <button type="submit" class="btn btn-primary">Search / Filter</button>
+                <?php $hasAttendanceFilter = !empty($selectedDate) || !empty($searchName); ?>
+                <a
+                    href="atten.php"
+                    class="btn btn-outline<?= $hasAttendanceFilter ? '' : ' btn-clear-placeholder'; ?>"
+                    <?= $hasAttendanceFilter ? '' : 'aria-hidden="true" tabindex="-1"'; ?>
+                >Clear Filter</a>
+            </div>
         </form>
     </div>
 
@@ -368,6 +444,8 @@ function formatTime($timeStr) {
             No attendance records found.
         </p>
     <?php endif; ?>
-
+        </main>
+    </div>
+<script src="js/calendar-picker.js?v=<?= filemtime(__DIR__ . '/js/calendar-picker.js'); ?>"></script>
 </body> 
 </html>

@@ -1,8 +1,8 @@
 <style>
     .tt-chatbot {
         position: fixed;
-        right: 22px;
-        bottom: 22px;
+        right: 88px;
+        bottom: 24px;
         z-index: 3000;
         font-family: Inter, "Segoe UI", Arial, sans-serif;
     }
@@ -307,8 +307,8 @@
     }
     @media (max-width: 480px) {
         .tt-chatbot {
-            right: 12px;
-            bottom: 12px;
+            right: 75px;
+            bottom: 15px;
         }
         .tt-chatbot-panel {
             right: -2px;

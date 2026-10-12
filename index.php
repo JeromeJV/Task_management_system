@@ -141,7 +141,6 @@ include 'config/loginBE.php';
             <nav>
                 <a href="#" class="active">Login</a>
                 <a href="TaskTrackWeb.php">Website</a>
-                <a href="register.php">Register</a>
                 <a href="attendance_form.php">ATTENDANCE</a>
             </nav>
         </header>

@@ -1,4 +1,58 @@
 <?php
+function isLogisticsEmployee(mysqli $conn, int $employeeId, ?int $userId = null): bool
+{
+    $statement = $conn->prepare("
+        SELECT (
+            EXISTS (
+                SELECT 1
+                FROM employee e
+                WHERE e.employee_id = ?
+                  AND (
+                      LOWER(TRIM(COALESCE(e.position, ''))) IN ('log', 'logistic', 'logistics', 'driver', 'delivery driver')
+                      OR EXISTS (
+                          SELECT 1
+                          FROM users u
+                          WHERE u.role = 'log'
+                            AND (
+                                (? > 0 AND u.id = ?)
+                                OR LOWER(TRIM(u.name)) = LOWER(TRIM(e.username))
+                            )
+                      )
+                  )
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM users u
+                WHERE ? > 0
+                  AND u.id = ?
+                  AND u.role = 'log'
+            )
+        ) AS is_logistics
+    ");
+    if (!$statement) {
+        throw new RuntimeException('Failed to prepare Logistics attendance lookup: ' . $conn->error);
+    }
+
+    $resolvedUserId = $userId ?? 0;
+    $statement->bind_param(
+        'iiiii',
+        $employeeId,
+        $resolvedUserId,
+        $resolvedUserId,
+        $resolvedUserId,
+        $resolvedUserId
+    );
+    if (!$statement->execute()) {
+        $error = $statement->error;
+        $statement->close();
+        throw new RuntimeException('Failed to identify Logistics attendance: ' . $error);
+    }
+    $isLogistics = (bool) ($statement->get_result()->fetch_assoc()['is_logistics'] ?? false);
+    $statement->close();
+
+    return $isLogistics;
+}
+
 function finalizeDailyAttendance(mysqli $conn, string $currentDate, string $currentTime): int
 {
     if ($currentTime < '17:01:00') {
@@ -36,15 +90,33 @@ function finalizeDailyAttendance(mysqli $conn, string $currentDate, string $curr
     $absentStatement->close();
 
     $statusStatement = $conn->prepare("
-        UPDATE attendance
-        SET is_late = CASE WHEN time_in > '08:00:00' THEN 1 ELSE 0 END,
-            status = CASE
-                WHEN time_in IS NULL OR time_in = '00:00:00' THEN 'Absent'
-                WHEN time_in_2 IS NULL OR time_in_2 = '00:00:00' THEN 'Half Day'
-                WHEN time_in > '08:00:00' THEN 'Late'
+        UPDATE attendance a
+        LEFT JOIN employee e ON e.employee_id = a.employee_id
+        SET a.is_late = CASE WHEN a.time_in > '08:00:00' THEN 1 ELSE 0 END,
+            a.status = CASE
+                WHEN a.time_in IS NULL OR a.time_in = '00:00:00' THEN 'Absent'
+                WHEN (
+                    LOWER(TRIM(COALESCE(e.position, ''))) IN ('log', 'logistic', 'logistics', 'driver', 'delivery driver')
+                    OR EXISTS (
+                        SELECT 1
+                        FROM users u
+                        WHERE u.role = 'log'
+                          AND (
+                              u.id = a.user_id
+                              OR LOWER(TRIM(u.name)) = LOWER(TRIM(e.username))
+                          )
+                    )
+                ) THEN
+                    CASE
+                        WHEN a.time_out IS NULL OR a.time_out = '00:00:00' THEN 'Half Day'
+                        WHEN a.time_in > '08:00:00' THEN 'Late'
+                        ELSE 'Present'
+                    END
+                WHEN a.time_in_2 IS NULL OR a.time_in_2 = '00:00:00' THEN 'Half Day'
+                WHEN a.time_in > '08:00:00' THEN 'Late'
                 ELSE 'Present'
             END
-        WHERE attendance_date = ?
+        WHERE a.attendance_date = ?
     ");
 
     if (!$statusStatement) {

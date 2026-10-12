@@ -7,6 +7,15 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 include('config/connection.php');
+require_once __DIR__ . '/account_access.php';
+requireActiveAccount($conn);
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!isset($_SESSION['id'], $_SESSION['role']) || !in_array($_SESSION['role'], ['HR', 'super'], true)) {
+        http_response_code(403);
+        exit('You are not authorized to manage employee records.');
+    }
+}
 
 // Siguraduhing tama ang timezone
 date_default_timezone_set('Asia/Manila');
@@ -59,7 +68,6 @@ if (isset($_POST['hire_applicant_id']) || isset($_POST['applicant_id'])) {
                 $fullname = $app_data['username'] ?? $app_data['name'] ?? 'New Employee';
             }
 
-            $dept    = !empty($app_data['department']) ? $app_data['department'] : 'General';
             $pos     = !empty($app_data['position_applied']) ? $app_data['position_applied'] : ($app_data['position'] ?? 'Employee');
             $contact = $app_data['contact_number'] ?? $app_data['phone'] ?? '';
             $address = trim(($app_data['house_number'] ?? '') . ' ' . ($app_data['street'] ?? '') . ' ' . ($app_data['barangay'] ?? '') . ' ' . ($app_data['city'] ?? ''));
@@ -69,16 +77,14 @@ if (isset($_POST['hire_applicant_id']) || isset($_POST['applicant_id'])) {
             $email   = $app_data['email'] ?? '';
 
             $safe_name    = mysqli_real_escape_string($conn, $fullname);
-            $safe_dept    = mysqli_real_escape_string($conn, $dept);
             $safe_pos     = mysqli_real_escape_string($conn, $pos);
             $safe_contact = mysqli_real_escape_string($conn, $contact);
             $safe_addr    = mysqli_real_escape_string($conn, $address);
             $safe_email   = mysqli_real_escape_string($conn, $email);
 
-            $hire_sql = "INSERT INTO employee (username, department, position, contact_number, address, email) 
-                         VALUES ('$safe_name', '$safe_dept', '$safe_pos', '$safe_contact', '$safe_addr', '$safe_email')
+            $hire_sql = "INSERT INTO employee (username, position, contact_number, address, email)
+                         VALUES ('$safe_name', '$safe_pos', '$safe_contact', '$safe_addr', '$safe_email')
                          ON DUPLICATE KEY UPDATE 
-                            department = VALUES(department),
                             position = VALUES(position),
                             contact_number = VALUES(contact_number),
                             address = VALUES(address),
@@ -122,7 +128,6 @@ if (isset($_POST['hire_applicant_id']) || isset($_POST['applicant_id'])) {
 // -----------------------------------------------------
 if (isset($_POST['submit']) && !isset($_POST['is_update'])) { 
     $username       = $_POST['username'] ?? '';
-    $department     = $_POST['department'] ?? '';
     $position       = $_POST['position'] ?? '';
     $contact_number = $_POST['contact_number'] ?? '';
     $address        = $_POST['address'] ?? '';
@@ -147,14 +152,13 @@ if (isset($_POST['submit']) && !isset($_POST['is_update'])) {
 
     if ($isValid) {
         $safe_user_name      = mysqli_real_escape_string($conn, $username);
-        $safe_department     = mysqli_real_escape_string($conn, $department);
         $safe_position       = mysqli_real_escape_string($conn, $position);
         $safe_contact_number = mysqli_real_escape_string($conn, $contact_number);
         $safe_address        = mysqli_real_escape_string($conn, $address);
         $safe_email          = mysqli_real_escape_string($conn, $email);
         
-        $sql = "INSERT INTO employee (username, department, position, contact_number, address, email) 
-                VALUES ('$safe_user_name', '$safe_department', '$safe_position', '$safe_contact_number', '$safe_address', '$safe_email')";
+        $sql = "INSERT INTO employee (username, position, contact_number, address, email)
+                VALUES ('$safe_user_name', '$safe_position', '$safe_contact_number', '$safe_address', '$safe_email')";
         
         $query = mysqli_query($conn, $sql);
 
@@ -170,6 +174,12 @@ if (isset($_POST['submit']) && !isset($_POST['is_update'])) {
             header("Location: HR.php");
             exit();
         }
+    } else {
+        $_SESSION['err'] = $username_err !== ''
+            ? $username_err
+            : ($contact_number_err !== '' ? $contact_number_err : 'Check the employee details and try again.');
+        header("Location: HR.php");
+        exit();
     }
 }
 
@@ -198,8 +208,8 @@ if (isset($_POST['del']) && !empty($passid)) {
 
 // KAPAG PININDOT ANG UPDATE BUTTON SA HR.PHP
 } elseif (isset($_POST['upd']) && !empty($passid)) {
-    // I-redirect sa register.php para doon i-edit ang details sa form
-    header("Location: register.php?edit_id=" . urlencode($passid));
+    $_SESSION['err'] = 'Open the employee profile and choose Edit Details to update this record.';
+    header("Location: HR.php");
     exit();
 }
 
@@ -207,44 +217,115 @@ if (isset($_POST['del']) && !empty($passid)) {
 // 3. Update Employee Save Execution
 // -----------------------------------------------------
 if (isset($_POST['submit']) && isset($_POST['is_update'])) {
-    $employee_id    = $_POST['employee_id'] ?? '';
-    $username       = $_POST['username'] ?? '';
-    $department     = $_POST['department'] ?? '';
-    $position       = $_POST['position'] ?? '';
-    $contact_number = $_POST['contact_number'] ?? '';
-    $address        = $_POST['address'] ?? '';
-    $email          = $_POST['email'] ?? '';
-
-    $safe_employee_id    = mysqli_real_escape_string($conn, $employee_id);
-    $safe_user_name      = mysqli_real_escape_string($conn, $username);
-    $safe_department     = mysqli_real_escape_string($conn, $department);
-    $safe_position       = mysqli_real_escape_string($conn, $position);
-    $safe_contact_number = mysqli_real_escape_string($conn, $contact_number);
-    $safe_address        = mysqli_real_escape_string($conn, $address);
-    $safe_email          = mysqli_real_escape_string($conn, $email);
-
-    $sql = "UPDATE employee 
-            SET username = '$safe_user_name', 
-                department = '$safe_department',
-                position = '$safe_position',
-                contact_number = '$safe_contact_number',
-                address = '$safe_address',
-                email = '$safe_email'
-            WHERE employee_id = '$safe_employee_id'";
-
-    $query = mysqli_query($conn, $sql);
-
-    if ($query) {
-        $updateAtt = $conn->prepare("UPDATE attendance SET username = ? WHERE employee_id = ?");
-        $updateAtt->bind_param("si", $safe_user_name, $safe_employee_id);
-        $updateAtt->execute();
-
-        $_SESSION['msg'] = "Employee updated successfully.";
-    } else {
-        $_SESSION['err'] = "Update Failed: " . mysqli_error($conn);
+    if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['HR', 'super'], true)) {
+        http_response_code(403);
+        exit('You are not authorized to update employee records.');
+    }
+    $posted_token = (string) ($_POST['csrf_token'] ?? '');
+    if (
+        empty($_SESSION['employee_edit_csrf'])
+        || !hash_equals((string) $_SESSION['employee_edit_csrf'], $posted_token)
+    ) {
+        $_SESSION['err'] = 'Your session expired. Refresh the HR page and try again.';
+        header('Location: HR.php');
+        exit();
     }
 
-    // MATAPOS MAG-UPDATE, BABALIK SA HR.PHP
+    $employee_id = filter_var($_POST['employee_id'] ?? null, FILTER_VALIDATE_INT);
+    $username = trim((string) ($_POST['username'] ?? ''));
+    $position = trim((string) ($_POST['position'] ?? ''));
+    $contact_number = trim((string) ($_POST['contact_number'] ?? ''));
+    $address = trim((string) ($_POST['address'] ?? ''));
+    $email = trim((string) ($_POST['email'] ?? ''));
+    $validation_error = '';
+
+    if (!$employee_id || $employee_id < 1) {
+        $validation_error = 'Invalid employee record.';
+    } elseif ($username === '' || mb_strlen($username) > 100) {
+        $validation_error = 'Enter an employee name up to 100 characters.';
+    } elseif (mb_strlen($position) > 100) {
+        $validation_error = 'Position must be 100 characters or fewer.';
+    } elseif (mb_strlen($contact_number) > 20 || ($contact_number !== '' && !preg_match('/^[0-9 ]+$/', $contact_number))) {
+        $validation_error = 'Enter a valid contact number using digits and spaces only.';
+    } elseif (mb_strlen($address) > 255) {
+        $validation_error = 'Address must be 255 characters or fewer.';
+    } elseif (mb_strlen($email) > 255 || ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL))) {
+        $validation_error = 'Enter a valid email address up to 255 characters.';
+    }
+
+    if ($validation_error !== '') {
+        $_SESSION['err'] = $validation_error;
+    } else {
+        $conn->begin_transaction();
+        $employee_exists = $conn->prepare('SELECT employee_id FROM employee WHERE employee_id = ? FOR UPDATE');
+        if (!$employee_exists) {
+            $conn->rollback();
+            throw new RuntimeException('Unable to verify employee record: ' . $conn->error);
+        }
+        $employee_exists->bind_param('i', $employee_id);
+        if (!$employee_exists->execute()) {
+            $error = $employee_exists->error;
+            $employee_exists->close();
+            $conn->rollback();
+            throw new RuntimeException('Unable to verify employee record: ' . $error);
+        }
+        $employee_found = $employee_exists->get_result()->num_rows === 1;
+        $employee_exists->close();
+
+        if (!$employee_found) {
+            $conn->rollback();
+            $_SESSION['err'] = 'The employee record could not be found.';
+        } else {
+            $update_employee = $conn->prepare(
+                'UPDATE employee
+                 SET username = ?, position = ?, contact_number = ?, address = ?, email = ?
+                 WHERE employee_id = ?'
+            );
+            if (!$update_employee) {
+                $conn->rollback();
+                throw new RuntimeException('Unable to prepare employee update: ' . $conn->error);
+            }
+            $update_employee->bind_param(
+                'sssssi',
+                $username,
+                $position,
+                $contact_number,
+                $address,
+                $email,
+                $employee_id
+            );
+
+            if (!$update_employee->execute()) {
+                $error = $update_employee->error;
+                $update_employee->close();
+                $conn->rollback();
+                $_SESSION['err'] = 'Employee update failed: ' . $error;
+            } else {
+                $update_employee->close();
+                $update_attendance = $conn->prepare('UPDATE attendance SET username = ? WHERE employee_id = ?');
+                if (!$update_attendance) {
+                    $conn->rollback();
+                    throw new RuntimeException('Unable to prepare attendance name update: ' . $conn->error);
+                }
+                $update_attendance->bind_param('si', $username, $employee_id);
+                if (!$update_attendance->execute()) {
+                    $error = $update_attendance->error;
+                    $update_attendance->close();
+                    $conn->rollback();
+                    $_SESSION['err'] = 'Employee details were not saved because attendance names could not be updated: ' . $error;
+                } else {
+                    $update_attendance->close();
+                    if (!$conn->commit()) {
+                        $conn->rollback();
+                        $_SESSION['err'] = 'Employee changes could not be committed.';
+                    } else {
+                        $_SESSION['msg'] = 'Employee updated successfully.';
+                    }
+                }
+            }
+        }
+    }
+
     header("Location: HR.php");
     exit();
 

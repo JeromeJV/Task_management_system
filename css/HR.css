@@ -321,20 +321,29 @@ a {
 
 .hr-search {
     display: flex;
-    min-height: 44px;
+    min-height: 46px;
     align-items: center;
     gap: 9px;
-    padding: 0 12px;
-    border: 1px solid #D6DDD8;
+    padding: 0 13px;
+    border: 1px solid #D5E0D9;
     border-radius: 10px;
-    background: #FFFFFF;
-    box-shadow: 0 2px 5px rgba(31, 41, 55, 0.05);
+    background: linear-gradient(135deg, #FFFFFF 0%, #F7FAF8 100%);
+    box-shadow: 0 2px 7px rgba(32, 65, 46, 0.045);
+    transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
 }
 
-.hr-search:focus-within,
-.hr-filter-select:focus-visible {
-    border-color: #5A9E73;
-    outline: 3px solid rgba(31, 110, 74, 0.13);
+.hr-search:hover,
+.hr-search:focus-within {
+    border-color: #78A58B;
+    background: #F4F9F5;
+    transform: translateY(-1px);
+}
+
+#attendanceFilter:focus-visible {
+    border-color: #28794F;
+    outline: 3px solid rgba(31, 110, 74, 0.16);
+    outline-offset: 1px;
+    box-shadow: 0 0 0 1px #28794F;
 }
 
 .hr-search-icon {
@@ -344,30 +353,58 @@ a {
     transform: rotate(-18deg);
 }
 
-.hr-search input {
+#employeeSearch {
     width: 100%;
     min-width: 0;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    outline: 0;
+    background: transparent;
+    color: #27372E;
+    font-size: 13px;
+    box-shadow: none;
+}
+
+#employeeSearch:hover,
+#employeeSearch:focus-visible {
     border: 0;
     outline: 0;
     background: transparent;
-    color: #26352C;
-    font-size: 12px;
+    box-shadow: none;
 }
 
-.hr-search input::placeholder {
-    color: #929B95;
+#employeeSearch::placeholder {
+    color: #7A877F;
 }
 
-.hr-filter-select {
+#attendanceFilter {
     width: 100%;
-    min-height: 42px;
-    padding: 0 12px;
-    border: 1px solid #D6DDD8;
+    min-height: 46px;
+    padding: 11px 36px 11px 13px;
+    border: 1px solid #D5E0D9;
     border-radius: 10px;
-    background: #FFFFFF;
-    color: #5D6B62;
-    font-size: 12px;
+    background-color: #FFFFFF;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m5 7.5 5 5 5-5' stroke='%23596960' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    color: #27372E;
+    font-size: 13px;
+    box-shadow: 0 2px 7px rgba(32, 65, 46, 0.045);
     cursor: pointer;
+    appearance: none;
+    transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+}
+
+.select-control--hr-filter {
+    width: 100%;
+}
+
+#attendanceFilter:hover:not(:disabled) {
+    border-color: #78A58B;
+    background-color: #F4F9F5;
+    transform: translateY(-1px);
 }
 
 .hr-employee-section {
@@ -512,7 +549,6 @@ a {
     white-space: nowrap;
 }
 
-.hr-employee-department,
 .hr-employee-position {
     width: 100%;
     margin: 0 0 7px;
@@ -523,7 +559,6 @@ a {
     white-space: nowrap;
 }
 
-.hr-employee-department span,
 .hr-employee-position span {
     color: #879188;
     font-weight: 600;
@@ -700,6 +735,55 @@ a {
     background: #FFFFFF;
     box-shadow: 0 24px 70px rgba(23, 37, 29, 0.2);
     animation: hrModalEnter 160ms ease-out;
+}
+
+.hr-edit-employee-modal {
+    width: min(100%, 620px);
+}
+
+.hr-edit-employee-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 16px;
+    margin-top: 20px;
+}
+
+.hr-edit-employee-form label {
+    display: grid;
+    gap: 6px;
+    color: #68756C;
+    font-size: 11px;
+    font-weight: 650;
+}
+
+#editEmployeeModal .hr-edit-employee-form input {
+    width: 100%;
+    min-height: 46px;
+    padding: 11px 13px;
+    border: 1px solid #D5E0D9;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #FFFFFF 0%, #F7FAF8 100%);
+    color: #27372E;
+    font: inherit;
+    font-size: 13px;
+    box-shadow: 0 2px 7px rgba(32, 65, 46, 0.045);
+    transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+}
+
+#editEmployeeModal .hr-edit-employee-form input:focus-visible {
+    border-color: #28794F;
+    outline: 3px solid rgba(31, 110, 74, 0.16);
+    outline-offset: 1px;
+    box-shadow: 0 0 0 1px #28794F;
+}
+
+.hr-edit-address,
+.hr-edit-actions {
+    grid-column: 1 / -1;
+}
+
+.hr-edit-actions {
+    margin-top: 4px;
 }
 
 @keyframes hrModalEnter {
@@ -1002,6 +1086,15 @@ a {
 
     .hr-employee-modal {
         padding: 22px 18px 18px;
+    }
+
+    .hr-edit-employee-form {
+        grid-template-columns: 1fr;
+    }
+
+    .hr-edit-address,
+    .hr-edit-actions {
+        grid-column: auto;
     }
 }
 

@@ -27,6 +27,7 @@ $count = $count ?? count($records);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Document</title>
+    <link rel="stylesheet" href="css/select-control.css?v=<?= filemtime(__DIR__ . '/css/select-control.css'); ?>">
 </head>
 <body> 
         <h1>Record System</h1>
@@ -69,5 +70,6 @@ $count = $count ?? count($records);
 </form>
 
     <button><a href="delivery_main.php">Back</a></button>
+    <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
 </body>
 </html>

@@ -3,8 +3,12 @@ header('Content-Type: application/json');
 require_once __DIR__ . '/connection.php';
 require_once __DIR__ . '/attendance_helpers.php';
 require_once __DIR__ . '/payroll_helpers.php';
+require_once __DIR__ . '/system_audit.php';
+require_once __DIR__ . '/account_access.php';
 
-session_start();
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
 
 // Security Check: Ensure user is logged in
 if (!isset($_SESSION['email'])) {
@@ -15,6 +19,7 @@ if (!isset($_SESSION['email'])) {
     ]);
     exit();
 }
+requireActiveAccount($conn, true);
 
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_REQUEST['action'] ?? ($method === 'GET' ? 'get_all' : '');
@@ -123,7 +128,7 @@ if ($method === 'GET') {
     }
 
     if ($action === 'get_all') {
-        $sql = "SELECT p.*, e.tin_no, e.sss_no, e.hdmf_no, e.position, e.department, e.username 
+        $sql = "SELECT p.*, e.tin_no, e.sss_no, e.hdmf_no, e.position, e.username
                 FROM payroll p 
                 INNER JOIN employee e ON p.employee_id = e.employee_id 
                 ORDER BY p.payroll_id DESC";
@@ -153,7 +158,7 @@ if ($method === 'GET') {
     if ($action === 'get_single' && isset($_GET['payroll_id'])) {
         $payroll_id = intval($_GET['payroll_id']);
         
-        $stmt = $conn->prepare("SELECT p.*, e.tin_no, e.sss_no, e.hdmf_no, e.position, e.department, e.username 
+        $stmt = $conn->prepare("SELECT p.*, e.tin_no, e.sss_no, e.hdmf_no, e.position, e.username
                                 FROM payroll p 
                                 INNER JOIN employee e ON p.employee_id = e.employee_id 
                                 WHERE p.payroll_id = ?");
@@ -278,6 +283,15 @@ if ($method === 'POST' && $action === 'create_payroll') {
     );
 
     if ($stmt->execute()) {
+        recordSystemAudit(
+            $conn,
+            (int) ($_SESSION['id'] ?? 0) ?: null,
+            (string) ($_SESSION['name'] ?? 'Payroll user'),
+            'payroll_created',
+            'payroll',
+            (int) $conn->insert_id,
+            'Created payroll for employee #' . $employee_id . ' for ' . $pay_period . ' (' . $pay_date . ').'
+        );
         header("Location: ../payroll.php?success=1");
         exit();
     } else {
@@ -312,6 +326,15 @@ if ($method === 'POST' && $action === 'mark_paid') {
     $stmt->bind_param("i", $payroll_id);
 
     if ($stmt->execute() && $stmt->affected_rows === 1) {
+        recordSystemAudit(
+            $conn,
+            (int) ($_SESSION['id'] ?? 0) ?: null,
+            (string) ($_SESSION['name'] ?? 'Payroll user'),
+            'payroll_marked_paid',
+            'payroll',
+            $payroll_id,
+            'Marked payroll #' . $payroll_id . ' as paid.'
+        );
         echo json_encode([
             'status' => 'success',
             'message' => 'Payroll marked as paid.'

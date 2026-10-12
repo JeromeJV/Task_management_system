@@ -333,7 +333,7 @@ summary {
     padding: 8px 9px;
     background: #f7f8fa;
     color: #929aaa;
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 800;
     letter-spacing: .05em;
     text-transform: uppercase;
@@ -354,7 +354,7 @@ summary {
     border-bottom: 1px solid #edf0f4;
     background: #fff;
     color: #4b5567;
-    font-size: 9px;
+    font-size: 10px;
     white-space: nowrap;
 }
 
@@ -396,7 +396,7 @@ summary {
     background: transparent;
     color: #273348;
     cursor: pointer;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     text-align: left;
     text-overflow: ellipsis;
@@ -413,7 +413,7 @@ summary {
     gap: 5px;
     margin-top: 3px;
     color: #8993a3;
-    font-size: 8px;
+    font-size: 9px;
 }
 
 .category-dot,
@@ -462,6 +462,14 @@ summary {
     color: #e32932 !important;
 }
 
+.overdue-detail {
+    display: block;
+    margin: 3px 0 0 15px;
+    color: #d83239;
+    font-size: 9px;
+    font-weight: 650;
+}
+
 .status-pill {
     display: inline-flex;
     align-items: center;
@@ -469,7 +477,7 @@ summary {
     padding: 4px 7px;
     border: 1px solid transparent;
     border-radius: 7px;
-    font-size: 8px;
+    font-size: 9px;
     font-weight: 700;
 }
 
@@ -536,12 +544,12 @@ summary {
     gap: 12px;
     margin-bottom: 4px;
     color: #8993a3;
-    font-size: 7px;
+    font-size: 9px;
 }
 
 .progress-label strong {
     color: #3b82f6;
-    font-size: 8px;
+    font-size: 9px;
 }
 
 .is-completed .progress-label strong {
@@ -553,8 +561,8 @@ summary {
 }
 
 .progress-track {
-    width: 100px;
-    height: 4px;
+    width: 110px;
+    height: 5px;
     overflow: hidden;
     border-radius: 99px;
     background: #e8edf4;
@@ -578,8 +586,8 @@ summary {
 .open-button,
 .done-button {
     display: inline-flex;
-    min-width: 55px;
-    min-height: 25px;
+    min-width: 76px;
+    min-height: 30px;
     align-items: center;
     justify-content: center;
     padding: 0 9px;
@@ -588,7 +596,7 @@ summary {
     background: #f8fafc;
     color: #4b5563;
     cursor: pointer;
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 650;
 }
 
@@ -596,13 +604,6 @@ summary {
     border-color: #3b82f6;
     background: #3b82f6;
     color: #fff;
-}
-
-.is-overdue .open-button {
-    border-color: #e62e33;
-    background: #e62e33;
-    color: #fff;
-    font-weight: 750;
 }
 
 .done-button {
@@ -619,7 +620,7 @@ summary {
 }
 
 .task-dialog {
-    width: min(455px, calc(100% - 30px));
+    width: min(520px, calc(100% - 30px));
     max-height: min(90vh, 680px);
     padding: 0;
     overflow: auto;
@@ -635,7 +636,7 @@ summary {
 }
 
 .dialog-content {
-    padding: 20px;
+    padding: 24px;
 }
 
 .dialog-topline {
@@ -643,15 +644,15 @@ summary {
     align-items: center;
     justify-content: space-between;
     color: #8791a2;
-    font-size: 8px;
+    font-size: 10px;
     font-weight: 700;
     letter-spacing: .12em;
 }
 
 .dialog-close {
     display: grid;
-    width: 27px;
-    height: 27px;
+    width: 34px;
+    height: 34px;
     place-items: center;
     border: 0;
     border-radius: 50%;
@@ -664,36 +665,36 @@ summary {
 .dialog-content h2 {
     margin: 0 34px 8px 0;
     color: #172033;
-    font-size: 18px;
+    font-size: 22px;
     line-height: 1.28;
 }
 
 .dialog-badges {
     display: flex;
     gap: 6px;
-    margin-bottom: 13px;
+    margin-bottom: 16px;
 }
 
 .priority-badge {
-    padding: 4px 8px;
+    padding: 5px 9px;
     border: 1px solid #e6eaf0;
     border-radius: 7px;
     background: #f8fafc;
     color: #4b5563;
-    font-size: 8px;
+    font-size: 10px;
     font-weight: 650;
 }
 
 .dialog-facts {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 7px;
-    margin-bottom: 9px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+    margin-bottom: 11px;
 }
 
 .dialog-facts > div {
     min-width: 0;
-    padding: 9px;
+    padding: 12px;
     border: 1px solid #edf0f4;
     border-radius: 9px;
     background: #f8fafc;
@@ -704,7 +705,7 @@ summary {
     display: block;
     margin-bottom: 5px;
     color: #8c96a6;
-    font-size: 7px;
+    font-size: 9px;
     letter-spacing: .05em;
 }
 
@@ -714,13 +715,21 @@ summary {
     gap: 5px;
     overflow: hidden;
     color: #303a4d;
-    font-size: 8px;
+    font-size: 11px;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
+.dialog-overdue-detail {
+    display: block;
+    margin-top: 6px;
+    color: #d83239;
+    font-size: 11px;
+    font-weight: 700;
+}
+
 .description-box {
-    padding: 11px;
+    padding: 13px;
     border: 1px solid #edf0f4;
     border-radius: 9px;
     background: #f8fafc;
@@ -729,14 +738,14 @@ summary {
 .description-box p {
     margin: 0;
     color: #536074;
-    font-size: 9px;
+    font-size: 12px;
     line-height: 1.6;
     white-space: normal;
 }
 
 .progress-update {
-    margin-top: 9px;
-    padding: 12px;
+    margin-top: 12px;
+    padding: 15px;
     border: 1px solid #d9e8ff;
     border-radius: 9px;
     background: #f1f7ff;
@@ -745,23 +754,28 @@ summary {
 .progress-update-heading {
     justify-content: space-between;
     color: #1d4ed8;
-    font-size: 9px;
+    font-size: 12px;
 }
 
 .progress-update-heading output {
-    padding: 3px 7px;
+    padding: 4px 9px;
     border-radius: 99px;
     background: #3b82f6;
     color: #fff;
-    font-size: 8px;
+    font-size: 11px;
     font-weight: 700;
 }
 
 .progress-update input[type="range"] {
     display: block;
     width: 100%;
-    height: 5px;
-    margin: 10px 0 4px;
+    min-height: 0;
+    height: 7px;
+    margin: 14px 0 5px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
     accent-color: #3b82f6;
     cursor: pointer;
 }
@@ -770,18 +784,25 @@ summary {
     display: flex;
     justify-content: space-between;
     color: #8c96a6;
-    font-size: 7px;
+    font-size: 10px;
+}
+
+.progress-help {
+    margin: 8px 0 0;
+    color: #64748b;
+    font-size: 11px;
+    line-height: 1.5;
 }
 
 .save-progress-button {
-    margin-top: 9px;
-    padding: 6px 9px;
+    margin-top: 11px;
+    padding: 8px 12px;
     border: 1px solid #c9ddfc;
     border-radius: 6px;
     background: #fff;
     color: #2455b7;
     cursor: pointer;
-    font-size: 8px;
+    font-size: 11px;
     font-weight: 650;
 }
 
@@ -793,7 +814,7 @@ summary {
 
 .updated-at {
     color: #9aa3b2;
-    font-size: 8px;
+    font-size: 10px;
 }
 
 .dialog-bottom > div {
@@ -802,14 +823,14 @@ summary {
 
 .close-button,
 .complete-button {
-    min-height: 29px;
-    padding: 0 11px;
+    min-height: 36px;
+    padding: 0 13px;
     border: 1px solid #e2e7ed;
     border-radius: 7px;
     background: #fff;
     color: #364152;
     cursor: pointer;
-    font-size: 8px;
+    font-size: 10px;
     font-weight: 650;
 }
 
@@ -821,8 +842,8 @@ summary {
 }
 
 .completed-dialog {
-    width: min(310px, calc(100% - 30px));
-    text-align: center;
+    width: min(520px, calc(100% - 30px));
+    text-align: left;
 }
 
 .completed-content {
@@ -834,7 +855,7 @@ summary {
     width: 39px;
     height: 39px;
     place-items: center;
-    margin: 0 auto 9px;
+    margin: 12px 0 10px;
     border-radius: 50%;
     background: #e8fbf3;
     color: #10b981;
@@ -843,24 +864,30 @@ summary {
 }
 
 .completed-content h2 {
-    margin: 0 0 5px;
-    font-size: 15px;
+    margin: 0 0 8px;
+    font-size: 22px;
 }
 
-.completed-content p {
-    margin: 0 0 13px;
-    color: #7c8799;
-    font-size: 9px;
+.completed-progress {
+    display: flex;
+    justify-content: space-between;
+    margin: 12px 0 0;
+    padding: 11px 13px;
+    border-radius: 9px;
+    background: #eafbf4;
+    color: #176b49;
+    font-size: 12px;
 }
 
-.completed-content button {
-    padding: 7px 12px;
+.completed-return {
+    margin-top: 14px;
+    padding: 9px 13px;
     border: 0;
     border-radius: 7px;
     background: #111827;
     color: #fff;
     cursor: pointer;
-    font-size: 9px;
+    font-size: 11px;
     font-weight: 650;
 }
 
@@ -903,6 +930,14 @@ summary {
 
     .dialog-content {
         padding: 16px;
+    }
+
+    .completed-content {
+        padding: 16px;
+    }
+
+    .dialog-facts {
+        grid-template-columns: 1fr;
     }
 }
 

@@ -7,6 +7,10 @@ date_default_timezone_set('Asia/Manila');
 // Siguraduhing tama ang path ng connection file
 include __DIR__ . '/connection.php';
 require_once __DIR__ . '/attendance_helpers.php';
+require_once __DIR__ . '/system_audit.php';
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
 
 $raw_employee_id = $_POST['employee_id'] ?? '';
 $action_type = $_POST['action_type'] ?? '';
@@ -44,7 +48,8 @@ if ($action_type === 'lookup') {
     $attendanceQuery->bind_param("is", $lookupEmployeeId, $today);
     $attendanceQuery->execute();
     $attendanceRow = $attendanceQuery->get_result()->fetch_assoc();
-    $nextAction = getNextAttendanceAction($attendanceRow);
+    $isLogistics = isLogisticsEmployee($conn, $lookupEmployeeId);
+    $nextAction = getNextAttendanceAction($attendanceRow, $isLogistics);
 
     echo json_encode([
         'status' => 'success',
@@ -110,6 +115,7 @@ if (!$employee_id && !$user_id) {
 // Tamang Oras at Petsa para sa Pilipinas
 $today = date('Y-m-d');
 $nowTime = date('H:i:s');
+$isLogistics = isLogisticsEmployee($conn, (int) ($employee_id ?? 0), $user_id);
 finalizeDailyAttendance($conn, $today, $nowTime);
 
 // 1. Hanapin kung may attendance record na ngayong araw
@@ -120,7 +126,7 @@ $attRes = $checkAtt->get_result();
 $attRow = $attRes->fetch_assoc();
 
 if ($action_type === 'submit') {
-    $action_type = getNextAttendanceAction($attRow);
+    $action_type = getNextAttendanceAction($attRow, $isLogistics);
     if ($action_type === null) {
         echo json_encode(['status' => 'error', 'message' => "{$username}'s attendance is already complete for today.", 'next_action' => null]);
         exit;
@@ -142,10 +148,19 @@ if ($attRow) {
     $updateQuery->bind_param("ssii", $nowTime, $attendanceStatus, $attendanceIsLate, $attendance_id);
     
     if ($updateQuery->execute()) {
+        recordSystemAudit(
+            $conn,
+            $user_id ? (int) $user_id : (isset($_SESSION['id']) ? (int) $_SESSION['id'] : null),
+            (string) ($_SESSION['name'] ?? $username),
+            'attendance_' . $action_type,
+            'employee',
+            (int) $employee_id,
+            attendanceActionLabel($action_type) . ' recorded for ' . $username . ' on ' . $today . '.'
+        );
         $nextAction = null;
         if ($isSequentialSubmit) {
             $updatedAttendance = array_merge($attRow, [$action_type => $nowTime]);
-            $nextAction = getNextAttendanceAction($updatedAttendance);
+            $nextAction = getNextAttendanceAction($updatedAttendance, $isLogistics);
         }
         finalizeDailyAttendance($conn, $today, $nowTime);
         $finalStatus = getAttendanceStatus($conn, $attendance_id);
@@ -168,7 +183,18 @@ if ($attRow) {
     $insertQuery->bind_param("iissssi", $employee_id, $user_id, $username, $today, $nowTime, $attendanceStatus, $attendanceIsLate);
     
     if ($insertQuery->execute()) {
-        $nextAction = $isSequentialSubmit ? 'time_out' : null;
+        recordSystemAudit(
+            $conn,
+            $user_id ? (int) $user_id : (isset($_SESSION['id']) ? (int) $_SESSION['id'] : null),
+            (string) ($_SESSION['name'] ?? $username),
+            'attendance_' . $action_type,
+            'employee',
+            (int) $employee_id,
+            attendanceActionLabel($action_type) . ' recorded for ' . $username . ' on ' . $today . '.'
+        );
+        $nextAction = $isSequentialSubmit
+            ? getNextAttendanceAction([$action_type => $nowTime], $isLogistics)
+            : null;
         $attendanceId = $conn->insert_id;
         finalizeDailyAttendance($conn, $today, $nowTime);
         $finalStatus = getAttendanceStatus($conn, $attendanceId);
@@ -183,9 +209,11 @@ if ($attRow) {
     }
 }
 
-function getNextAttendanceAction($attendance)
+function getNextAttendanceAction($attendance, bool $isLogistics = false)
 {
-    $actions = ['time_in', 'time_out', 'time_in_2', 'time_out_2'];
+    $actions = $isLogistics
+        ? ['time_in', 'time_out']
+        : ['time_in', 'time_out', 'time_in_2', 'time_out_2'];
     if (!$attendance) {
         return $actions[0];
     }

@@ -4,25 +4,38 @@ $tasktrackActive = $tasktrackActive ?? '';
 $tasktrackName = (string) ($_SESSION['name'] ?? 'TaskTrack User');
 $tasktrackEmail = (string) ($_SESSION['email'] ?? '');
 $tasktrackDashboard = match ($tasktrackRole) {
+    'admin' => 'admin.php',
     'HR' => 'HR.php',
     'super' => 'supervisor.php',
-    'pro' => 'factory_main.php',
+    'pro', 'cooking', 'packaging' => 'factory_main.php',
     'log' => 'delivery_main.php',
     default => 'index.php',
 };
 $tasktrackRoleLabel = match ($tasktrackRole) {
+    'admin' => 'Administrator',
     'HR' => 'Human Resources',
     'super' => 'Supervisor',
     'pro' => 'Production Staff',
+    'cooking' => 'Cooking Staff',
+    'packaging' => 'Packaging Staff',
     'log' => 'Logistics',
     default => 'Employee',
 };
-$tasktrackNavItems = [
-    'dashboard' => ['Dashboard', $tasktrackDashboard, 'dashboard'],
-    'employee' => ['Employee', 'employee.php', 'employee'],
-    'production' => ['Production', 'factory_main.php', 'production'],
-    'logistics' => ['Logistics', 'delivery_main.php', 'logistics'],
-];
+$tasktrackNavItems = match ($tasktrackRole) {
+    'admin' => [
+        'dashboard' => ['Dashboard', 'admin.php', 'dashboard'],
+        'accounts' => ['Accounts', 'admin.php?section=accounts', 'employee'],
+        'audit' => ['Audit log', 'admin.php?section=audit', 'tasks'],
+        'reports' => ['Reports', 'admin.php?section=reports', 'production'],
+    ],
+    'employee' => [],
+    default => [
+        'dashboard' => ['Dashboard', $tasktrackDashboard, 'dashboard'],
+        'employee' => ['Employee', 'employee.php', 'employee'],
+        'production' => ['Production', 'factory_main.php', 'production'],
+        'logistics' => ['Logistics', 'delivery_main.php', 'logistics'],
+    ],
+};
 if (in_array($tasktrackRole, ['HR', 'payroll', 'super', 'employee'], true)) {
     $tasktrackNavItems['my-tasks'] = ['My Tasks', 'office_employee.php', 'tasks'];
 }
@@ -60,3 +73,4 @@ $tasktrackIcons = [
         <span class="tasktrack-nav-label">LOG OUT</span>
     </a>
 </aside>
+<?php include __DIR__ . '/notification_bell.php'; ?>

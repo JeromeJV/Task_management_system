@@ -6,6 +6,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 }
 require_once __DIR__ . '/config/connection.php';
 require_once __DIR__ . '/config/autoLog.php';
+require_once __DIR__ . '/config/task_notifications.php';
 date_default_timezone_set('Asia/Manila');
 
 $allowedRoles = ['HR', 'payroll', 'super', 'employee'];
@@ -13,13 +14,12 @@ if (!isset($_SESSION['id'], $_SESSION['email'], $_SESSION['role']) || !in_array(
     header('Location: index.php');
     exit();
 }
-
 $userId = (int) $_SESSION['id'];
 $userEmail = trim((string) $_SESSION['email']);
-$userName = trim((string) ($_SESSION['name'] ?? ''));
 $accountRole = (string) $_SESSION['role'];
 $escape = static fn ($value): string => htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 $today = date('Y-m-d');
+ensureTaskNotificationSchema($conn);
 
 if (empty($_SESSION['office_employee_csrf'])) {
     $_SESSION['office_employee_csrf'] = bin2hex(random_bytes(32));
@@ -28,29 +28,19 @@ if (empty($_SESSION['office_employee_csrf'])) {
 $accountLinkError = '';
 $employee = null;
 $matchStmt = $conn->prepare(
-    "SELECT e.employee_id, e.username, e.department, e.position,
-            CASE
-                WHEN EXISTS (
-                    SELECT 1 FROM attendance a
-                    WHERE a.employee_id = e.employee_id AND a.user_id = ?
-                ) THEN 0
-                WHEN e.email IS NOT NULL AND e.email <> '' AND LOWER(TRIM(e.email)) = LOWER(TRIM(?)) THEN 1
-                ELSE 2
-            END AS match_priority
+    "SELECT e.employee_id, e.username, e.position
      FROM employee e
      WHERE EXISTS (
             SELECT 1 FROM attendance a
             WHERE a.employee_id = e.employee_id AND a.user_id = ?
         )
         OR (e.email IS NOT NULL AND e.email <> '' AND LOWER(TRIM(e.email)) = LOWER(TRIM(?)))
-        OR (? <> '' AND LOWER(TRIM(e.username)) = LOWER(TRIM(?)))
-     ORDER BY match_priority ASC, e.employee_id ASC
-     LIMIT 2"
+     ORDER BY e.employee_id ASC"
 );
 if (!$matchStmt) {
     throw new RuntimeException('Unable to prepare your employee profile lookup: ' . $conn->error);
 }
-$matchStmt->bind_param('isisss', $userId, $userEmail, $userId, $userEmail, $userName, $userName);
+$matchStmt->bind_param('is', $userId, $userEmail);
 if (!$matchStmt->execute()) {
     $error = $matchStmt->error;
     $matchStmt->close();
@@ -65,8 +55,8 @@ $matchStmt->close();
 
 if ($matches === []) {
     $accountLinkError = 'This login is not linked to an employee profile yet. Please ask HR to check the employee record and account email.';
-} elseif (count($matches) > 1 && (int) $matches[0]['match_priority'] === (int) $matches[1]['match_priority']) {
-    $accountLinkError = 'More than one employee profile matches this account. Please ask HR to resolve the duplicate employee record before viewing tasks.';
+} elseif (count($matches) > 1) {
+    $accountLinkError = 'More than one employee profile is linked to this account. Please ask HR to resolve the employee account link before viewing tasks.';
 } else {
     $employee = $matches[0];
 }
@@ -77,7 +67,7 @@ $statusFilter = strtolower(trim((string) ($_GET['status'] ?? 'all')));
 if (!in_array($statusFilter, ['all', 'pending', 'completed', 'overdue'], true)) {
     $statusFilter = 'all';
 }
-$periodFilter = strtolower(trim((string) ($_GET['period'] ?? 'week')));
+$periodFilter = strtolower(trim((string) ($_GET['period'] ?? 'all')));
 if (!in_array($periodFilter, ['week', 'all'], true)) {
     $periodFilter = 'week';
 }
@@ -97,9 +87,33 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $employee !== null) {
         $progress = $action === 'mark_complete'
             ? 100
             : filter_var($_POST['progress'] ?? null, FILTER_VALIDATE_INT);
-        if ($progress === false || $progress < 0 || $progress > 99 && $action === 'save_progress') {
-            $errorMessage = 'Progress must be between 0 and 99%. Use Mark as complete to finish the task.';
+        if ($progress === false || $progress < 0 || ($action === 'save_progress' && $progress > 100)) {
+            $errorMessage = 'Progress must be between 0 and 100%. Use Mark as complete when the task is finished.';
         } else {
+            $taskContextStmt = $conn->prepare(
+                "SELECT supervisor_id, progress, title
+                 FROM office
+                 WHERE office_id = ? AND employee_id = ?
+                   AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done')
+                 LIMIT 1"
+            );
+            if (!$taskContextStmt) {
+                throw new RuntimeException('Unable to prepare task notification context: ' . $conn->error);
+            }
+            $taskContextStmt->bind_param('ii', $taskId, $employee['employee_id']);
+            if (!$taskContextStmt->execute()) {
+                $error = $taskContextStmt->error;
+                $taskContextStmt->close();
+                throw new RuntimeException('Unable to load task notification context: ' . $error);
+            }
+            $taskContext = $taskContextStmt->get_result()->fetch_assoc();
+            $taskContextStmt->close();
+            $supervisorId = (int) ($taskContext['supervisor_id'] ?? 0);
+            $previousProgress = (int) ($taskContext['progress'] ?? 0);
+            $taskTitle = (string) ($taskContext['title'] ?? 'assigned task');
+            if (!$conn->begin_transaction()) {
+                throw new RuntimeException('Unable to start task update: ' . $conn->error);
+            }
             $newStatus = $action === 'mark_complete' ? 'completed' : 'pending';
             $updateStmt = $conn->prepare(
                 "UPDATE office
@@ -108,12 +122,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $employee !== null) {
                    AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done')"
             );
             if (!$updateStmt) {
+                $conn->rollback();
                 throw new RuntimeException('Unable to prepare the task update: ' . $conn->error);
             }
             $updateStmt->bind_param('isii', $progress, $newStatus, $taskId, $employee['employee_id']);
             if (!$updateStmt->execute()) {
                 $error = $updateStmt->error;
                 $updateStmt->close();
+                $conn->rollback();
                 throw new RuntimeException('Unable to update the task: ' . $error);
             }
             $changed = $updateStmt->affected_rows;
@@ -128,26 +144,52 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $employee !== null) {
                      LIMIT 1"
                 );
                 if (!$verifyStmt) {
+                    $conn->rollback();
                     throw new RuntimeException('Unable to verify the task update: ' . $conn->error);
                 }
                 $verifyStmt->bind_param('ii', $taskId, $employee['employee_id']);
                 if (!$verifyStmt->execute()) {
                     $error = $verifyStmt->error;
                     $verifyStmt->close();
+                    $conn->rollback();
                     throw new RuntimeException('Unable to verify the task update: ' . $error);
                 }
                 $taskStillActive = $verifyStmt->get_result()->num_rows > 0;
                 $verifyStmt->close();
             }
             if (!$taskStillActive) {
+                $conn->rollback();
                 $errorMessage = 'This task is not assigned to your account or has already been completed.';
             } else {
-                $_SESSION['office_employee_flash'] = $action === 'mark_complete'
-                    ? 'Task marked as completed.'
-                    : 'Task progress updated.';
-                header('Location: office_employee.php?status=' . rawurlencode($statusFilter)
-                    . '&period=' . rawurlencode($periodFilter) . '&task_id=' . $taskId);
-                exit();
+                try {
+                    if ($supervisorId > 0 && ($action === 'mark_complete' || $previousProgress !== $progress)) {
+                        createTaskNotification(
+                            $conn,
+                            $supervisorId,
+                            $userId,
+                            $action === 'mark_complete' ? 'office_task_completed' : 'office_task_progress',
+                            $action === 'mark_complete' ? 'Task completed' : 'Task progress updated',
+                            ((string) ($_SESSION['name'] ?? 'The assigned employee')) . ($action === 'mark_complete'
+                                ? ' marked "' . $taskTitle . '" as complete.'
+                                : ' updated "' . $taskTitle . '" to ' . $progress . '%.'),
+                            'employee.php?employee_id=' . (int) $employee['employee_id'],
+                            'office',
+                            (string) $taskId
+                        );
+                    }
+                    if (!$conn->commit()) {
+                        throw new RuntimeException('Unable to save the task update: ' . $conn->error);
+                    }
+                    $_SESSION['office_employee_flash'] = $action === 'mark_complete'
+                        ? 'Task marked as completed.'
+                        : 'Task progress updated.';
+                    header('Location: office_employee.php?status=' . rawurlencode($statusFilter)
+                        . '&period=' . rawurlencode($periodFilter) . '&task_id=' . $taskId);
+                    exit();
+                } catch (RuntimeException $exception) {
+                    $conn->rollback();
+                    throw $exception;
+                }
             }
         }
     }
@@ -159,7 +201,7 @@ $tasks = [];
 $selectedTaskId = filter_input(INPUT_GET, 'task_id', FILTER_VALIDATE_INT) ?: 0;
 if ($employee !== null) {
     $taskStmt = $conn->prepare(
-        'SELECT office_id, data_type, title, content, department, status, priority_level,
+        'SELECT office_id, data_type, title, content, status, priority_level,
                 due_date, progress, submission_date, updated_at
          FROM office
          WHERE employee_id = ?
@@ -176,7 +218,7 @@ if ($employee !== null) {
     }
     $taskResult = $taskStmt->get_result();
     while ($task = $taskResult->fetch_assoc()) {
-        $task['progress'] = (int) ($task['progress'] ?? 0);
+        $task['progress'] = max(0, min(100, (int) ($task['progress'] ?? 0)));
         $normalizedStatus = strtolower(trim((string) ($task['status'] ?? 'pending')));
         if (in_array($normalizedStatus, ['completed', 'complete', 'done'], true)) {
             $task['display_status'] = 'completed';
@@ -213,11 +255,8 @@ foreach ($tasks as $task) {
         break;
     }
 }
-$department = trim((string) ($employee['department'] ?? ''));
 $position = trim((string) ($employee['position'] ?? ''));
-if ($department === '') {
-    $department = $position !== '' ? $position : strtoupper($accountRole);
-}
+$position = $position !== '' ? $position : strtoupper($accountRole);
 $displayName = trim((string) ($employee['username'] ?? $_SESSION['name'] ?? 'Office Employee'));
 $initials = '';
 foreach (preg_split('/\s+/', $displayName, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $namePart) {
@@ -236,13 +275,73 @@ if ($initials === '') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Tasks | TaskTrack</title>
+    <?php if ($accountRole === 'HR'): ?>
+    <link rel="stylesheet" href="css/HR.css?v=<?= filemtime(__DIR__ . '/css/HR.css'); ?>">
+    <?php endif; ?>
+    <link rel="stylesheet" href="css/tasktrack_sidebar.css?v=<?= filemtime(__DIR__ . '/css/tasktrack_sidebar.css'); ?>">
     <link rel="stylesheet" href="css/office_employee.css?v=<?= filemtime(__DIR__ . '/css/office_employee.css'); ?>">
+    <link rel="stylesheet" href="css/role-form-controls.css?v=<?= filemtime(__DIR__ . '/css/role-form-controls.css'); ?>">
+    <?php if ($accountRole === 'HR'): ?>
+    <style>
+        .hr-main.employee-main {
+            width: min(100% - 72px, 1700px);
+            margin-left: 72px;
+            padding: 0;
+        }
+        @media (max-width: 600px) {
+            .hr-main.employee-main {
+                width: 100%;
+                margin-left: 0;
+            }
+        }
+    </style>
+    <?php endif; ?>
 </head>
 <body>
+<?php if ($accountRole === 'HR'): ?>
+<div class="hr-shell">
+    <aside class="hr-sidebar" aria-label="HR navigation">
+        <a class="hr-brand" href="HR.php" aria-label="TaskTrack HR home">
+            <span class="hr-brand-mark" aria-hidden="true">T</span>
+            <span class="hr-brand-name">TASKTRACK</span>
+        </a>
+        <nav class="hr-nav">
+            <a class="hr-nav-link" href="HR.php">
+                <span class="hr-nav-icon" aria-hidden="true">▦</span>
+                <span class="hr-nav-label">Employees</span>
+            </a>
+            <a class="hr-nav-link" href="atten.php">
+                <span class="hr-nav-icon" aria-hidden="true">◷</span>
+                <span class="hr-nav-label">Attendance</span>
+            </a>
+            <a class="hr-nav-link" href="application_form.php">
+                <span class="hr-nav-icon" aria-hidden="true">▤</span>
+                <span class="hr-nav-label">Applicants</span>
+            </a>
+            <a class="hr-nav-link" href="interview_sched.php">
+                <span class="hr-nav-icon" aria-hidden="true">▣</span>
+                <span class="hr-nav-label">Interview Schedule</span>
+            </a>
+            <a class="hr-nav-link is-active" href="office_employee.php" aria-current="page">
+                <span class="hr-nav-icon" aria-hidden="true">☑</span>
+                <span class="hr-nav-label">My Tasks</span>
+            </a>
+        </nav>
+        <a class="hr-nav-link hr-logout" href="logout.php">
+            <span class="hr-nav-icon" aria-hidden="true">↪</span>
+            <span class="hr-nav-label">Log out</span>
+        </a>
+    </aside>
+    <?php include __DIR__ . '/config/notification_bell.php'; ?>
+    <div class="hr-main employee-main">
+<?php else: ?>
+<?php $tasktrackActive = 'my-tasks'; include __DIR__ . '/config/tasktrack_sidebar.php'; ?>
+<div class="employee-main">
+<?php endif; ?>
 <header class="employee-topbar">
     <div class="employee-identity">
         <span class="employee-avatar"><?= $escape($initials); ?></span>
-        <span class="employee-name"><?= $escape($displayName); ?><small><?= $escape($department); ?></small></span>
+        <span class="employee-name"><?= $escape($displayName); ?><small><?= $escape($position); ?></small></span>
     </div>
     <a class="logout-link" href="logout.php" aria-label="Log out" title="Log out">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg>
@@ -312,6 +411,9 @@ if ($initials === '') {
                             $priority = strtolower(trim((string) ($task['priority_level'] ?? 'medium')));
                             $progress = max(0, min(100, (int) $task['progress']));
                             $dueDate = $task['due_date'] ? date('D, d M', strtotime($task['due_date'])) : 'No due date';
+                            $overdueDays = $status === 'overdue'
+                                ? (int) (new DateTimeImmutable((string) $task['due_date']))->diff(new DateTimeImmutable($today))->days
+                                : 0;
                             $taskUrl = '?period=' . rawurlencode($periodFilter) . '&status=' . rawurlencode($statusFilter)
                                 . '&task_id=' . (int) $task['office_id'];
                             ?>
@@ -320,7 +422,12 @@ if ($initials === '') {
                                     <a class="task-open" href="<?= $escape($taskUrl); ?>"><?= $escape($task['title'] ?: 'Untitled task'); ?></a>
                                     <small><span class="category-dot is-<?= $escape(strtolower((string) ($task['data_type'] ?? 'general'))); ?>"></span><?= $escape($task['data_type'] ?: 'General'); ?></small>
                                 </td>
-                                <td class="due-cell<?= $status === 'overdue' ? ' is-late' : ''; ?>"><?= $escape($dueDate); ?></td>
+                                <td class="due-cell<?= $status === 'overdue' ? ' is-late' : ''; ?>">
+                                    <span><?= $escape($dueDate); ?></span>
+                                    <?php if ($status === 'overdue'): ?>
+                                        <small class="overdue-detail">Overdue by <?= $overdueDays; ?> <?= $overdueDays === 1 ? 'day' : 'days'; ?></small>
+                                    <?php endif; ?>
+                                </td>
                                 <td><span class="status-pill is-<?= $escape($status); ?>"><i></i><?= $escape(ucfirst($status)); ?></span></td>
                                 <td><span class="priority-text is-<?= $escape(in_array($priority, ['low', 'medium', 'high', 'urgent'], true) ? $priority : 'medium'); ?>"><i></i><?= $escape(ucfirst($priority)); ?></span></td>
                                 <td><span class="owner"><b><?= $escape($initials); ?></b><?= $escape($displayName); ?></span></td>
@@ -330,9 +437,9 @@ if ($initials === '') {
                                 </td>
                                 <td>
                                     <?php if ($status === 'completed'): ?>
-                                        <span class="done-button">Done ✓</span>
+                                        <a class="open-button" href="<?= $escape($taskUrl); ?>">View details →</a>
                                     <?php else: ?>
-                                        <a class="open-button" href="<?= $escape($taskUrl); ?>"><?= $status === 'overdue' ? 'Urgent!' : 'Open →'; ?></a>
+                                        <a class="open-button" href="<?= $escape($taskUrl); ?>">Open task →</a>
                                     <?php endif; ?>
                                 </td>
                             </tr>
@@ -344,6 +451,10 @@ if ($initials === '') {
         </section>
     <?php endif; ?>
 </main>
+</div>
+<?php if ($accountRole === 'HR'): ?>
+</div>
+<?php endif; ?>
 
 <?php if ($selectedTask !== null && $employee !== null && $selectedTask['display_status'] !== 'completed'): ?>
 <dialog class="task-dialog" id="taskDialog" aria-labelledby="dialogTitle">
@@ -358,14 +469,21 @@ if ($initials === '') {
         </div>
         <div class="dialog-facts">
             <div><small>TASK OWNER</small><strong><b><?= $escape($initials); ?></b><?= $escape($displayName); ?></strong></div>
-            <div><small>DUE DATE</small><strong><?= $escape($selectedTask['due_date'] ? date('D, d M Y', strtotime($selectedTask['due_date'])) : 'Not set'); ?></strong></div>
-            <div><small>DEPARTMENT</small><strong><?= $escape($selectedTask['department'] ?: $department); ?></strong></div>
+            <div>
+                <small>DUE DATE</small>
+                <strong><?= $escape($selectedTask['due_date'] ? date('D, d M Y', strtotime($selectedTask['due_date'])) : 'Not set'); ?></strong>
+                <?php if ($selectedTask['display_status'] === 'overdue'): ?>
+                    <?php $selectedOverdueDays = (int) (new DateTimeImmutable((string) $selectedTask['due_date']))->diff(new DateTimeImmutable($today))->days; ?>
+                    <span class="dialog-overdue-detail">Overdue by <?= $selectedOverdueDays; ?> <?= $selectedOverdueDays === 1 ? 'day' : 'days'; ?></span>
+                <?php endif; ?>
+            </div>
         </div>
         <div class="description-box"><small>DESCRIPTION</small><p><?= nl2br($escape($selectedTask['content'] ?? 'No description provided.')); ?></p></div>
         <section class="progress-update">
             <div class="progress-update-heading"><strong>Progress update</strong><output id="progressOutput"><?= (int) $selectedTask['progress']; ?>%</output></div>
-            <input type="range" id="progressInput" name="progress" min="0" max="99" value="<?= (int) $selectedTask['progress']; ?>" aria-label="Task progress">
-            <div class="progress-limits"><span>0%</span><span>99%</span></div>
+            <input type="range" id="progressInput" name="progress" min="0" max="100" value="<?= (int) $selectedTask['progress']; ?>" aria-label="Task progress">
+            <div class="progress-limits"><span>0%</span><span>100%</span></div>
+            <p class="progress-help">Saving 100% updates progress only. Mark the task complete when it is ready for review.</p>
             <button class="save-progress-button" type="submit" name="task_action" value="save_progress">Save progress</button>
         </section>
         <div class="dialog-bottom">
@@ -390,17 +508,27 @@ if ($initials === '') {
 <?php elseif ($selectedTask !== null && $selectedTask['display_status'] === 'completed'): ?>
 <dialog class="task-dialog completed-dialog" id="completedDialog">
     <div class="completed-content">
-        <span class="completed-mark">✓</span><h2>Task completed</h2>
-        <p><?= $escape($selectedTask['title']); ?> is marked as completed.</p>
-        <button type="button" data-close-completed>Return to my tasks</button>
+        <div class="dialog-topline"><span>TASK DETAILS</span><button type="button" class="dialog-close" data-close-completed aria-label="Close">×</button></div>
+        <span class="completed-mark">✓</span><h2><?= $escape($selectedTask['title'] ?: 'Untitled task'); ?></h2>
+        <div class="dialog-badges">
+            <span class="status-pill is-completed"><i></i>Completed</span>
+            <span class="priority-badge"><?= $escape(ucfirst($selectedTask['priority_level'] ?? 'medium')); ?> priority</span>
+        </div>
+        <div class="dialog-facts">
+            <div><small>TASK OWNER</small><strong><b><?= $escape($initials); ?></b><?= $escape($displayName); ?></strong></div>
+            <div><small>DUE DATE</small><strong><?= $escape($selectedTask['due_date'] ? date('D, d M Y', strtotime($selectedTask['due_date'])) : 'Not set'); ?></strong></div>
+        </div>
+        <div class="description-box"><small>DESCRIPTION</small><p><?= nl2br($escape($selectedTask['content'] ?? 'No description provided.')); ?></p></div>
+        <p class="completed-progress">Progress <strong>100%</strong></p>
+        <button type="button" class="completed-return" data-close-completed>Return to my tasks</button>
     </div>
 </dialog>
 <script>
     const completedDialog = document.getElementById('completedDialog');
-    document.querySelector('[data-close-completed]').addEventListener('click', () => {
+    document.querySelectorAll('[data-close-completed]').forEach((button) => button.addEventListener('click', () => {
         completedDialog.close();
         history.replaceState(null, '', 'office_employee.php');
-    });
+    }));
     completedDialog.showModal();
 </script>
 <?php endif; ?>

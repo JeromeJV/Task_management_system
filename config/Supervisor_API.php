@@ -1,5 +1,7 @@
 <?php
 include('config/connection.php');
+require_once __DIR__ . '/account_access.php';
+require_once __DIR__ . '/task_notifications.php';
 
 // -----------------------------------------------------
 // 1. Connection & Initialization
@@ -12,8 +14,10 @@ if (!isset($_SESSION['email'])) {
     header("Location: index.php");
     exit();
 }
+requireActiveAccount($conn);
+ensureTaskNotificationSchema($conn);
 
-$allowed_roles = ($module === 'factory') ? ['super', 'pro'] : ['super', 'log'];
+$allowed_roles = ($module === 'factory') ? ['super', 'pro', 'cooking', 'packaging'] : ['super', 'log'];
 if (!in_array($_SESSION['role'], $allowed_roles, true)) {
     header("Location: index.php");
     exit();
@@ -54,18 +58,91 @@ $allowed_products = [
 // 2. Module: DELIVERY
 // -----------------------------------------------------
 if ($module === 'delivery') {
+    require_once __DIR__ . '/delivery_activity_schema.php';
+    ensureDeliveryActivitySchema($conn);
+    $current_role = (string) ($_SESSION['role'] ?? '');
+    $current_user_id = (int) ($_SESSION['id'] ?? $_SESSION['user_id'] ?? 0);
+
+    if (isset($_GET['activity_log'])) {
+        header('Content-Type: application/json; charset=utf-8');
+        $delivery_id = filter_var($_GET['activity_log'], FILTER_VALIDATE_INT);
+        if (!$delivery_id) {
+            http_response_code(400);
+            echo json_encode(['error' => 'A valid delivery ID is required.']);
+            exit();
+        }
+
+        $activity_stmt = $conn->prepare(
+            "SELECT actor_name, event_type, from_driver_name, to_driver_name, occurred_at
+             FROM delivery_activity
+             WHERE delivery_id = ?
+             ORDER BY occurred_at DESC, activity_id DESC"
+        );
+        if (!$activity_stmt) {
+            throw new RuntimeException('Unable to prepare delivery activity history: ' . $conn->error);
+        }
+        $activity_stmt->bind_param('i', $delivery_id);
+        if (!$activity_stmt->execute()) {
+            throw new RuntimeException('Unable to load delivery activity history: ' . $activity_stmt->error);
+        }
+        $activity_result = $activity_stmt->get_result();
+        $activity_rows = [];
+        while ($activity_row = $activity_result->fetch_assoc()) {
+            $activity_rows[] = $activity_row;
+        }
+        $activity_stmt->close();
+
+        if ($current_role === 'log') {
+            $ownership_stmt = $conn->prepare("SELECT delivery_id FROM delivery WHERE delivery_id = ? AND driver_id = ? LIMIT 1");
+            $ownership_stmt->bind_param('ii', $delivery_id, $current_user_id);
+            if (!$ownership_stmt->execute() || $ownership_stmt->get_result()->num_rows === 0) {
+                http_response_code(403);
+                echo json_encode(['error' => 'You can only view activity for your assigned deliveries.']);
+                exit();
+            }
+            $ownership_stmt->close();
+        }
+        echo json_encode(['activities' => $activity_rows], JSON_UNESCAPED_UNICODE);
+        exit();
+    }
 
     // --- FETCH PRESENT DRIVERS TODAY ---
     $present_drivers = [];
-    $sql_drivers = "SELECT DISTINCT u.id, u.name 
+    $sql_drivers = "SELECT u.id, u.name
                     FROM users u
-                    INNER JOIN employee e ON (e.username = u.name OR e.email = u.email)
-                    INNER JOIN attendance a ON a.employee_id = e.employee_id
-                    WHERE u.role = 'log' 
-                    AND DATE(a.attendance_date) = CURDATE()
-                    AND LOWER(a.status) = 'present'
-                    AND a.time_in IS NOT NULL 
-                    AND a.time_in != '00:00:00'";
+                    WHERE u.role = 'log'
+                      AND EXISTS (
+                          SELECT 1
+                          FROM attendance a
+                          LEFT JOIN employee e ON e.employee_id = a.employee_id
+                          WHERE a.attendance_date = CURDATE()
+                            AND LOWER(TRIM(a.status)) IN ('present', 'early', 'late', 'overtime', 'undertime', 'half day')
+                            AND a.time_in IS NOT NULL
+                            AND a.time_in != '00:00:00'
+                            AND (
+                                (
+                                    (a.time_out IS NULL OR a.time_out = '00:00:00')
+                                    AND (a.time_in_2 IS NULL OR a.time_in_2 = '00:00:00')
+                                )
+                                OR (
+                                    a.time_in_2 IS NOT NULL
+                                    AND a.time_in_2 != '00:00:00'
+                                    AND (a.time_out_2 IS NULL OR a.time_out_2 = '00:00:00')
+                                )
+                            )
+                            AND (
+                                a.user_id = u.id
+                                OR e.username = u.name
+                                OR (e.email IS NOT NULL AND e.email != '' AND e.email = u.email)
+                                OR EXISTS (
+                                    SELECT 1
+                                    FROM attendance driver_user_link
+                                    WHERE driver_user_link.employee_id = e.employee_id
+                                      AND driver_user_link.user_id = u.id
+                                )
+                            )
+                      )
+                    ORDER BY u.name";
 
     $res_drivers = mysqli_query($conn, $sql_drivers);
     if ($res_drivers && mysqli_num_rows($res_drivers) > 0) {
@@ -75,16 +152,37 @@ if ($module === 'delivery') {
     }
 
     function isDriverPresentToday($conn, $driver_id) {
-        $check_sql = "SELECT a.attendance_id 
-                    FROM attendance a
-                    INNER JOIN employee e ON a.employee_id = e.employee_id
-                    INNER JOIN users u ON (u.name = e.username OR u.email = e.email)
-                    WHERE u.id = ? 
-                        AND u.role = 'log'
-                        AND DATE(a.attendance_date) = CURDATE()
-                        AND LOWER(a.status) = 'present'
-                        AND a.time_in IS NOT NULL 
-                        AND a.time_in != '00:00:00'";
+        $check_sql = "SELECT a.attendance_id
+                      FROM attendance a
+                      LEFT JOIN employee e ON e.employee_id = a.employee_id
+                      INNER JOIN users u ON u.id = ?
+                      WHERE u.role = 'log'
+                        AND a.attendance_date = CURDATE()
+                        AND LOWER(TRIM(a.status)) IN ('present', 'early', 'late', 'overtime', 'undertime', 'half day')
+                        AND a.time_in IS NOT NULL
+                        AND a.time_in != '00:00:00'
+                        AND (
+                            (
+                                (a.time_out IS NULL OR a.time_out = '00:00:00')
+                                AND (a.time_in_2 IS NULL OR a.time_in_2 = '00:00:00')
+                            )
+                            OR (
+                                a.time_in_2 IS NOT NULL
+                                AND a.time_in_2 != '00:00:00'
+                                AND (a.time_out_2 IS NULL OR a.time_out_2 = '00:00:00')
+                            )
+                        )
+                        AND (
+                            a.user_id = u.id
+                            OR e.username = u.name
+                            OR (e.email IS NOT NULL AND e.email != '' AND e.email = u.email)
+                            OR EXISTS (
+                                SELECT 1
+                                FROM attendance driver_user_link
+                                WHERE driver_user_link.employee_id = e.employee_id
+                                  AND driver_user_link.user_id = u.id
+                            )
+                        )";
         
         $stmt = $conn->prepare($check_sql);
         $stmt->bind_param("i", $driver_id);
@@ -97,57 +195,224 @@ if ($module === 'delivery') {
     }
 
     // --- INSERT DELIVERY ---
-    if (isset($_POST['submit']) && $action === 'insert') {
-        $production_id = $_POST['production_id'] ?? '';
-        $driver_id     = $_POST['driver_id'] ?? '';
-        $route         = trim($_POST['route'] ?? '');
-        $delivery_date = trim($_POST['delivery_date'] ?? '');
+    if (isset($_POST['submit']) && $action === 'insert' && $current_role === 'super') {
+        $submitted_groups = $_POST['assignments'] ?? [];
+        if (!is_array($submitted_groups)) {
+            $submitted_groups = [];
+        }
+        if (empty($submitted_groups) && isset($_POST['production_ids'])) {
+            $legacy_ids = $_POST['production_ids'];
+            $submitted_groups = [[
+                'driver_id' => $_POST['driver_id'] ?? '',
+                'products' => [],
+            ]];
+            if (is_array($legacy_ids)) {
+                foreach ($legacy_ids as $legacy_id) {
+                    if (is_string($legacy_id) || is_int($legacy_id)) {
+                        $submitted_groups[0]['products'][(string) $legacy_id] = [
+                            'route' => $_POST['route'] ?? '',
+                            'delivery_date' => $_POST['delivery_date'] ?? '',
+                        ];
+                    }
+                }
+            }
+        }
 
-        if (empty($production_id)) {
-            $errors['production_id'] = "Please select a product.";
-        }
-        
-        if (empty($driver_id)) {
-            $errors['driver_id'] = "Please assign a present driver.";
-        } else if (!isDriverPresentToday($conn, $driver_id)) {
-            $errors['driver_id'] = "Selected driver is not timed in / present today or has already timed out.";
-        }
+        $deliveries_to_create = [];
+        $seen_production_ids = [];
+        foreach ($submitted_groups as $group) {
+            if (!is_array($group)) {
+                $errors['assignments'] = 'Invalid delivery group submitted.';
+                continue;
+            }
+            $driver_id = filter_var($group['driver_id'] ?? '', FILTER_VALIDATE_INT);
+            if (!$driver_id || $driver_id < 1) {
+                $errors['assignments'] = 'Select an active driver for each delivery group.';
+            } elseif (!isDriverPresentToday($conn, $driver_id)) {
+                $errors['assignments'] = 'A selected driver is not timed in / present today or has already timed out.';
+            }
 
-        if (!preg_match("/^[a-zA-Z0-9 ]*$/", $route) || empty($route)) {
-            $errors['route'] = "Please enter a valid route address.";
+            $group_products = $group['products'] ?? [];
+            if (!is_array($group_products) || empty($group_products)) {
+                $errors['assignments'] = 'Choose at least one product for each delivery group.';
+                continue;
+            }
+
+            foreach ($group_products as $group_product_id => $product_details) {
+                if (
+                    (!is_string($group_product_id) && !is_int($group_product_id))
+                    || !is_array($product_details)
+                ) {
+                    $errors['assignments'] = 'Invalid product selection submitted.';
+                    continue;
+                }
+                $production_id = $product_details['production_id'] ?? $group_product_id;
+                if (!is_string($production_id) && !is_int($production_id)) {
+                    $errors['assignments'] = 'Choose a valid product.';
+                    continue;
+                }
+                $production_id = trim((string) $production_id);
+                if ($production_id === '' || strlen($production_id) > 64) {
+                    $errors['assignments'] = 'Choose a valid product.';
+                    continue;
+                }
+                if (isset($seen_production_ids[$production_id])) {
+                    $errors['assignments'] = 'A product can only be assigned once.';
+                    continue;
+                }
+                $seen_production_ids[$production_id] = true;
+
+                $route = $product_details['route'] ?? null;
+                $delivery_date = $product_details['delivery_date'] ?? null;
+                $route = is_string($route) ? trim($route) : '';
+                $delivery_date = is_string($delivery_date) ? trim($delivery_date) : '';
+                $parsed_delivery_date = DateTimeImmutable::createFromFormat('!Y-m-d', $delivery_date);
+                if ($route === '' || !preg_match("/^[a-zA-Z0-9 ]+$/", $route)) {
+                    $errors['assignments'] = 'Enter a valid destination for every selected product.';
+                }
+                if (
+                    !$parsed_delivery_date
+                    || $parsed_delivery_date->format('Y-m-d') !== $delivery_date
+                ) {
+                    $errors['assignments'] = 'Select a valid delivery date for every selected product.';
+                }
+                $deliveries_to_create[] = [
+                    'production_id' => $production_id,
+                    'driver_id' => $driver_id,
+                    'route' => $route,
+                    'delivery_date' => $delivery_date,
+                ];
+            }
         }
-        if (empty($delivery_date)) {
-            $errors['delivery_date'] = "Delivery date is required.";
+        if (empty($deliveries_to_create)) {
+            $errors['assignments'] = $errors['assignments'] ?? 'Select at least one product before creating deliveries.';
         }
 
         if (empty($errors)) {
-            // Kunin lang ang data ng product kung ito ay 'product done'
-            $get_prod = $conn->prepare("SELECT Stock_number, quantity FROM production WHERE production_id = ? AND product_status = 'product done'");
-            $get_prod->bind_param("s", $production_id);
-            $get_prod->execute();
-            $prod_res  = $get_prod->get_result();
-            $prod_data = $prod_res->fetch_assoc();
-            $get_prod->close();
-
-            if ($prod_data) {
-                $stock  = $prod_data['Stock_number'];
-                $pieces = $prod_data['quantity']; 
-
-                $stmt = $conn->prepare("INSERT INTO delivery (production_id, route, pieces, stock, driver_id, delivery_date) VALUES (?, ?, ?, ?, ?, ?)");
-                $stmt->bind_param("ssssss", $production_id, $route, $pieces, $stock, $driver_id, $delivery_date);
-                
-                if ($stmt->execute()) {
-                    $message = "New Delivery Task assigned and created successfully.";
+            $conn->begin_transaction();
+            $get_prod = null;
+            $check_delivery = null;
+            $insert_delivery = null;
+            try {
+                $get_prod = $conn->prepare(
+                    "SELECT Stock_number, quantity
+                     FROM production
+                     WHERE production_id = ?
+                       AND LOWER(TRIM(COALESCE(product_status, ''))) = 'product done'
+                     FOR UPDATE"
+                );
+                if (!$get_prod) {
+                    throw new RuntimeException('Unable to prepare the completed-product lookup: ' . $conn->error);
                 }
-                $stmt->close();
-            } else {
-                $errors['production_id'] = "Selected product is either not found or not yet completed ('product done').";
+                $check_delivery = $conn->prepare("SELECT delivery_id FROM delivery WHERE production_id = ? LIMIT 1");
+                if (!$check_delivery) {
+                    throw new RuntimeException('Unable to prepare the existing-delivery check: ' . $conn->error);
+                }
+                $insert_delivery = $conn->prepare(
+                    "INSERT INTO delivery (production_id, route, pieces, stock, driver_id, delivery_date)
+                     VALUES (?, ?, ?, ?, ?, ?)"
+                );
+                if (!$insert_delivery) {
+                    throw new RuntimeException('Unable to prepare delivery creation: ' . $conn->error);
+                }
+
+                $actor_name = trim((string) ($_SESSION['name'] ?? ''));
+                if ($actor_name === '') {
+                    $actor_name = 'User #' . $current_user_id;
+                }
+                $created_count = 0;
+
+                foreach ($deliveries_to_create as $delivery_details) {
+                    $production_id = $delivery_details['production_id'];
+                    $driver_id = $delivery_details['driver_id'];
+                    $route = $delivery_details['route'];
+                    $delivery_date = $delivery_details['delivery_date'];
+                    $get_prod->bind_param('s', $production_id);
+                    if (!$get_prod->execute()) {
+                        throw new RuntimeException('Unable to verify a selected product: ' . $get_prod->error);
+                    }
+                    $prod_result = $get_prod->get_result();
+                    $prod_data = $prod_result->fetch_assoc();
+                    $prod_result->free();
+                    if (!$prod_data) {
+                        throw new RuntimeException("A selected product is no longer available or is not marked 'Product Done'.");
+                    }
+
+                    $check_delivery->bind_param('s', $production_id);
+                    if (!$check_delivery->execute()) {
+                        throw new RuntimeException('Unable to verify whether a product is already assigned: ' . $check_delivery->error);
+                    }
+                    $existing_delivery = $check_delivery->get_result();
+                    $already_assigned = $existing_delivery->num_rows > 0;
+                    $existing_delivery->free();
+                    if ($already_assigned) {
+                        throw new RuntimeException('A selected product has already been assigned to a delivery.');
+                    }
+                    $pieces = $prod_data['quantity'];
+                    $stock = $prod_data['Stock_number'];
+                    $stock = $prod_data['Stock_number'];
+                    $insert_delivery->bind_param(
+                        'ssssss',
+                        $production_id,
+                        $route,
+                        $pieces,
+                        $stock,
+                        $driver_id,
+                        $delivery_date
+                    );
+                    if (!$insert_delivery->execute()) {
+                        throw new RuntimeException('Unable to create a delivery task: ' . $insert_delivery->error);
+                    }
+                    $delivery_id = (int) $conn->insert_id;
+                    $driver_name = getDeliveryDriverName($conn, $driver_id);
+                    recordDeliveryActivity(
+                        $conn,
+                        $delivery_id,
+                        $current_user_id,
+                        $actor_name,
+                        'delivery_assigned',
+                        null,
+                        null,
+                        $driver_id,
+                        $driver_name
+                    );
+                    createTaskNotification(
+                        $conn,
+                        (int) $driver_id,
+                        (int) $current_user_id,
+                        'delivery_assigned',
+                        'New delivery assigned',
+                        'A delivery to ' . $route . ' is assigned to you for ' . date('M j, Y', strtotime($delivery_date)) . '.',
+                        'logistic.php',
+                        'delivery',
+                        (string) $delivery_id
+                    );
+                    $created_count++;
+                }
+
+                if (!$conn->commit()) {
+                    throw new RuntimeException('Unable to commit the delivery assignments.');
+                }
+                $message = $created_count . ' delivery task' . ($created_count === 1 ? '' : 's') . ' assigned and created successfully.';
+            } catch (RuntimeException $exception) {
+                $conn->rollback();
+                $errors['production_id'] = $exception->getMessage();
+            } finally {
+                if ($get_prod) {
+                    $get_prod->close();
+                }
+                if ($check_delivery) {
+                    $check_delivery->close();
+                }
+                if ($insert_delivery) {
+                    $insert_delivery->close();
+                }
             }
         }
     }
 
     // --- UPDATE DELIVERY ---
-    if (isset($_POST['submit']) && $action === 'update') {
+    if (isset($_POST['submit']) && $action === 'update' && $current_role === 'super') {
         $delivery_id   = $_POST['delivery_id'] ?? '';
         $driver_id     = $_POST['driver_id'] ?? '';
         $route         = trim($_POST['route'] ?? '');
@@ -162,25 +427,135 @@ if ($module === 'delivery') {
         }
 
         if (!empty($delivery_id) && empty($errors)) {
-            $stmt = $conn->prepare("UPDATE delivery SET route = ?, pieces = ?, stock = ?, driver_id = ?, delivery_date = ? WHERE delivery_id = ?");
+            $old_delivery_stmt = $conn->prepare("SELECT driver_id FROM delivery WHERE delivery_id = ? AND status != 'Delivered' LIMIT 1");
+            $old_delivery_stmt->bind_param('i', $delivery_id);
+            $old_delivery_stmt->execute();
+            $old_delivery = $old_delivery_stmt->get_result()->fetch_assoc();
+            $old_delivery_stmt->close();
+            if (!$old_delivery) {
+                $errors['delivery_id'] = 'The delivery could not be found or is already completed.';
+            }
+        }
+
+        if (!empty($delivery_id) && empty($errors)) {
+            $stmt = $conn->prepare("UPDATE delivery SET route = ?, pieces = ?, stock = ?, driver_id = ?, delivery_date = ? WHERE delivery_id = ? AND status != 'Delivered'");
             $stmt->bind_param("ssssss", $route, $pieces, $stock, $driver_id, $delivery_date, $delivery_id);
 
+            $conn->begin_transaction();
             if ($stmt->execute()) {
-                $message = "Delivery record updated successfully.";
+                $actor_name = trim((string) ($_SESSION['name'] ?? ''));
+                if ($actor_name === '') {
+                    $actor_name = 'User #' . $current_user_id;
+                }
+                $previous_driver_id = (int) $old_delivery['driver_id'];
+                try {
+                    if ($previous_driver_id !== (int) $driver_id) {
+                        recordDeliveryActivity(
+                            $conn,
+                            (int) $delivery_id,
+                            $current_user_id,
+                            $actor_name,
+                            'driver_reassigned',
+                            $previous_driver_id,
+                            getDeliveryDriverName($conn, $previous_driver_id),
+                            (int) $driver_id,
+                            getDeliveryDriverName($conn, (int) $driver_id)
+                        );
+                        createTaskNotification(
+                            $conn,
+                            $previous_driver_id,
+                            (int) $current_user_id,
+                            'delivery_reassigned',
+                            'Delivery reassigned',
+                            'A delivery previously assigned to you has been reassigned to another driver.',
+                            'logistic.php',
+                            'delivery',
+                            (string) $delivery_id
+                        );
+                        createTaskNotification(
+                            $conn,
+                            (int) $driver_id,
+                            (int) $current_user_id,
+                            'delivery_reassigned',
+                            'Delivery assigned to you',
+                            'A delivery to ' . $route . ' is assigned to you for ' . date('M j, Y', strtotime($delivery_date)) . '.',
+                            'logistic.php',
+                            'delivery',
+                            (string) $delivery_id
+                        );
+                    }
+                    recordDeliveryActivity($conn, (int) $delivery_id, $current_user_id, $actor_name, 'delivery_updated');
+                    if (!$conn->commit()) {
+                        throw new RuntimeException('Unable to commit the delivery update.');
+                    }
+                    $message = "Delivery record updated successfully.";
+                } catch (RuntimeException $exception) {
+                    $conn->rollback();
+                    $errors['delivery_id'] = "The delivery update and activity history could not be saved: " . $exception->getMessage();
+                }
+            } else {
+                $conn->rollback();
+                $errors['delivery_id'] = "Unable to update the delivery record.";
             }
             $stmt->close();
         }
     }
 
     // --- CONFIRM DELIVERY ---
-    if (($_POST['mark_delivered'] ?? '') === '1') {
+    if (($_POST['mark_delivered'] ?? '') === '1' && $current_role === 'log') {
         $delivery_id = filter_var($_POST['idno'] ?? '', FILTER_VALIDATE_INT);
         $current_user_id = $_SESSION['id'] ?? $_SESSION['user_id'] ?? null;
 
         if ($delivery_id && $current_user_id !== null) {
-            $stmt = $conn->prepare("UPDATE delivery SET status = 'Delivered' WHERE delivery_id = ? AND driver_id = ? AND (status != 'Delivered' OR status IS NULL)");
+            $stmt = $conn->prepare("UPDATE delivery SET status = 'Delivered', delivered_at = NOW() WHERE delivery_id = ? AND driver_id = ? AND (status != 'Delivered' OR status IS NULL)");
             $stmt->bind_param("ii", $delivery_id, $current_user_id);
-            $stmt->execute();
+            $conn->begin_transaction();
+            if ($stmt->execute() && $stmt->affected_rows === 1) {
+                $actor_name = trim((string) ($_SESSION['name'] ?? ''));
+                if ($actor_name === '') {
+                    $actor_name = 'User #' . $current_user_id;
+                }
+                try {
+                    recordDeliveryActivity($conn, $delivery_id, $current_user_id, $actor_name, 'delivery_completed');
+                    $assignerStmt = $conn->prepare(
+                        "SELECT actor_user_id
+                         FROM delivery_activity
+                         WHERE delivery_id = ? AND event_type = 'delivery_assigned'
+                         ORDER BY activity_id ASC LIMIT 1"
+                    );
+                    if (!$assignerStmt) {
+                        throw new RuntimeException('Unable to prepare delivery assigner lookup: ' . $conn->error);
+                    }
+                    $assignerStmt->bind_param('i', $delivery_id);
+                    if (!$assignerStmt->execute()) {
+                        $error = $assignerStmt->error;
+                        $assignerStmt->close();
+                        throw new RuntimeException('Unable to load delivery assigner: ' . $error);
+                    }
+                    $assignerId = (int) ($assignerStmt->get_result()->fetch_assoc()['actor_user_id'] ?? 0);
+                    $assignerStmt->close();
+                    createTaskNotification(
+                        $conn,
+                        $assignerId,
+                        (int) $current_user_id,
+                        'delivery_completed',
+                        'Delivery completed',
+                        'A delivery task you assigned has been marked delivered.',
+                        'supervisor.php',
+                        'delivery',
+                        (string) $delivery_id
+                    );
+                    if (!$conn->commit()) {
+                        throw new RuntimeException('Unable to commit delivery completion.');
+                    }
+                } catch (RuntimeException $exception) {
+                    $conn->rollback();
+                    $_SESSION['delivery_error'] = 'Delivery completion could not be saved with its activity history: ' . $exception->getMessage();
+                }
+            } else {
+                $conn->rollback();
+                $_SESSION['delivery_error'] = 'This delivery is unavailable, already completed, or assigned to another driver.';
+            }
             $stmt->close();
         }
     }
@@ -190,13 +565,13 @@ if ($module === 'delivery') {
     // -----------------------------------------------------------------
     
     // Kunin ang Role at User ID mula sa active session
-    $current_role    = $_SESSION['role'] ?? '';
-    $current_user_id = $_SESSION['id'] ?? $_SESSION['user_id'] ?? null; 
+    $current_role = $_SESSION['role'] ?? '';
+    $current_user_id = $_SESSION['id'] ?? $_SESSION['user_id'] ?? null;
 
     // --- FETCH PENDING DELIVERIES ---
     if ($current_role === 'super') {
         // PAG SUPERVISOR: Nakikita lahat ng delivery ng kahit sinong driver
-        $sql_pending = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.delivery_date, d.status, 
+        $sql_pending = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.delivery_date, d.status, d.delivered_at,
                                p.product_name, p.product_status,
                                u.name AS driver_name
                         FROM delivery d 
@@ -209,7 +584,7 @@ if ($module === 'delivery') {
     } else {
         // PAG DRIVER / LOGISTICS ('log'): ACCOUNT-LEVEL FILTERING
         // I-filter gamit ang d.driver_id = ? para KANYANG ACCOUNT LANG ANG LUMABAS
-        $sql_pending = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.delivery_date, d.status, 
+        $sql_pending = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.delivery_date, d.status, d.delivered_at,
                                p.product_name, p.product_status,
                                u.name AS driver_name
                         FROM delivery d 
@@ -235,7 +610,7 @@ if ($module === 'delivery') {
     // --- FETCH DELIVERY HISTORY ---
     if ($current_role === 'super') {
         // PAG SUPERVISOR: Nakikita ang buong kasaysayan ng delivery ng lahat
-        $sql_history = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.delivery_date, d.status, 
+        $sql_history = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.delivery_date, d.status, d.delivered_at,
                                p.product_name, p.product_status,
                                u.name AS driver_name 
                         FROM delivery d 
@@ -247,7 +622,7 @@ if ($module === 'delivery') {
         $stmt_history = $conn->prepare($sql_history);
     } else {
         // PAG DRIVER / LOGISTICS ('log'): ACCOUNT-LEVEL FILTERING
-        $sql_history = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.delivery_date, d.status, 
+        $sql_history = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.delivery_date, d.status, d.delivered_at,
                                p.product_name, p.product_status,
                                u.name AS driver_name 
                         FROM delivery d 
@@ -274,13 +649,89 @@ if ($module === 'delivery') {
     $prod_query = "SELECT p.production_id, p.product_name, p.Stock_number, p.quantity, p.product_status   
                    FROM production p
                    LEFT JOIN delivery d ON p.production_id = d.production_id
-                   WHERE p.product_status = 'product done' 
+                   WHERE LOWER(TRIM(COALESCE(p.product_status, ''))) = 'product done'
                      AND d.delivery_id IS NULL";
 
     $prod_result = mysqli_query($conn, $prod_query);
     if ($prod_result) {
         $production_items = mysqli_fetch_all($prod_result, MYSQLI_ASSOC);
     }
+
+    $delivery_report_period = $_GET['report_period'] ?? 'month';
+    $delivery_report_error = '';
+    if (!in_array($delivery_report_period, ['month', 'year'], true)) {
+        $delivery_report_period = 'month';
+        $delivery_report_error = 'Choose a valid reporting period.';
+    }
+    $delivery_report_month = $_GET['report_month'] ?? date('Y-m');
+    $valid_report_month = is_string($delivery_report_month)
+        && preg_match('/^\d{4}-\d{2}$/', $delivery_report_month)
+        && ($report_month_date = DateTimeImmutable::createFromFormat('!Y-m', $delivery_report_month))
+        && $report_month_date->format('Y-m') === $delivery_report_month;
+    if (!$valid_report_month) {
+        if ($delivery_report_period === 'month') {
+            $delivery_report_error = 'Choose a valid month for the delivery report.';
+        }
+        $delivery_report_month = date('Y-m');
+        $report_month_date = DateTimeImmutable::createFromFormat('!Y-m', $delivery_report_month);
+    }
+    $delivery_report_year = $_GET['report_year'] ?? date('Y');
+    $valid_report_year = is_string($delivery_report_year)
+        && preg_match('/^\d{4}$/', $delivery_report_year)
+        && (int) $delivery_report_year >= 1000
+        && ($report_year_date = DateTimeImmutable::createFromFormat('!Y', $delivery_report_year))
+        && $report_year_date->format('Y') === $delivery_report_year;
+    if (!$valid_report_year) {
+        if ($delivery_report_period === 'year') {
+            $delivery_report_error = 'Choose a valid year for the delivery report.';
+        }
+        $delivery_report_year = date('Y');
+        $report_year_date = DateTimeImmutable::createFromFormat('!Y', $delivery_report_year);
+    }
+    if ($delivery_report_period === 'year') {
+        $delivery_report_start = $report_year_date->format('Y-01-01');
+        $delivery_report_end = $report_year_date->format('Y-12-31');
+        $delivery_report_label = $report_year_date->format('Y');
+    } else {
+        $delivery_report_start = $report_month_date->format('Y-m-01');
+        $delivery_report_end = $report_month_date->modify('last day of this month')->format('Y-m-d');
+        $delivery_report_label = $report_month_date->format('F Y');
+    }
+    $delivery_report = ['total' => 0, 'completed' => 0, 'pending' => 0, 'overdue' => 0];
+    $delivery_report_scope = $current_role === 'log' ? ' AND driver_id = ?' : '';
+    $delivery_report_sql = "SELECT COUNT(*) AS total_count,
+                                   SUM(CASE WHEN status = 'Delivered' THEN 1 ELSE 0 END) AS completed_count,
+                                   SUM(CASE WHEN (status != 'Delivered' OR status IS NULL)
+                                             AND (status IS NULL OR LOWER(status) NOT IN ('cancelled', 'canceled'))
+                                            THEN 1 ELSE 0 END) AS pending_count,
+                                   SUM(CASE WHEN (status != 'Delivered' OR status IS NULL)
+                                             AND (status IS NULL OR LOWER(status) NOT IN ('cancelled', 'canceled'))
+                                             AND delivery_date < CURDATE()
+                                            THEN 1 ELSE 0 END) AS overdue_count
+                            FROM delivery
+                            WHERE delivery_date BETWEEN ? AND ?$delivery_report_scope";
+    $delivery_report_stmt = $conn->prepare($delivery_report_sql);
+    if (!$delivery_report_stmt) {
+        throw new RuntimeException('Unable to prepare monthly delivery report: ' . $conn->error);
+    }
+    if ($current_role === 'log') {
+        $delivery_report_stmt->bind_param('ssi', $delivery_report_start, $delivery_report_end, $current_user_id);
+    } else {
+        $delivery_report_stmt->bind_param('ss', $delivery_report_start, $delivery_report_end);
+    }
+    if (!$delivery_report_stmt->execute()) {
+        throw new RuntimeException('Unable to load monthly delivery report: ' . $delivery_report_stmt->error);
+    }
+    $delivery_report_row = $delivery_report_stmt->get_result()->fetch_assoc();
+    if ($delivery_report_row) {
+        $delivery_report = [
+            'total' => (int) $delivery_report_row['total_count'],
+            'completed' => (int) $delivery_report_row['completed_count'],
+            'pending' => (int) $delivery_report_row['pending_count'],
+            'overdue' => (int) $delivery_report_row['overdue_count'],
+        ];
+    }
+    $delivery_report_stmt->close();
 }
 
 // -----------------------------------------------------
@@ -288,20 +739,17 @@ if ($module === 'delivery') {
 // -----------------------------------------------------
 elseif ($module === 'factory') {
 
-    $assignment_table_sql = "CREATE TABLE IF NOT EXISTS production_assignments (
-                                production_id VARCHAR(64) NOT NULL,
-                                employee_id INT NOT NULL,
-                                work_type ENUM('Cooking', 'Packaging') NOT NULL,
-                                assigned_by INT DEFAULT NULL,
-                                assigned_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                                PRIMARY KEY (production_id),
-                                KEY idx_production_assignments_employee (employee_id)
-                             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
-    if (!mysqli_query($conn, $assignment_table_sql)) {
-        throw new RuntimeException("Unable to initialize production task assignments.");
-    }
+    require_once __DIR__ . '/production_assignment_schema.php';
+    ensureProductionAssignmentSchema($conn);
+    ensureProductionActivitySchema($conn);
 
-    $is_production_worker = (($_SESSION['role'] ?? '') === 'pro');
+    $current_role = (string) ($_SESSION['role'] ?? '');
+    $is_production_worker = in_array($current_role, ['pro', 'cooking', 'packaging'], true);
+    $is_production_supervisor = $current_role === 'super';
+    $current_work_type = [
+        'cooking' => 'Cooking',
+        'packaging' => 'Packaging',
+    ][$current_role] ?? null;
     $current_employee_id = null;
 
     if ($is_production_worker) {
@@ -309,8 +757,17 @@ elseif ($module === 'factory') {
         $employee_stmt = $conn->prepare(
             "SELECT e.employee_id
              FROM users u
-             INNER JOIN employee e ON (e.username = u.name OR (e.email IS NOT NULL AND e.email = u.email))
+             INNER JOIN employee e
+                 ON (e.username = u.name
+                     OR (e.email IS NOT NULL AND e.email = u.email)
+                     OR EXISTS (
+                         SELECT 1
+                         FROM attendance employee_user_link
+                         WHERE employee_user_link.employee_id = e.employee_id
+                           AND employee_user_link.user_id = u.id
+                     ))
              WHERE u.id = ?
+               AND u.role IN ('pro', 'cooking', 'packaging')
              ORDER BY (e.email = u.email) DESC, e.employee_id ASC
              LIMIT 1"
         );
@@ -324,29 +781,26 @@ elseif ($module === 'factory') {
     }
 
     $present_production_employees = [];
-    $present_employees_sql = "SELECT e.employee_id, e.username, e.position
+    $present_employees_sql = "SELECT DISTINCT e.employee_id, e.username, e.position, u.role AS production_role
                               FROM employee e
+                              INNER JOIN users u
+                                  ON u.role IN ('cooking', 'packaging')
+                                 AND (
+                                     u.name = e.username
+                                     OR (e.email IS NOT NULL AND e.email != '' AND u.email = e.email)
+                                     OR EXISTS (
+                                         SELECT 1
+                                         FROM attendance employee_user_link
+                                         WHERE employee_user_link.employee_id = e.employee_id
+                                           AND employee_user_link.user_id = u.id
+                                     )
+                                 )
                               WHERE EXISTS (
                                   SELECT 1
-                                  FROM users u
-                                  WHERE u.role = 'pro'
-                                    AND (
-                                        u.name = e.username
-                                        OR (e.email IS NOT NULL AND e.email != '' AND u.email = e.email)
-                                        OR EXISTS (
-                                            SELECT 1
-                                            FROM attendance employee_user_link
-                                            WHERE employee_user_link.employee_id = e.employee_id
-                                              AND employee_user_link.user_id = u.id
-                                        )
-                                    )
-                                    AND EXISTS (
-                                        SELECT 1
-                                        FROM attendance a
-                                        WHERE (a.user_id = u.id OR a.employee_id = e.employee_id)
-                                          AND DATE(a.attendance_date) = CURDATE()
-                                          AND LOWER(TRIM(a.status)) IN ('present', 'early', 'late', 'overtime', 'undertime', 'half day')
-                                    )
+                                  FROM attendance a
+                                  WHERE (a.user_id = u.id OR a.employee_id = e.employee_id)
+                                    AND DATE(a.attendance_date) = CURDATE()
+                                    AND LOWER(TRIM(a.status)) IN ('present', 'early', 'late', 'overtime', 'undertime', 'half day')
                               )
                               ORDER BY e.position, e.username";
     $present_employees_result = mysqli_query($conn, $present_employees_sql);
@@ -357,50 +811,52 @@ elseif ($module === 'factory') {
         $present_production_employees[] = $employee;
     }
 
+    $is_present_production_employee = static function (int $employee_id, string $work_type) use ($conn): bool {
+        $required_role = $work_type === 'Cooking' ? 'cooking' : 'packaging';
+        $check_employee = $conn->prepare(
+            "SELECT e.employee_id
+             FROM employee e
+             INNER JOIN users u
+                 ON (u.name = e.username
+                     OR (e.email IS NOT NULL AND e.email != '' AND u.email = e.email)
+                     OR EXISTS (
+                         SELECT 1
+                         FROM attendance employee_user_link
+                         WHERE employee_user_link.employee_id = e.employee_id
+                           AND employee_user_link.user_id = u.id
+                     ))
+             WHERE e.employee_id = ?
+               AND u.role = ?
+               AND EXISTS (
+                   SELECT 1
+                   FROM attendance a
+                   WHERE (a.user_id = u.id OR a.employee_id = e.employee_id)
+                     AND DATE(a.attendance_date) = CURDATE()
+                     AND LOWER(TRIM(a.status)) IN ('present', 'early', 'late', 'overtime', 'undertime', 'half day')
+               )
+             LIMIT 1"
+        );
+        $check_employee->bind_param("is", $employee_id, $required_role);
+        $check_employee->execute();
+        $is_eligible = ($check_employee->get_result()->num_rows > 0);
+        $check_employee->close();
+
+        return $is_eligible;
+    };
+
     // --- REASSIGN PRODUCTION TASK ---
-    if (isset($_POST['submit']) && $action === 'reassign') {
+    if ($is_production_supervisor && isset($_POST['submit']) && $action === 'reassign') {
         $production_id = trim($_POST['production_id'] ?? '');
-        $assignment_parts = explode('|', $_POST['assignment_target'] ?? '', 2);
-        $employee_id = filter_var($assignment_parts[0] ?? '', FILTER_VALIDATE_INT);
-        $work_type = trim($assignment_parts[1] ?? '');
+        $employee_id = filter_var($_POST['employee_id'] ?? '', FILTER_VALIDATE_INT);
+        $work_type = trim($_POST['work_type'] ?? '');
 
         if ($production_id === '') {
             $errors['assignment'] = "Please select a production task.";
         }
         if (!$employee_id || !in_array($work_type, ['Cooking', 'Packaging'], true)) {
-            $errors['assignment_target'] = "Please select a present employee and work area.";
-        } else {
-            $check_employee = $conn->prepare(
-                "SELECT e.employee_id
-                 FROM employee e
-                 INNER JOIN users u
-                     ON (u.name = e.username
-                         OR (e.email IS NOT NULL AND e.email != '' AND u.email = e.email)
-                         OR EXISTS (
-                             SELECT 1
-                             FROM attendance employee_user_link
-                             WHERE employee_user_link.employee_id = e.employee_id
-                               AND employee_user_link.user_id = u.id
-                         ))
-                 WHERE e.employee_id = ?
-                   AND u.role = 'pro'
-                   AND EXISTS (
-                       SELECT 1
-                       FROM attendance a
-                       WHERE (a.user_id = u.id OR a.employee_id = e.employee_id)
-                         AND DATE(a.attendance_date) = CURDATE()
-                         AND LOWER(TRIM(a.status)) IN ('present', 'early', 'late', 'overtime', 'undertime', 'half day')
-                   )
-                 LIMIT 1"
-            );
-            $check_employee->bind_param("i", $employee_id);
-            $check_employee->execute();
-            $employee_is_eligible = ($check_employee->get_result()->num_rows > 0);
-            $check_employee->close();
-
-            if (!$employee_is_eligible) {
-                $errors['assignment_target'] = "Only production user accounts with an active Present attendance record can be assigned.";
-            }
+            $errors['assignment_target'] = "Please select a present employee for the selected work area.";
+        } elseif (!$is_present_production_employee((int) $employee_id, $work_type)) {
+            $errors['assignment_target'] = "Select a present account whose role matches the selected work area.";
         }
 
         if (empty($errors)) {
@@ -421,21 +877,127 @@ elseif ($module === 'factory') {
             }
         }
 
+        if (empty($errors) && $work_type === 'Packaging') {
+            $cooking_check = $conn->prepare(
+                "SELECT work_status
+                 FROM production_assignments
+                 WHERE production_id = ? AND work_type = 'Cooking'
+                 LIMIT 1"
+            );
+            $cooking_check->bind_param("s", $production_id);
+            $cooking_check->execute();
+            $cooking_assignment = $cooking_check->get_result()->fetch_assoc();
+            $cooking_check->close();
+
+            if (!$cooking_assignment || $cooking_assignment['work_status'] !== 'Done') {
+                $errors['assignment'] = "Packaging can only be assigned after Cooking is marked done.";
+            }
+        }
+
+        if (empty($errors)) {
+            $opposite_work_type = $work_type === 'Cooking' ? 'Packaging' : 'Cooking';
+            $opposite_assignment = $conn->prepare(
+                "SELECT employee_id
+                 FROM production_assignments
+                 WHERE production_id = ? AND work_type = ?
+                 LIMIT 1"
+            );
+            $opposite_assignment->bind_param("ss", $production_id, $opposite_work_type);
+            $opposite_assignment->execute();
+            $opposite_row = $opposite_assignment->get_result()->fetch_assoc();
+            $opposite_assignment->close();
+
+            if ($opposite_row && (int) $opposite_row['employee_id'] === (int) $employee_id) {
+                $errors['assignment_target'] = "Cooking and Packaging must be assigned to different employees.";
+            }
+        }
+
+        if (empty($errors)) {
+            $check_stage = $conn->prepare(
+                "SELECT work_status, employee_id
+                 FROM production_assignments
+                 WHERE production_id = ? AND work_type = ?
+                 LIMIT 1"
+            );
+            $check_stage->bind_param("ss", $production_id, $work_type);
+            $check_stage->execute();
+            $stage_row = $check_stage->get_result()->fetch_assoc();
+            $check_stage->close();
+
+            if ($stage_row && $stage_row['work_status'] === 'Done') {
+                $errors['assignment'] = "A completed work area cannot be reassigned.";
+            }
+        }
+
         if (empty($errors)) {
             $assigned_by = (int) ($_SESSION['id'] ?? $_SESSION['user_id'] ?? 0);
+            $actor_name = trim((string) ($_SESSION['name'] ?? ''));
+            if ($actor_name === '') {
+                $actor_name = 'User #' . $assigned_by;
+            }
             $stmt = $conn->prepare(
                 "INSERT INTO production_assignments (production_id, employee_id, work_type, assigned_by)
                  VALUES (?, ?, ?, ?)
                  ON DUPLICATE KEY UPDATE
                     employee_id = VALUES(employee_id),
-                    work_type = VALUES(work_type),
                     assigned_by = VALUES(assigned_by),
                     assigned_at = CURRENT_TIMESTAMP"
             );
             $stmt->bind_param("sisi", $production_id, $employee_id, $work_type, $assigned_by);
+            $conn->begin_transaction();
             if ($stmt->execute()) {
-                $message = "Production task reassigned successfully.";
+                $previous_employee_id = (int) ($stage_row['employee_id'] ?? 0);
+                try {
+                    if (!$stage_row || $previous_employee_id !== (int) $employee_id) {
+                        recordProductionActivity(
+                            $conn,
+                            $production_id,
+                            $assigned_by,
+                            $actor_name,
+                            $stage_row ? 'stage_reassigned' : 'stage_assigned',
+                            $work_type,
+                            $previous_employee_id > 0 ? $previous_employee_id : null,
+                            $previous_employee_id > 0 ? getProductionEmployeeName($conn, $previous_employee_id) : null,
+                            (int) $employee_id,
+                            getProductionEmployeeName($conn, (int) $employee_id)
+                        );
+                        if ($previous_employee_id > 0) {
+                            notifyEmployeeTaskAssignee(
+                                $conn,
+                                $previous_employee_id,
+                                $assigned_by,
+                                'production_reassigned',
+                                'Production stage reassigned',
+                                'The ' . $work_type . ' stage for production item #' . $production_id . ' has been assigned to another employee.',
+                                'Production.php',
+                                'production',
+                                $production_id
+                            );
+                        }
+                        notifyEmployeeTaskAssignee(
+                            $conn,
+                            (int) $employee_id,
+                            $assigned_by,
+                            'production_assigned',
+                            'Production stage assigned',
+                            'The ' . $work_type . ' stage for production item #' . $production_id . ' is assigned to you.',
+                            'Production.php',
+                            'production',
+                            $production_id
+                        );
+                    }
+                    if (!$conn->commit()) {
+                        throw new RuntimeException('The database could not commit the production assignment.');
+                    }
+                    $message = $stage_row
+                        ? "Production stage reassigned successfully."
+                        : "Production stage assigned successfully.";
+                } catch (RuntimeException $exception) {
+                    $conn->rollback();
+                    $errors['assignment'] = "Unable to save the assignment and its activity history: " . $exception->getMessage();
+                }
             } else {
+                $conn->rollback();
                 $errors['assignment'] = "Unable to reassign the selected production task.";
             }
             $stmt->close();
@@ -443,106 +1005,176 @@ elseif ($module === 'factory') {
     }
 
     // --- INSERT PRODUCTION ---
-    if (isset($_POST['submit']) && $action === 'insert') {
-        $product_name = trim($_POST['product_name'] ?? '');
-        $target_pcs   = trim($_POST['target_pcs'] ?? '');
-        $due_date     = trim($_POST['due_date'] ?? '');
-        $Stock_number = trim($_POST['Stock_number'] ?? '');
-        $quantity     = trim($_POST['quantity'] ?? '');
-        $assignment_parts = explode('|', $_POST['assignment_target'] ?? '', 2);
-        $employee_id = filter_var($assignment_parts[0] ?? '', FILTER_VALIDATE_INT);
-        $work_type = trim($assignment_parts[1] ?? '');
+    if ($is_production_supervisor && isset($_POST['submit']) && $action === 'insert') {
+        $submitted_assignments = $_POST['assignments'] ?? null;
+        if (!is_array($submitted_assignments) && isset($_POST['product_name'])) {
+            $submitted_assignments = [[
+                'product_name' => $_POST['product_name'] ?? '',
+                'cooking_employee_id' => $_POST['cooking_employee_id'] ?? '',
+                'target_pcs' => $_POST['target_pcs'] ?? '',
+                'Stock_number' => $_POST['Stock_number'] ?? '',
+                'quantity' => $_POST['quantity'] ?? '',
+                'due_date' => $_POST['due_date'] ?? '',
+            ]];
+        }
+        $submitted_assignments = is_array($submitted_assignments) ? array_values($submitted_assignments) : [];
+        $validated_assignments = [];
 
-        if (!in_array($product_name, $allowed_products)) {
-            $errors['product_name'] = "Please select a valid product from the list.";
-        }
-        if (!preg_match("/^[0-9 ]*$/", $target_pcs)) {
-            $errors['target_pcs'] = "Please use only numbers for your Target PCS.";
-        }
-        if (!preg_match("/^[0-9 ]*$/", $quantity)) {
-            $errors['quantity'] = "Please use only numbers for your Quantity.";
-        }
-        if (!preg_match("/^[0-9 ]*$/", $Stock_number)) {
-            $errors['Stock_number'] = "Please use only numbers for your Stock Number.";
-        }
-        if (!empty($Stock_number) && mb_strlen($Stock_number) != 4) {
-            $errors['Stock_number'] = "Your Stock Number must be exactly 4 characters long.";
+        if ($submitted_assignments === []) {
+            $errors['assignments'] = "Add at least one production product before confirming.";
         }
 
-        if (!$employee_id || !in_array($work_type, ['Cooking', 'Packaging'], true)) {
-            $errors['assignment_target'] = "Please select a present employee and Cooking or Packaging work area.";
-        } else {
-            $check_employee = $conn->prepare(
-                "SELECT e.employee_id
-                 FROM employee e
-                 INNER JOIN users u
-                     ON (u.name = e.username
-                         OR (e.email IS NOT NULL AND e.email != '' AND u.email = e.email)
-                         OR EXISTS (
-                             SELECT 1
-                             FROM attendance employee_user_link
-                             WHERE employee_user_link.employee_id = e.employee_id
-                               AND employee_user_link.user_id = u.id
-                         ))
-                 WHERE e.employee_id = ?
-                   AND u.role = 'pro'
-                   AND EXISTS (
-                       SELECT 1
-                       FROM attendance a
-                       WHERE (a.user_id = u.id OR a.employee_id = e.employee_id)
-                         AND DATE(a.attendance_date) = CURDATE()
-                         AND LOWER(TRIM(a.status)) IN ('present', 'early', 'late', 'overtime', 'undertime', 'half day')
-                   )
-                 LIMIT 1"
-            );
-            $check_employee->bind_param("i", $employee_id);
-            $check_employee->execute();
-            $employee_is_eligible = ($check_employee->get_result()->num_rows > 0);
-            $check_employee->close();
-
-            if (!$employee_is_eligible) {
-                $errors['assignment_target'] = "Only production user accounts with an active Present attendance record can be assigned.";
+        foreach ($submitted_assignments as $index => $assignment) {
+            $row_number = $index + 1;
+            if (!is_array($assignment)) {
+                $errors['assignments'] = "Production item {$row_number} is invalid.";
+                continue;
             }
+
+            $product_name = trim((string) ($assignment['product_name'] ?? ''));
+            $target_pcs = trim((string) ($assignment['target_pcs'] ?? ''));
+            $due_date = trim((string) ($assignment['due_date'] ?? ''));
+            $stock_number = trim((string) ($assignment['Stock_number'] ?? ''));
+            $quantity = trim((string) ($assignment['quantity'] ?? ''));
+            $cooking_employee_id = filter_var(
+                $assignment['cooking_employee_id'] ?? '',
+                FILTER_VALIDATE_INT
+            );
+
+            if (!in_array($product_name, $allowed_products, true)) {
+                $errors['assignments'] = "Select a valid product for production item {$row_number}.";
+            }
+            if ($target_pcs === '' || !preg_match('/^[0-9]+$/', $target_pcs)) {
+                $errors['assignments'] = "Enter a valid Target PCS for production item {$row_number}.";
+            }
+            if ($quantity === '' || !preg_match('/^[0-9]+$/', $quantity)) {
+                $errors['assignments'] = "Enter a valid Quantity for production item {$row_number}.";
+            }
+            if (!preg_match('/^[0-9]{4}$/', $stock_number)) {
+                $errors['assignments'] = "Stock Number for production item {$row_number} must be exactly 4 digits.";
+            }
+            $date_parts = explode('-', $due_date);
+            if (
+                !preg_match('/^\d{4}-\d{2}-\d{2}$/', $due_date)
+                || count($date_parts) !== 3
+                || !checkdate((int) ($date_parts[1] ?? 0), (int) ($date_parts[2] ?? 0), (int) ($date_parts[0] ?? 0))
+            ) {
+                $errors['assignments'] = "Select a valid due date for production item {$row_number}.";
+            }
+            if (!$cooking_employee_id) {
+                $errors['assignments'] = "Assign a present Cooking employee to production item {$row_number}.";
+            } elseif (!$is_present_production_employee((int) $cooking_employee_id, 'Cooking')) {
+                $errors['assignments'] = "Select a present Cooking employee for production item {$row_number}.";
+            }
+
+            $validated_assignments[] = [
+                'product_name' => $product_name,
+                'target_pcs' => $target_pcs,
+                'due_date' => $due_date,
+                'stock_number' => $stock_number,
+                'quantity' => $quantity,
+                'cooking_employee_id' => (int) ($cooking_employee_id ?: 0),
+            ];
         }
 
         if (empty($errors)) {
             $assigned_by = (int) ($_SESSION['id'] ?? $_SESSION['user_id'] ?? 0);
-            $conn->begin_transaction();
+            $production_stmt = null;
+            $assignment_stmt = null;
+            $transaction_started = false;
+            $work_type = 'Cooking';
+            $actor_name = trim((string) ($_SESSION['name'] ?? ''));
+            if ($actor_name === '') {
+                $actor_name = 'User #' . $assigned_by;
+            }
 
-            $production_stmt = $conn->prepare(
-                "INSERT INTO production (product_name, target_pcs, due_date, Stock_number, quantity)
-                 VALUES (?, ?, ?, ?, ?)"
-            );
-            $production_stmt->bind_param("sssss", $product_name, $target_pcs, $due_date, $Stock_number, $quantity);
-
-            if ($production_stmt->execute()) {
-                $production_id = (string) $conn->insert_id;
+            try {
+                $conn->begin_transaction();
+                $transaction_started = true;
+                $production_stmt = $conn->prepare(
+                    "INSERT INTO production (product_name, target_pcs, due_date, Stock_number, quantity)
+                     VALUES (?, ?, ?, ?, ?)"
+                );
                 $assignment_stmt = $conn->prepare(
                     "INSERT INTO production_assignments (production_id, employee_id, work_type, assigned_by)
                      VALUES (?, ?, ?, ?)"
                 );
-                $assignment_stmt->bind_param("sisi", $production_id, $employee_id, $work_type, $assigned_by);
-
-                if ($assignment_stmt->execute()) {
-                    $conn->commit();
-                    $message = "New Production Task created and assigned successfully.";
-                } else {
-                    $conn->rollback();
-                    $errors['assignment_target'] = "The production task could not be assigned. No task was created.";
+                if (!$production_stmt || !$assignment_stmt) {
+                    throw new RuntimeException('Unable to prepare production assignment statements.');
                 }
-                $assignment_stmt->close();
-            } else {
-                $conn->rollback();
-                $errors['product_name'] = "Unable to create the production task.";
+
+                foreach ($validated_assignments as $assignment) {
+                    $production_stmt->bind_param(
+                        "sssss",
+                        $assignment['product_name'],
+                        $assignment['target_pcs'],
+                        $assignment['due_date'],
+                        $assignment['stock_number'],
+                        $assignment['quantity']
+                    );
+                    if (!$production_stmt->execute()) {
+                        throw new RuntimeException('Unable to create a production product.');
+                    }
+
+                    $production_id = (string) $conn->insert_id;
+                    $employee_id = $assignment['cooking_employee_id'];
+                    $assignment_stmt->bind_param("sisi", $production_id, $employee_id, $work_type, $assigned_by);
+                    if (!$assignment_stmt->execute()) {
+                        throw new RuntimeException('Unable to assign a production product to Cooking.');
+                    }
+
+                    recordProductionActivity(
+                        $conn,
+                        $production_id,
+                        $assigned_by,
+                        $actor_name,
+                        'product_created',
+                        'Cooking',
+                        null,
+                        null,
+                        $employee_id,
+                        getProductionEmployeeName($conn, $employee_id)
+                    );
+                    notifyEmployeeTaskAssignee(
+                        $conn,
+                        $employee_id,
+                        $assigned_by,
+                        'production_assigned',
+                        'Production task assigned',
+                        'A new Cooking task for production item #' . $production_id . ' is assigned to you.',
+                        'Production.php',
+                        'production',
+                        $production_id
+                    );
+                }
+
+                if (!$conn->commit()) {
+                    throw new RuntimeException('The database could not commit the production assignments.');
+                }
+                $transaction_started = false;
+                $message = count($validated_assignments) === 1
+                    ? "New production task created and assigned to Cooking."
+                    : count($validated_assignments) . " production tasks created and assigned successfully.";
+            } catch (RuntimeException $exception) {
+                if ($transaction_started) {
+                    $conn->rollback();
+                }
+                $errors['assignments'] = "No production tasks were saved. " . $exception->getMessage();
+            } finally {
+                if ($production_stmt) {
+                    $production_stmt->close();
+                }
+                if ($assignment_stmt) {
+                    $assignment_stmt->close();
+                }
             }
-            $production_stmt->close();
         }
     }
 
     // --- DELETE PRODUCTION ---
     $passid = $_POST['idno'] ?? null;
 
-    if (isset($_POST['del']) && $passid) {
+    if ($is_production_supervisor && isset($_POST['del']) && $passid) {
         $delete_assignment = $conn->prepare("DELETE FROM production_assignments WHERE production_id = ?");
         $delete_assignment->bind_param("s", $passid);
         $delete_assignment->execute();
@@ -556,7 +1188,7 @@ elseif ($module === 'factory') {
     }
 
     // --- UPDATE PRODUCTION ---
-    if (isset($_POST['submit']) && $action === 'update') {
+    if ($is_production_supervisor && isset($_POST['submit']) && $action === 'update') {
         $production_id = trim($_POST['production_id'] ?? '');
         $product_name  = trim($_POST['product_name'] ?? '');
         $target_pcs    = trim($_POST['target_pcs'] ?? '');
@@ -580,10 +1212,31 @@ elseif ($module === 'factory') {
         if (empty($errors) && !empty($production_id)) {
             $stmt = $conn->prepare("UPDATE production SET product_name=?, target_pcs=?, due_date=?, Stock_number=?, quantity=? WHERE production_id=?");
             $stmt->bind_param("ssssss", $product_name, $target_pcs, $due_date, $Stock_number, $quantity, $production_id);
-
+            $conn->begin_transaction();
             if ($stmt->execute()) {
-                $message = "Production Task updated successfully.";
+                $actor_user_id = (int) ($_SESSION['id'] ?? $_SESSION['user_id'] ?? 0);
+                $actor_name = trim((string) ($_SESSION['name'] ?? ''));
+                if ($actor_name === '') {
+                    $actor_name = 'User #' . $actor_user_id;
+                }
+                try {
+                    recordProductionActivity(
+                        $conn,
+                        $production_id,
+                        $actor_user_id,
+                        $actor_name,
+                        'product_updated'
+                    );
+                    if (!$conn->commit()) {
+                        throw new RuntimeException('The database could not commit the product update.');
+                    }
+                    $message = "Production Task updated successfully.";
+                } catch (RuntimeException $exception) {
+                    $conn->rollback();
+                    $message = "The product update and activity history could not be saved: " . $exception->getMessage();
+                }
             } else {
+                $conn->rollback();
                 $message = "Failed to update Production Task.";
             }
             $stmt->close();
@@ -593,60 +1246,220 @@ elseif ($module === 'factory') {
     // --- UPDATE STATUS TO DONE ---
     if (isset($_POST['mark_done'])) {
         $production_id = $_POST['idno'] ?? '';
-        $can_mark_done = !$is_production_worker;
-
         if ($is_production_worker && $current_employee_id !== null && !empty($production_id)) {
+            $conn->begin_transaction();
+            $completion_error = null;
+            $stage_completed = false;
+            $assignment_work_type_filter = $current_work_type === null ? '' : " AND work_type = '$current_work_type'";
             $assignment_check = $conn->prepare(
-                "SELECT production_id
+                "SELECT work_type, work_status, assigned_by
                  FROM production_assignments
-                 WHERE production_id = ? AND employee_id = ?
-                 LIMIT 1"
+                 WHERE production_id = ? AND employee_id = ?$assignment_work_type_filter
+                 LIMIT 1
+                 FOR UPDATE"
             );
             $assignment_check->bind_param("si", $production_id, $current_employee_id);
             $assignment_check->execute();
-            $can_mark_done = ($assignment_check->get_result()->num_rows > 0);
+            $worker_assignment = $assignment_check->get_result()->fetch_assoc();
             $assignment_check->close();
-        }
 
-        if (!empty($production_id) && $can_mark_done) {
-            $stmt = $conn->prepare(
-                "UPDATE production
-                 SET product_status = 'product done'
-                 WHERE production_id = ?
-                   AND (product_status != 'product done' OR product_status IS NULL)"
-            );
-            $stmt->bind_param("s", $production_id);
-            if (!$stmt->execute() || $stmt->affected_rows !== 1) {
-                $_SESSION['production_error'] = "This task could not be completed. It may already be done or unavailable.";
+            $can_complete_stage = $worker_assignment && $worker_assignment['work_status'] === 'Pending';
+            if ($can_complete_stage && $worker_assignment['work_type'] === 'Packaging') {
+                $cooking_check = $conn->prepare(
+                    "SELECT work_status
+                     FROM production_assignments
+                     WHERE production_id = ? AND work_type = 'Cooking'
+                     LIMIT 1
+                     FOR UPDATE"
+                );
+                $cooking_check->bind_param("s", $production_id);
+                $cooking_check->execute();
+                $cooking_assignment = $cooking_check->get_result()->fetch_assoc();
+                $cooking_check->close();
+                $can_complete_stage = !$cooking_assignment || $cooking_assignment['work_status'] === 'Done';
             }
-            $stmt->close();
+
+            if ($can_complete_stage) {
+                $complete_stage = $conn->prepare(
+                    "UPDATE production_assignments
+                     SET work_status = 'Done', completed_at = NOW()
+                     WHERE production_id = ? AND employee_id = ? AND work_type = ? AND work_status = 'Pending'"
+                );
+                $complete_stage->bind_param("sis", $production_id, $current_employee_id, $worker_assignment['work_type']);
+                $stage_completed = $complete_stage->execute() && $complete_stage->affected_rows === 1;
+                $complete_stage->close();
+
+                if ($stage_completed && $worker_assignment['work_type'] === 'Packaging') {
+                    $complete_production = $conn->prepare(
+                        "UPDATE production
+                         SET product_status = 'product done'
+                         WHERE production_id = ?
+                           AND (product_status != 'product done' OR product_status IS NULL)"
+                    );
+                    $complete_production->bind_param("s", $production_id);
+                    if (!$complete_production->execute() || $complete_production->affected_rows !== 1) {
+                        $completion_error = "The packaging stage was completed, but the production status could not be updated.";
+                    }
+                    $complete_production->close();
+                }
+                if ($stage_completed) {
+                    $actor_user_id = (int) ($_SESSION['id'] ?? $_SESSION['user_id'] ?? 0);
+                    $actor_name = trim((string) ($_SESSION['name'] ?? ''));
+                    if ($actor_name === '') {
+                        $actor_name = getProductionEmployeeName($conn, $current_employee_id) ?? ('User #' . $actor_user_id);
+                    }
+                    try {
+                        recordProductionActivity(
+                            $conn,
+                            (string) $production_id,
+                            $actor_user_id,
+                            $actor_name,
+                            'stage_completed',
+                            $worker_assignment['work_type'],
+                            null,
+                            null,
+                            $current_employee_id,
+                            getProductionEmployeeName($conn, $current_employee_id)
+                        );
+                        createTaskNotification(
+                            $conn,
+                            (int) ($worker_assignment['assigned_by'] ?? 0),
+                            $actor_user_id,
+                            'production_stage_completed',
+                            'Production stage completed',
+                            $actor_name . ' completed the ' . $worker_assignment['work_type'] . ' stage for item #' . $production_id . '.',
+                            'factory_main.php',
+                            'production',
+                            (string) $production_id
+                        );
+                    } catch (RuntimeException $exception) {
+                        $completion_error = "This stage could not be completed with its activity history: " . $exception->getMessage();
+                    }
+                }
+            } else {
+                $completion_error = $worker_assignment && $worker_assignment['work_type'] === 'Packaging'
+                    ? "Packaging can only be completed after Cooking is done."
+                    : "This task is not assigned to your account or is already completed.";
+            }
+
+            if ($can_complete_stage && !$stage_completed) {
+                $completion_error = "This task could not be completed. It may already be done or unavailable.";
+            }
+
+            if ($completion_error === null) {
+                if (!$conn->commit()) {
+                    $conn->rollback();
+                    $_SESSION['production_error'] = "The completed stage could not be saved.";
+                }
+            } else {
+                $conn->rollback();
+                $_SESSION['production_error'] = $completion_error;
+            }
         } elseif ($is_production_worker) {
             $_SESSION['production_error'] = "This task is not assigned to your account.";
+        } elseif ($is_production_supervisor && !empty($production_id)) {
+            $_SESSION['production_error'] = "Production stages can only be completed by the assigned Cooking and Packaging workers.";
         }
         
-        $redirect_page = ($_SESSION['role'] === 'pro') ? 'production.php' : 'factory_main.php';
+        $redirect_page = $is_production_worker ? 'production.php' : 'factory_main.php';
         header("Location: $redirect_page");
         exit();
     }
 
     // --- FETCH PRODUCTION RECORDS ---
-    $assignment_filter = $is_production_worker
-        ? ($current_employee_id === null ? null : " AND pa.employee_id = " . $current_employee_id)
-        : "";
+    if (!$is_production_worker || $current_employee_id !== null) {
+        if ($is_production_worker) {
+            $assignment_employee_filter = " AND pa.employee_id = " . $current_employee_id;
+            $role_stage_filter = $current_work_type === null
+                ? ''
+                : " AND pa.work_type = '" . $current_work_type . "'";
+            $stage_visibility_filter = " AND pa.work_status = 'Pending'
+                                        AND (pa.work_type = 'Cooking'
+                                             OR NOT EXISTS (
+                                                 SELECT 1
+                                                 FROM production_assignments legacy_cooking
+                                                 WHERE legacy_cooking.production_id = pa.production_id
+                                                   AND legacy_cooking.work_type = 'Cooking'
+                                             )
+                                             OR EXISTS (
+                                            SELECT 1
+                                            FROM production_assignments cooking
+                                            WHERE cooking.production_id = pa.production_id
+                                              AND cooking.work_type = 'Cooking'
+                                              AND cooking.work_status = 'Done'
+                                        ))";
+            $pending_assignment_source = "INNER JOIN production_assignments pa
+                                            ON pa.production_id = CAST(p.production_id AS CHAR)
+                                           AND pa.work_type IN ('Cooking', 'Packaging')
+                                         LEFT JOIN employee e ON e.employee_id = pa.employee_id";
+            $history_assignment_source = $pending_assignment_source;
+            $pending_stage_visibility_filter = $assignment_employee_filter . $role_stage_filter . $stage_visibility_filter;
+            $history_assignment_filter = $assignment_employee_filter . $role_stage_filter;
+        } else {
+            $pending_assignment_source = "CROSS JOIN (
+                                             SELECT 'Cooking' AS work_type
+                                             UNION ALL SELECT 'Packaging'
+                                         ) stages
+                                         LEFT JOIN production_assignments pa
+                                           ON pa.production_id = CAST(p.production_id AS CHAR)
+                                          AND pa.work_type = stages.work_type
+                                         LEFT JOIN employee e ON e.employee_id = pa.employee_id";
+            $history_assignment_source = $pending_assignment_source;
+            $pending_stage_visibility_filter = "";
+            $history_assignment_filter = "";
+        }
+        $assigned_status_expression = $is_production_worker
+            ? "COALESCE(pa.work_status, 'Pending')"
+            : "CASE
+                   WHEN stages.work_type = 'Packaging'
+                     AND pa.employee_id IS NULL
+                     AND EXISTS (
+                         SELECT 1
+                         FROM production_assignments cooking_ready
+                         WHERE cooking_ready.production_id = CAST(p.production_id AS CHAR)
+                           AND cooking_ready.work_type = 'Cooking'
+                           AND cooking_ready.work_status = 'Done'
+                     )
+                   THEN 'Waiting for Packaging'
+                   WHEN stages.work_type = 'Packaging'
+                     AND COALESCE(pa.work_status, 'Pending') = 'Pending'
+                     AND EXISTS (
+                         SELECT 1
+                         FROM production_assignments cooking_stage
+                         WHERE cooking_stage.production_id = CAST(p.production_id AS CHAR)
+                           AND cooking_stage.work_type = 'Cooking'
+                     )
+                     AND NOT EXISTS (
+                         SELECT 1
+                         FROM production_assignments cooking
+                         WHERE cooking.production_id = CAST(p.production_id AS CHAR)
+                           AND cooking.work_type = 'Cooking'
+                           AND cooking.work_status = 'Done'
+                     )
+                   THEN 'Waiting for Cooking'
+                   ELSE COALESCE(pa.work_status, 'Pending')
+               END";
+        $history_status_expression = $is_production_worker
+            ? "COALESCE(pa.work_status, 'Pending')"
+            : "CASE
+                   WHEN pa.work_status IS NULL AND p.product_status = 'product done' THEN 'Done'
+                   ELSE COALESCE(pa.work_status, 'Pending')
+               END";
 
-    if ($assignment_filter !== null) {
         $sql_pending = "SELECT p.production_id, p.product_name, p.target_pcs, p.Stock_number, p.quantity, p.due_date, p.product_status,
                                pa.employee_id AS assigned_employee_id, e.username AS assigned_employee_name,
-                               e.position AS assigned_position, pa.work_type AS assigned_work_type
+                               e.position AS assigned_position,
+                               " . ($is_production_worker ? "pa.work_type" : "stages.work_type") . " AS assigned_work_type,
+                               $assigned_status_expression AS assigned_work_status
                         FROM production p
-                        LEFT JOIN production_assignments pa ON pa.production_id = CAST(p.production_id AS CHAR)
-                        LEFT JOIN employee e ON e.employee_id = pa.employee_id
-                        WHERE (p.product_status != 'product done' OR p.product_status IS NULL)" . $assignment_filter . "
-                        ORDER BY p.production_id DESC";
+                        $pending_assignment_source
+                        WHERE (p.product_status != 'product done' OR p.product_status IS NULL)"
+                        . $pending_stage_visibility_filter . "
+                        ORDER BY p.production_id DESC, assigned_work_type";
 
         $res_pending = mysqli_query($conn, $sql_pending);
         if (!$res_pending) {
-            throw new RuntimeException("Unable to load production tasks.");
+            throw new RuntimeException("Unable to load production tasks: " . mysqli_error($conn));
         }
         while ($row = mysqli_fetch_assoc($res_pending)) {
             $pending_records[] = $row;
@@ -654,16 +1467,18 @@ elseif ($module === 'factory') {
 
         $sql_history = "SELECT p.production_id, p.product_name, p.target_pcs, p.Stock_number, p.quantity, p.due_date, p.product_status,
                                pa.employee_id AS assigned_employee_id, e.username AS assigned_employee_name,
-                               e.position AS assigned_position, pa.work_type AS assigned_work_type
+                               e.position AS assigned_position,
+                               " . ($is_production_worker ? "pa.work_type" : "stages.work_type") . " AS assigned_work_type,
+                               $history_status_expression AS assigned_work_status
                         FROM production p
-                        LEFT JOIN production_assignments pa ON pa.production_id = CAST(p.production_id AS CHAR)
-                        LEFT JOIN employee e ON e.employee_id = pa.employee_id
-                        WHERE p.product_status = 'product done'" . $assignment_filter . "
-                        ORDER BY p.production_id DESC";
+                        $history_assignment_source
+                        WHERE p.product_status = 'product done'"
+                        . $history_assignment_filter . "
+                        ORDER BY p.production_id DESC, assigned_work_type";
 
         $res_history = mysqli_query($conn, $sql_history);
         if (!$res_history) {
-            throw new RuntimeException("Unable to load production task history.");
+            throw new RuntimeException("Unable to load production task history: " . mysqli_error($conn));
         }
         while ($row = mysqli_fetch_assoc($res_history)) {
             $history_records[] = $row;
