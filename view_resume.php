@@ -10,6 +10,7 @@ if (!empty($file) && file_exists($filepath)):
         <title>View Resume</title>
     </head>
     <body style="text-align: center; background: #222; padding: 20px;">
+        <?php include __DIR__ . '/config/theme_toggle.php'; ?>
         <!-- Manual Back / Close Button -->
         <div style="margin-bottom: 15px;">
             <button onclick="window.close()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">

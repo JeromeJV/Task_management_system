@@ -17,6 +17,8 @@ $pending_records = $pending_records ?? [];
 $history_records = $history_records ?? [];
 $delivery_error = $_SESSION['delivery_error'] ?? '';
 unset($_SESSION['delivery_error']);
+$delivery_success = $_SESSION['delivery_success'] ?? '';
+unset($_SESSION['delivery_success']);
 
 // Calculate Dashboard Stats
 $completed_today_count = 0;
@@ -292,6 +294,16 @@ foreach ($history_records as $hrec) {
             color: var(--badge-yellow-text);
         }
 
+        .status-badge.awaiting-approval {
+            border: 1px solid #fecaca;
+            background: #fff0f0;
+            color: #b4232f;
+        }
+
+        .shipment-card.is-awaiting-approval {
+            border-top-color: #dc3545;
+        }
+
         .card-body {
             font-size: 0.85rem;
             color: #4a5568;
@@ -305,6 +317,50 @@ foreach ($history_records as $hrec) {
             gap: 6px;
             margin-bottom: 4px;
             word-break: break-word;
+        }
+
+        .shipment-attribution {
+            display: grid;
+            gap: 3px;
+            margin: 10px 0 12px;
+            color: var(--text-muted);
+            font-size: 0.76rem;
+        }
+
+        .shipment-attribution strong {
+            color: #475569;
+        }
+
+        .shipment-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .shipment-actions .btn-view-details {
+            grid-column: 1 / -1;
+        }
+
+        .feedback-button {
+            padding: 7px 10px;
+            border: 1px solid #fecaca;
+            border-radius: 6px;
+            background: #fff7f7;
+            color: #b4232f;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .feedback-message {
+            margin: 0;
+            padding: 14px;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            background: #fff7f7;
+            color: #7f1d1d;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
         }
 
         .btn-view-details {
@@ -639,6 +695,7 @@ foreach ($history_records as $hrec) {
 
         .hidden { display: none !important; }
         .delivery-error { margin: 16px 20px; padding: 12px 16px; border: 1px solid #f1aeb5; border-radius: 8px; background: #f8d7da; color: #842029; }
+        .delivery-success { margin: 16px 20px; padding: 12px 16px; border: 1px solid #a3cfbb; border-radius: 8px; background: #d1e7dd; color: #0f5132; }
         .delivery-filters { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 20px 18px; }
         .delivery-filters input, .delivery-filters select { min-height: 40px; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px; }
         .container .delivery-filters .calendar-picker {
@@ -868,6 +925,9 @@ foreach ($history_records as $hrec) {
     <?php if ($delivery_error !== ''): ?>
         <div class="delivery-error" role="alert"><?= htmlspecialchars($delivery_error, ENT_QUOTES, 'UTF-8'); ?></div>
     <?php endif; ?>
+    <?php if ($delivery_success !== ''): ?>
+        <div class="delivery-success" role="status"><?= htmlspecialchars($delivery_success, ENT_QUOTES, 'UTF-8'); ?></div>
+    <?php endif; ?>
 
     <!-- Dashboard Metrics Top Cards -->
     <div class="metrics-grid">
@@ -902,7 +962,9 @@ foreach ($history_records as $hrec) {
             <input type="search" id="cardSearchInput" placeholder="Search ID, product, destination..." oninput="filterCards()">
             <select id="cardStatusFilter" onchange="filterCards()">
                 <option value="">All statuses</option>
-                <?php foreach (array_unique(array_map(static fn($record) => (string) ($record['status'] ?? 'Pending'), $pending_records)) as $status_option): ?>
+                <option value="awaiting approval">Waiting for approval</option>
+                <option value="changes requested">Changes requested</option>
+                <?php foreach (array_unique(array_map(static fn($record) => (string) ($record['status'] ?? 'Pending'), array_filter($pending_records, static fn($record) => !in_array(($record['completion_review_status'] ?? ''), ['pending_review', 'rejected'], true)))) as $status_option): ?>
                     <option value="<?= htmlspecialchars(strtolower($status_option), ENT_QUOTES, 'UTF-8'); ?>"><?= htmlspecialchars($status_option, ENT_QUOTES, 'UTF-8'); ?></option>
                 <?php endforeach; ?>
             </select>
@@ -919,27 +981,39 @@ foreach ($history_records as $hrec) {
                     $pieces = htmlspecialchars($row['pieces'] ?? '0');
                     $stock = htmlspecialchars($row['stock'] ?? 'N/A');
                     $date = htmlspecialchars($row['delivery_date'] ?? 'N/A');
-                    $status = htmlspecialchars($row['status'] ?? 'Pending');
+                    $status_label = match ($row['completion_review_status'] ?? '') {
+                        'pending_review' => 'Awaiting Approval',
+                        'rejected' => 'Changes Requested',
+                        default => (string) ($row['status'] ?? 'Pending'),
+                    };
+                    $status = htmlspecialchars($status_label, ENT_QUOTES, 'UTF-8');
+                    $review_note = (string) ($row['completion_review_note'] ?? '');
+                    $assigned_by_name = trim((string) ($row['assigned_by_name'] ?? ''));
+                    $reviewed_by_name = trim((string) ($row['completion_reviewed_by_name'] ?? ''));
                     $due_date = $row['delivery_date'] ?? '';
                     $days_until_due = $due_date ? (int) floor((strtotime($due_date) - strtotime($today_date)) / 86400) : null;
                     $due_label = $days_until_due === null ? '' : ($days_until_due < 0 ? 'Overdue by ' . abs($days_until_due) . ' day(s)' : ($days_until_due <= 2 ? ($days_until_due === 0 ? 'Due today' : 'Due in ' . $days_until_due . ' day(s)') : 'Scheduled'));
                     $due_class = $days_until_due !== null && $days_until_due < 0 ? 'delivery-due-overdue' : ($days_until_due !== null && $days_until_due <= 2 ? 'delivery-due-soon' : 'delivery-due-normal');
                 ?>
-                    <div class="shipment-card" 
+                    <div class="shipment-card <?= in_array(strtolower($status_label), ['awaiting approval', 'changes requested'], true) ? 'is-awaiting-approval' : ''; ?>"
                          data-id="<?= $del_id; ?>"
                          data-product="<?= $prod_name; ?>"
                          data-route="<?= $route; ?>"
                          data-pieces="<?= $pieces; ?>"
                          data-stock="<?= $stock; ?>"
                          data-date="<?= $date; ?>"
-                         data-status="<?= htmlspecialchars(strtolower($status), ENT_QUOTES, 'UTF-8'); ?>"
+                         data-status="<?= htmlspecialchars(strtolower($status_label), ENT_QUOTES, 'UTF-8'); ?>"
+                         data-review-note="<?= htmlspecialchars($review_note, ENT_QUOTES, 'UTF-8'); ?>"
+                         data-assigned-by="<?= htmlspecialchars($assigned_by_name !== '' ? $assigned_by_name : 'Not recorded', ENT_QUOTES, 'UTF-8'); ?>"
+                         data-reviewed-by="<?= htmlspecialchars($reviewed_by_name, ENT_QUOTES, 'UTF-8'); ?>"
+                         data-reviewed-at="<?= htmlspecialchars((string) ($row['completion_reviewed_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
                          data-due-date="<?= htmlspecialchars((string) $due_date, ENT_QUOTES, 'UTF-8'); ?>"
                          onclick="openDetailModal(this)">
                         
                         <div class="card-header">
                             <span class="shipment-id">#SHP-IN-<?= $del_id; ?></span>
-                            <span class="status-badge <?= strtolower($status) === 'delivered' ? 'delivered' : 'in-transit'; ?>">
-                                <?= $status === 'Pending' ? 'IN TRANSIT' : strtoupper($status); ?>
+                            <span class="status-badge <?= in_array(strtolower($status_label), ['awaiting approval', 'changes requested'], true) ? 'awaiting-approval' : (strtolower($status_label) === 'delivered' ? 'delivered' : 'in-transit'); ?>">
+                                <?= $status_label === 'Pending' ? 'IN TRANSIT' : (strtolower($status_label) === 'awaiting approval' ? 'REQUEST SENT · WAITING FOR APPROVAL' : strtoupper($status_label)); ?>
                             </span>
                         </div>
 
@@ -947,11 +1021,31 @@ foreach ($history_records as $hrec) {
                             <div><strong>&bull; Product:</strong> <?= $prod_name; ?></div>
                             <div><strong>&bull; Destination:</strong> <?= $route; ?></div>
                             <div><strong>&bull; Date:</strong> <?= $date; ?></div>
+                        </div>
+                        <div class="shipment-attribution">
+                            <span><strong>Assigned:</strong> <?= htmlspecialchars($assigned_by_name !== '' ? $assigned_by_name : 'Not recorded', ENT_QUOTES, 'UTF-8'); ?></span>
+                            <?php if (in_array(($row['completion_review_status'] ?? ''), ['approved', 'rejected'], true)): ?>
+                                <span><strong><?= ($row['completion_review_status'] ?? '') === 'approved' ? 'Approved:' : 'Changes by:'; ?></strong>
+                                    <?= htmlspecialchars($reviewed_by_name !== '' ? $reviewed_by_name : 'Not recorded', ENT_QUOTES, 'UTF-8'); ?>
+                                    <?php if (!empty($row['completion_reviewed_at'])): ?> · <?= htmlspecialchars(date('M j, Y g:i A', strtotime((string) $row['completion_reviewed_at'])), ENT_QUOTES, 'UTF-8'); ?><?php endif; ?>
+                                </span>
+                            <?php endif; ?>
+                        </div>
+                        <div class="card-body">
                             <?php if ($due_label !== ''): ?><span class="delivery-due-badge <?= $due_class; ?>"><?= htmlspecialchars($due_label, ENT_QUOTES, 'UTF-8'); ?></span><?php endif; ?>
                         </div>
 
-                        <button class="btn-view-details" type="button" onclick="event.stopPropagation(); openDetailModal(this.parentElement)">View Details</button>
-                        <button class="delivery-activity-btn" type="button" data-activity-id="<?= $del_id; ?>" data-activity-product="<?= $prod_name; ?>">Activity</button>
+                        <div class="shipment-actions">
+                            <button class="btn-view-details" type="button" onclick="event.stopPropagation(); openDetailModal(this.closest('.shipment-card'))">View Details</button>
+                            <?php if (trim($review_note) !== ''): ?>
+                                <button class="feedback-button" type="button"
+                                        data-feedback="<?= htmlspecialchars($review_note, ENT_QUOTES, 'UTF-8'); ?>"
+                                        data-reviewer="<?= htmlspecialchars($reviewed_by_name !== '' ? $reviewed_by_name : 'Not recorded', ENT_QUOTES, 'UTF-8'); ?>"
+                                        data-reviewed-at="<?= htmlspecialchars((string) ($row['completion_reviewed_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                                        onclick="event.stopPropagation(); openReviewFeedback(this)">Supervisor feedback</button>
+                            <?php endif; ?>
+                            <button class="delivery-activity-btn" type="button" data-activity-id="<?= $del_id; ?>" data-activity-product="<?= $prod_name; ?>">Activity</button>
+                        </div>
                     </div>
                 <?php endforeach; ?>
             </div>
@@ -1012,6 +1106,9 @@ foreach ($history_records as $hrec) {
                                                 data-stock="<?= $stock; ?>"
                                                 data-date="<?= $date; ?>"
                                                 data-status="Completed"
+                                                data-assigned-by="<?= htmlspecialchars(trim((string) ($row['assigned_by_name'] ?? '')) ?: 'Not recorded', ENT_QUOTES, 'UTF-8'); ?>"
+                                                data-reviewed-by="<?= htmlspecialchars(trim((string) ($row['completion_reviewed_by_name'] ?? '')) ?: 'Not recorded', ENT_QUOTES, 'UTF-8'); ?>"
+                                                data-reviewed-at="<?= htmlspecialchars((string) ($row['completion_reviewed_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
                                                 onclick="openDetailModal(this, true)">View Details</button>
                                         <button type="button" class="delivery-activity-btn" data-activity-id="<?= $del_id; ?>" data-activity-product="<?= $prod_name; ?>">Activity</button>
                                         
@@ -1061,6 +1158,17 @@ foreach ($history_records as $hrec) {
     </div>
 </div>
 
+<div class="modal-overlay" id="reviewFeedbackModal" role="dialog" aria-modal="true" aria-labelledby="reviewFeedbackTitle" onclick="if (event.target === this) closeModal('reviewFeedbackModal')">
+    <div class="modal-card" style="max-width: 440px;">
+        <div class="modal-header">
+            <h3 id="reviewFeedbackTitle">Supervisor feedback</h3>
+            <button type="button" class="close-btn" onclick="closeModal('reviewFeedbackModal')" aria-label="Close">&times;</button>
+        </div>
+        <p id="reviewFeedbackMeta" style="margin: 0 0 12px; color: var(--text-muted); font-size: 0.85rem;"></p>
+        <p id="reviewFeedbackMessage" class="feedback-message"></p>
+    </div>
+</div>
+
 <!-- MODAL 1: SHIPMENT INFO MODAL -->
 <div class="modal-overlay" id="detailModal">
     <div class="modal-card">
@@ -1101,6 +1209,7 @@ foreach ($history_records as $hrec) {
                 <label>Status</label>
                 <span id="modalStatusText" style="color: var(--primary-green);">IN TRANSIT</span>
             </div>
+            <div id="modalAssignmentReview" style="grid-column: 1 / -1; white-space: pre-line; color: var(--text-muted); font-size: 0.85rem;"></div>
         </div>
 
         <div class="timeline-container">
@@ -1222,6 +1331,9 @@ foreach ($history_records as $hrec) {
         const stock = element.getAttribute('data-stock');
         const date = element.getAttribute('data-date');
         const status = element.getAttribute('data-status');
+        const assignedBy = element.getAttribute('data-assigned-by') || 'Not recorded';
+        const reviewedBy = element.getAttribute('data-reviewed-by') || '';
+        const reviewedAt = element.getAttribute('data-reviewed-at') || '';
 
         document.getElementById('modalShipmentId').innerText = 'Shipment #SHP-IN-' + id;
         document.getElementById('modalProduct').innerText = product;
@@ -1235,11 +1347,21 @@ foreach ($history_records as $hrec) {
         const stepDelivered = document.getElementById('stepDelivered');
         const statusText = document.getElementById('modalStatusText');
 
-        if (isHistory || status === 'Delivered' || status === 'Completed') {
+        const assignmentReviewElement = document.getElementById('modalAssignmentReview');
+        assignmentReviewElement.textContent = 'Assigned by: ' + assignedBy
+            + (reviewedBy ? '\n' + (status === 'changes requested' ? 'Changes requested by: ' : 'Reviewed by: ') + reviewedBy : '')
+            + (reviewedAt ? ' · ' + new Date(reviewedAt.replace(' ', 'T')).toLocaleString() : '');
+
+        if (isHistory || status === 'delivered' || status === 'completed') {
             submitBtn.style.display = 'none';
             stepDelivered.classList.add('active');
             stepDelivered.innerHTML = '&#10003; Delivered';
             statusText.innerText = 'COMPLETED';
+        } else if (status === 'awaiting approval') {
+            submitBtn.style.display = 'none';
+            stepDelivered.classList.remove('active');
+            stepDelivered.innerHTML = '&#9675; Awaiting Approval';
+            statusText.innerText = 'AWAITING SUPERVISOR APPROVAL';
         } else {
             submitBtn.style.display = 'block';
             stepDelivered.classList.remove('active');
@@ -1248,6 +1370,16 @@ foreach ($history_records as $hrec) {
         }
 
         document.getElementById('detailModal').style.display = 'flex';
+    }
+
+    function openReviewFeedback(button) {
+        const feedback = button.dataset.feedback || '';
+        const reviewer = button.dataset.reviewer || 'Not recorded';
+        const reviewedAt = button.dataset.reviewedAt || '';
+        document.getElementById('reviewFeedbackMeta').textContent = 'Changes requested by: ' + reviewer
+            + (reviewedAt ? ' · ' + new Date(reviewedAt.replace(' ', 'T')).toLocaleString() : '');
+        document.getElementById('reviewFeedbackMessage').textContent = feedback;
+        document.getElementById('reviewFeedbackModal').style.display = 'flex';
     }
 
     function closeModal(modalId) {
@@ -1393,12 +1525,15 @@ foreach ($history_records as $hrec) {
                 const item = document.createElement('li');
                 const summary = document.createElement('strong');
                 const eventMessages = {
-                    delivery_assigned: `${activity.actor_name} assigned this delivery.`,
-                    driver_reassigned: `${activity.actor_name} reassigned this delivery.`,
+                    delivery_assigned: `${activity.actor_name} assigned this delivery${activity.to_driver_name ? ` to ${activity.to_driver_name}` : ''}.`,
+                    driver_reassigned: `${activity.actor_name} reassigned this delivery${activity.from_driver_name ? ` from ${activity.from_driver_name}` : ''}${activity.to_driver_name ? ` to ${activity.to_driver_name}` : ''}.`,
                     delivery_updated: `${activity.actor_name} updated the delivery details.`,
+                    delivery_submitted_for_review: `${activity.actor_name} submitted this delivery for supervisor approval.`,
+                    delivery_approved: `${activity.actor_name} approved this delivery.`,
+                    delivery_changes_requested: `${activity.actor_name} requested changes for this delivery.`,
                     delivery_completed: `${activity.actor_name} confirmed delivery.`
                 };
-                summary.textContent = eventMessages[activity.event_type] || `${activity.actor_name} updated this delivery.`;
+                summary.textContent = eventMessages[activity.event_type] || `${activity.actor_name} recorded an update for this delivery.`;
                 const time = document.createElement('time');
                 time.dateTime = activity.occurred_at.replace(' ', 'T');
                 time.textContent = activity.occurred_at;

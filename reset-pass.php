@@ -1,8 +1,5 @@
 <?php
-include 'config/connection.php';
-include 'config/reset-password.php';
-
-
+require_once __DIR__ . '/config/reset-password.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -10,12 +7,13 @@ include 'config/reset-password.php';
     <title>Reset Password</title>
 </head>
 <body>
+    <?php include __DIR__ . '/config/theme_toggle.php'; ?>
     <h2>Create New Password</h2>
 
     <!-- Dto lahat ng error msg -->
     <?php if (!empty($errors)): ?>
         <div style="color: red;">
-            <?php foreach ($errors as $error) echo htmlspecialchars($error) . "<br>"; ?>
+            <?php foreach ($errors as $error) echo htmlspecialchars($error, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "<br>"; ?>
         </div>
     <?php endif; ?>
 
@@ -23,9 +21,11 @@ include 'config/reset-password.php';
         <div style="color: green;">
             Password successfully updated! You can now <a href="index.php">log in</a>.
         </div>
+    <?php elseif (!$tokenIsValid): ?>
+        <p>Please request a new password reset link.</p>
     <?php else: ?>
         <form method="POST">
-            <input type="hidden" name="token" value="<?php echo htmlspecialchars($token); ?>">
+            <input type="hidden" name="token" value="<?php echo htmlspecialchars((string) $token, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?>">
             
             <div>
                 <input type="password" name="password" placeholder="New Password" required>

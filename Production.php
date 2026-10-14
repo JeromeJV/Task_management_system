@@ -185,6 +185,20 @@ $active_tab = $_GET['tab'] ?? 'main';
         .selectable-row.selected-row {
             background-color: #edf5f0;
         }
+        .selectable-row.is-review-pending {
+            background-color: #fff7f7;
+        }
+        .selectable-row.is-changes-requested {
+            background-color: #fff7f7;
+        }
+        .selectable-row.is-review-pending:hover,
+        .selectable-row.is-review-pending.selected-row {
+            background-color: #fff0f1;
+        }
+        .selectable-row.is-changes-requested:hover,
+        .selectable-row.is-changes-requested.selected-row {
+            background-color: #fff0f1;
+        }
 
         .item-icon {
             width: 32px;
@@ -221,6 +235,41 @@ $active_tab = $_GET['tab'] ?? 'main';
         .badge-pending {
             background-color: #fff3cd;
             color: #664d03;
+        }
+        .badge-review {
+            background-color: #fff0f0;
+            color: #b4232f;
+            border: 1px solid #fecaca;
+        }
+        .badge-changes-requested {
+            background-color: #fff0f0;
+            color: #b4232f;
+            border: 1px solid #fecaca;
+        }
+        .production-task-filter {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+            margin: 0 0 12px;
+        }
+        .production-task-filter label {
+            color: #667085;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .production-task-filter select {
+            min-height: 36px;
+            margin-left: 6px;
+            padding: 7px 10px;
+            border: 1px solid #d9e2dc;
+            border-radius: 7px;
+            background: #fff;
+            color: #344054;
+        }
+        .production-task-filter-count {
+            color: #7b8790;
+            font-size: 12px;
         }
 
         /* Right Panel: Task Details */
@@ -610,6 +659,12 @@ $active_tab = $_GET['tab'] ?? 'main';
         </div>
         <?php unset($_SESSION['production_error']); ?>
     <?php endif; ?>
+        <?php if (!empty($_SESSION['production_success'])): ?>
+            <div role="status" style="margin: 0 24px 16px; padding: 12px; border-radius: 8px; color: #155724; background: #d4edda;">
+                <?= htmlspecialchars($_SESSION['production_success']); ?>
+            </div>
+            <?php unset($_SESSION['production_success']); ?>
+        <?php endif; ?>
 
     <?php if ($active_tab === 'main'): ?>
         <!-- MAIN PRODUCTION VIEW -->
@@ -625,6 +680,18 @@ $active_tab = $_GET['tab'] ?? 'main';
                 </div>
 
                 <?php if (!empty($pending_records)): ?>
+                    <div class="production-task-filter">
+                        <label for="productionTaskStatusFilter">Status
+                            <select id="productionTaskStatusFilter">
+                                <option value="all">All tasks</option>
+                                <option value="review">Waiting for approval</option>
+                                <option value="changes_requested">Changes requested</option>
+                                <option value="pending">In progress</option>
+                                <option value="done">Completed</option>
+                            </select>
+                        </label>
+                        <span id="productionTaskFilterCount" class="production-task-filter-count" aria-live="polite"></span>
+                    </div>
                     <div class="table-scroll">
                     <table id="mainProductionTable">
                         <thead>
@@ -642,9 +709,14 @@ $active_tab = $_GET['tab'] ?? 'main';
                             <?php 
                             $first_item = reset($pending_records);
                             foreach ($pending_records as $index => $row): 
-                                $is_done = (($row['assigned_work_status'] ?? '') === 'Done');
+                                $row_status = (string) ($row['assigned_work_status'] ?? 'Pending');
+                                $is_done = $row_status === 'Done';
+                                $is_review_pending = $row_status === 'Awaiting Approval';
+                                $is_changes_requested = ($row['completion_review_status'] ?? '') === 'rejected';
+                                $assigned_by_name = trim((string) ($row['assigned_by_name'] ?? ''));
+                                $reviewed_by_name = trim((string) ($row['completion_reviewed_by_name'] ?? ''));
                             ?>
-                                <tr class="selectable-row <?= $index === 0 ? 'selected-row' : ''; ?>" 
+                                <tr class="selectable-row <?= $index === 0 ? 'selected-row' : ''; ?> <?= $is_review_pending ? 'is-review-pending' : ($is_changes_requested ? 'is-changes-requested' : ''); ?>"
                                     onclick="selectTask(this)"
                                     data-id="<?= htmlspecialchars($row['production_id']); ?>"
                                     data-name="<?= htmlspecialchars($row['product_name'] ?? 'N/A'); ?>"
@@ -652,13 +724,17 @@ $active_tab = $_GET['tab'] ?? 'main';
                                     data-target="<?= htmlspecialchars($row['target_pcs']); ?>"
                                     data-due="<?= htmlspecialchars($row['due_date']); ?>"
                                     data-work-type="<?= htmlspecialchars($row['assigned_work_type'] ?? ''); ?>"
-                                    data-status="<?= $is_done ? 'done' : 'pending'; ?>">
+                                    data-status="<?= $is_done ? 'done' : ($is_review_pending ? 'review' : ($is_changes_requested ? 'changes_requested' : 'pending')); ?>"
+                                    data-review-note="<?= htmlspecialchars((string) ($row['completion_review_note'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                                    data-assigned-by="<?= htmlspecialchars($assigned_by_name !== '' ? $assigned_by_name : 'Not recorded', ENT_QUOTES, 'UTF-8'); ?>"
+                                    data-reviewed-by="<?= htmlspecialchars($reviewed_by_name, ENT_QUOTES, 'UTF-8'); ?>"
+                                    data-reviewed-at="<?= htmlspecialchars((string) ($row['completion_reviewed_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
                                     <td>
                                         <div class="prod-name-cell">
                                             <div class="item-icon">GT</div>
                                             <div>
                                                 <strong><?= htmlspecialchars($row['product_name'] ?? 'N/A'); ?></strong><br>
-                                                <small style="color:#aaa; font-size:10px;"><?= $is_done ? 'Completed' : 'In Progress'; ?></small>
+                                                <small style="color:#aaa; font-size:10px;"><?= $is_done ? 'Completed' : ($is_review_pending ? 'Awaiting supervisor approval' : ($is_changes_requested ? 'Supervisor requested changes' : 'In Progress')); ?></small>
                                             </div>
                                         </div>
                                     </td>
@@ -670,6 +746,10 @@ $active_tab = $_GET['tab'] ?? 'main';
                                     <td>
                                         <?php if ($is_done): ?>
                                             <span class="badge badge-done">Done</span>
+                                        <?php elseif ($is_review_pending): ?>
+                                            <span class="badge badge-review">Request sent · Waiting for approval</span>
+                                        <?php elseif ($is_changes_requested): ?>
+                                            <span class="badge badge-changes-requested">Changes requested · resubmit</span>
                                         <?php else: ?>
                                             <span class="badge badge-pending">In Progress</span>
                                         <?php endif; ?>
@@ -679,6 +759,7 @@ $active_tab = $_GET['tab'] ?? 'main';
                         </tbody>
                     </table>
                     </div>
+                    <p id="productionTaskFilterEmpty" hidden style="padding: 14px 0; color: #888;">No tasks match this status filter.</p>
                 <?php else: ?>
                     <p style="padding: 20px 0; color: #888;">No active production records found.</p>
                 <?php endif; ?>
@@ -726,10 +807,20 @@ $active_tab = $_GET['tab'] ?? 'main';
                             <span id="detailBoxDue"><?= htmlspecialchars($first_item['due_date']); ?></span>
                         </div>
                     </div>
+                    <p id="reviewFeedback" role="status" style="display:none; margin: 12px 0; padding: 10px; border: 1px solid #fecaca; border-radius: 8px; color: #b4232f; background: #fff0f0;"></p>
+                    <p id="assignmentReviewDetails" style="margin: 10px 0; color: #64748b; font-size: 12px;">
+                        Assigned by: <?= htmlspecialchars(trim((string) ($first_item['assigned_by_name'] ?? '')) ?: 'Not recorded', ENT_QUOTES, 'UTF-8'); ?>
+                        <?php if (!empty($first_item['completion_reviewed_by_name'])): ?>
+                            · <?= ($first_item['completion_review_status'] ?? '') === 'approved' ? 'Approved by: ' : 'Changes requested by: '; ?><?= htmlspecialchars($first_item['completion_reviewed_by_name'], ENT_QUOTES, 'UTF-8'); ?>
+                            <?php if (!empty($first_item['completion_reviewed_at'])): ?> · <?= htmlspecialchars(date('M j, Y g:i A', strtotime((string) $first_item['completion_reviewed_at'])), ENT_QUOTES, 'UTF-8'); ?><?php endif; ?>
+                        <?php endif; ?>
+                    </p>
 
                     <div id="actionContainer">
-                        <?php if (($first_item['assigned_work_status'] ?? 'Pending') !== 'Done'): ?>
-                            <button type="button" class="btn-continue" onclick="openModal()">Complete <?= htmlspecialchars($first_item['assigned_work_type'] ?? 'Stage'); ?></button>
+                        <?php if (($first_item['assigned_work_status'] ?? 'Pending') === 'Awaiting Approval'): ?>
+                            <button type="button" class="btn-continue" style="background:#ccc; cursor:not-allowed;" disabled>Awaiting supervisor approval</button>
+                        <?php elseif (($first_item['assigned_work_status'] ?? 'Pending') !== 'Done'): ?>
+                            <button type="button" class="btn-continue" onclick="openModal()">Submit <?= htmlspecialchars($first_item['assigned_work_type'] ?? 'Stage'); ?> for approval</button>
                         <?php else: ?>
                             <button type="button" class="btn-continue" style="background:#ccc; cursor:not-allowed;" disabled>Completed</button>
                         <?php endif; ?>
@@ -742,11 +833,11 @@ $active_tab = $_GET['tab'] ?? 'main';
                             <h3 style="font-size: 16px; margin-bottom: 8px;">Are you sure you want to continue?</h3>
                             <p id="completionMessage" style="font-size: 12px; color: #666;">This will complete the selected work area.</p>
                             
-                            <form id="productionCompletionForm" action="production.php" method="post">
+                            <form id="productionCompletionForm" action="Production.php" method="post">
                                 <input type="hidden" name="idno" id="modalInputId" value="<?= htmlspecialchars($first_item['production_id']); ?>">
                                 <div class="modal-actions">
                                     <button type="button" class="btn-modal-cancel" onclick="closeModal()">Cancel</button>
-                                    <button type="submit" name="mark_done" class="btn-modal-submit">Complete Stage</button>
+                                    <button type="submit" name="mark_done" class="btn-modal-submit">Submit for supervisor review</button>
                                 </div>
                             </form>
                         </div>
@@ -779,6 +870,8 @@ $active_tab = $_GET['tab'] ?? 'main';
                                 <th>DEADLINE</th>
                                 <th>WORK AREA</th>
                                 <th>STATUS</th>
+                                <th>Assigned by</th>
+                                <th>Reviewed by</th>
                                 <th>ACTION</th>
                             </tr>
                         </thead>
@@ -792,6 +885,13 @@ $active_tab = $_GET['tab'] ?? 'main';
                                     <td><?= htmlspecialchars($row['due_date'] ?? ''); ?></td>
                                     <td><?= htmlspecialchars($row['assigned_work_type'] ?? ''); ?></td>
                                     <td><span class="badge badge-done">• <?= htmlspecialchars($row['assigned_work_status'] ?? 'Completed'); ?></span></td>
+                                    <td><?= htmlspecialchars(trim((string) ($row['assigned_by_name'] ?? '')) ?: 'Not recorded', ENT_QUOTES, 'UTF-8'); ?></td>
+                                    <td>
+                                        <?= htmlspecialchars(trim((string) ($row['completion_reviewed_by_name'] ?? '')) ?: 'Not reviewed', ENT_QUOTES, 'UTF-8'); ?>
+                                        <?php if (!empty($row['completion_reviewed_at'])): ?>
+                                            <br><small><?= htmlspecialchars(date('M j, Y g:i A', strtotime((string) $row['completion_reviewed_at'])), ENT_QUOTES, 'UTF-8'); ?></small>
+                                        <?php endif; ?>
+                                    </td>
                                     <td>
                                         <form action="factory_task.php" method="post" style="display:inline;">
                                             <input type="hidden" name="idno" value="<?= htmlspecialchars($row['production_id'] ?? ''); ?>">
@@ -855,6 +955,10 @@ function selectTask(rowElement) {
     const due = rowElement.getAttribute('data-due');
     const workType = rowElement.getAttribute('data-work-type');
     const status = rowElement.getAttribute('data-status');
+    const reviewNote = rowElement.getAttribute('data-review-note') || '';
+    const assignedBy = rowElement.getAttribute('data-assigned-by') || 'Not recorded';
+    const reviewedBy = rowElement.getAttribute('data-reviewed-by') || '';
+    const reviewedAt = rowElement.getAttribute('data-reviewed-at') || '';
 
     // i-Update ang Task Details Panel sa Kanan
     document.getElementById('detailName').innerText = name;
@@ -872,14 +976,49 @@ function selectTask(rowElement) {
 
     // i-Update ang hidden ID sa Modal
     document.getElementById('modalInputId').value = id;
+    const reviewFeedback = document.getElementById('reviewFeedback');
+    reviewFeedback.textContent = reviewNote ? 'Supervisor feedback: ' + reviewNote : '';
+    reviewFeedback.style.display = reviewNote ? 'block' : 'none';
+    const assignmentReviewDetails = document.getElementById('assignmentReviewDetails');
+    assignmentReviewDetails.textContent = 'Assigned by: ' + assignedBy
+        + (reviewedBy ? ' · ' + (status === 'done' ? 'Approved by: ' : 'Changes requested by: ') + reviewedBy : '')
+        + (reviewedAt ? ' · ' + new Date(reviewedAt.replace(' ', 'T')).toLocaleString() : '');
 
     // i-Update ang Action Button batay sa status
     const actionContainer = document.getElementById('actionContainer');
     if (status === 'done') {
         actionContainer.innerHTML = '<button type="button" class="btn-continue" style="background:#ccc; cursor:not-allowed;" disabled>Completed</button>';
+    } else if (status === 'review') {
+        actionContainer.innerHTML = '<button type="button" class="btn-continue" style="background:#ccc; cursor:not-allowed;" disabled>Awaiting supervisor approval</button>';
+    } else if (status === 'changes_requested') {
+        actionContainer.innerHTML = `<button type="button" class="btn-continue" onclick="openModal()">Resubmit ${workType} for approval</button>`;
     } else {
-        actionContainer.innerHTML = `<button type="button" class="btn-continue" onclick="openModal()">Complete ${workType}</button>`;
+        actionContainer.innerHTML = `<button type="button" class="btn-continue" onclick="openModal()">Submit ${workType} for approval</button>`;
     }
+}
+
+const productionTaskStatusFilter = document.getElementById('productionTaskStatusFilter');
+if (productionTaskStatusFilter) {
+    const productionTaskRows = [...document.querySelectorAll('#mainProductionTable .selectable-row')];
+    const productionTaskFilterCount = document.getElementById('productionTaskFilterCount');
+    const productionTaskFilterEmpty = document.getElementById('productionTaskFilterEmpty');
+    productionTaskStatusFilter.addEventListener('change', () => {
+        const selectedStatus = productionTaskStatusFilter.value;
+        let visibleRows = 0;
+        productionTaskRows.forEach((row) => {
+            const visible = selectedStatus === 'all' || row.dataset.status === selectedStatus;
+            row.hidden = !visible;
+            if (visible) visibleRows += 1;
+        });
+        productionTaskFilterCount.textContent = `${visibleRows} task${visibleRows === 1 ? '' : 's'} shown`;
+        productionTaskFilterEmpty.hidden = visibleRows !== 0;
+        const selectedRow = document.querySelector('#mainProductionTable .selectable-row.selected-row:not([hidden])');
+        if (!selectedRow) {
+            const firstVisibleRow = productionTaskRows.find((row) => !row.hidden);
+            if (firstVisibleRow) selectTask(firstVisibleRow);
+        }
+    });
+    productionTaskStatusFilter.dispatchEvent(new Event('change'));
 }
 
 // 2. Modal Popup Control

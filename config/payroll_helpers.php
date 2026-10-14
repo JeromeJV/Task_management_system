@@ -66,7 +66,7 @@ function getPayrollAttendanceSummary(mysqli $conn, int $employeeId, string $star
                END AS is_logistics
         FROM attendance a
         LEFT JOIN employee e ON e.employee_id = a.employee_id
-        WHERE (a.employee_id = ? OR a.user_id = ?)
+        WHERE a.employee_id = ?
           AND a.attendance_date BETWEEN ? AND ?
         ORDER BY a.attendance_date ASC, a.attendance_id ASC
     ");
@@ -74,7 +74,7 @@ function getPayrollAttendanceSummary(mysqli $conn, int $employeeId, string $star
         throw new RuntimeException('Failed to prepare payroll attendance query: ' . $conn->error);
     }
 
-    $statement->bind_param('iiss', $employeeId, $employeeId, $startDate, $endDate);
+    $statement->bind_param('iss', $employeeId, $startDate, $endDate);
     if (!$statement->execute()) {
         $error = $statement->error;
         $statement->close();
@@ -115,8 +115,8 @@ function getPayrollAttendanceSummary(mysqli $conn, int $employeeId, string $star
             $dailyAttendance[$date]['time_in_after_noon'] = true;
         }
 
-        if ($hasTimeIn && $timeIn > '08:01:00') {
-            $lateSeconds = strtotime($timeIn) - strtotime('08:01:00');
+        if ($hasTimeIn && $timeIn > '08:00:00') {
+            $lateSeconds = strtotime($timeIn) - strtotime('08:00:00');
             $rawLateMinutes = intdiv($lateSeconds, 60);
             $dailyAttendance[$date]['raw_late_minutes'] = max($dailyAttendance[$date]['raw_late_minutes'], $rawLateMinutes);
 

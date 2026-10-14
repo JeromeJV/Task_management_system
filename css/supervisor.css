@@ -964,6 +964,25 @@ textarea {
     margin-bottom: 16px;
 }
 
+.active-task-heading-badges {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.active-task-review-count {
+    flex-shrink: 0;
+    padding: 6px 10px;
+    border: 1px solid #F2D79A;
+    border-radius: 999px;
+    background: #FFF8E8;
+    color: #96620B;
+    font-size: 11px;
+    font-weight: 800;
+}
+
 .active-task-heading p {
     margin-top: 5px;
     color: #78847D;
@@ -979,6 +998,49 @@ textarea {
     color: #1F6E4A;
     font-size: 11px;
     font-weight: 700;
+}
+
+.active-task-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px;
+    margin: 0 0 16px;
+    padding: 12px;
+    border: 1px solid #E7ECE9;
+    border-radius: 11px;
+    background: #FAFCFA;
+}
+
+.active-task-filters label {
+    display: grid;
+    gap: 5px;
+    min-width: 175px;
+    color: #68766D;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.active-task-filters select {
+    min-height: 36px;
+    padding: 7px 10px;
+    border: 1px solid #D8E1DA;
+    border-radius: 8px;
+    background: #fff;
+    color: #304036;
+    font-size: 12px;
+}
+
+.active-task-filters select:focus {
+    border-color: #39845C;
+    outline: 3px solid rgba(57, 132, 92, .13);
+}
+
+.active-task-filter-result {
+    margin-left: auto;
+    padding-bottom: 9px;
+    color: #78847D;
+    font-size: 11px;
 }
 
 .active-task-list {
@@ -1003,6 +1065,25 @@ textarea {
 
 .active-task-card.is-logistics {
     border-left-color: #4B8AC6;
+}
+
+.active-task-card.is-employee:not(.is-awaiting-approval) {
+    border-left-color: #8B6CC1;
+}
+
+.active-task-card.is-employee .active-task-card-mark {
+    background: #F2EDFA;
+    color: #7653AF;
+}
+
+.active-task-card.is-awaiting-approval {
+    border-color: #F2D79A;
+    border-left-color: #D99A20;
+    background: linear-gradient(100deg, #FFFCF3 0%, #FFF 100%);
+}
+
+.active-task-card[hidden] {
+    display: none !important;
 }
 
 .active-task-card:hover {
@@ -1101,6 +1182,12 @@ textarea {
     color: #59665E;
     font-size: 11px;
     white-space: nowrap;
+}
+
+.active-task-review-actions {
+    display: flex;
+    flex: 0 0 auto;
+    justify-content: flex-end;
 }
 
 .active-task-empty {
@@ -1524,6 +1611,12 @@ textarea {
         flex-wrap: wrap;
         justify-content: flex-start;
         padding-left: 48px;
+    }
+
+    .active-task-review-actions {
+        width: 100%;
+        padding-left: 48px;
+        justify-content: flex-start;
     }
 
     .chart-panel {

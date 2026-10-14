@@ -1,8 +1,22 @@
-<?php 
-    include("/config/connection.php");
+<?php
+if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
-    session_unset();
-    session_destroy();
-    header("Location: index.php");
-    exit();
-?>
+}
+
+$_SESSION = [];
+if (ini_get('session.use_cookies')) {
+    $cookieParameters = session_get_cookie_params();
+    setcookie(
+        session_name(),
+        '',
+        time() - 42000,
+        $cookieParameters['path'],
+        $cookieParameters['domain'],
+        $cookieParameters['secure'],
+        $cookieParameters['httponly']
+    );
+}
+session_destroy();
+
+header('Location: index.php');
+exit();

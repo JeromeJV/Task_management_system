@@ -60,13 +60,248 @@ if (empty($_SESSION['admin_csrf'])) {
     $_SESSION['admin_csrf'] = bin2hex(random_bytes(32));
 }
 
+$profilePictureDirectory = __DIR__ . '/uploads/profile-pictures';
+$deleteStoredProfilePicture = static function (?string $filename) use ($profilePictureDirectory): void {
+    if ($filename === null || !preg_match('/^[a-f0-9]{32}\.(jpg|png|webp)$/', $filename)) {
+        return;
+    }
+
+    $filePath = $profilePictureDirectory . DIRECTORY_SEPARATOR . $filename;
+    if (is_file($filePath) && !unlink($filePath)) {
+        error_log('TaskTrack could not remove an old profile picture.');
+    }
+};
+
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $postedToken = (string) ($_POST['csrf_token'] ?? '');
     if (!hash_equals((string) $_SESSION['admin_csrf'], $postedToken)) {
         $errorMessage = 'Your session token expired. Refresh the page and try again.';
     } else {
         $action = (string) ($_POST['action'] ?? '');
-        if ($action === 'create_account') {
+        if (in_array($action, ['update_profile_picture', 'remove_profile_picture'], true)) {
+            $userId = filter_var($_POST['user_id'] ?? null, FILTER_VALIDATE_INT);
+            if (!$userId || $userId < 1) {
+                $errorMessage = 'Choose a valid account.';
+            } else {
+                $userStmt = $conn->prepare('SELECT id, name, profile_picture FROM users WHERE id = ? LIMIT 1');
+                if (!$userStmt) {
+                    throw new RuntimeException('Unable to prepare the profile picture account lookup: ' . $conn->error);
+                }
+                $userStmt->bind_param('i', $userId);
+                if (!$userStmt->execute()) {
+                    $error = $userStmt->error;
+                    $userStmt->close();
+                    throw new RuntimeException('Unable to load the profile picture account: ' . $error);
+                }
+                $pictureAccount = $userStmt->get_result()->fetch_assoc();
+                $userStmt->close();
+
+                if (!$pictureAccount) {
+                    $errorMessage = 'The selected account no longer exists.';
+                } else {
+                    $newFilename = null;
+                    if ($action === 'update_profile_picture') {
+                        $upload = $_FILES['profile_picture'] ?? null;
+                        if (
+                            !is_array($upload)
+                            || !isset($upload['error'], $upload['tmp_name'], $upload['size'])
+                            || !is_string($upload['tmp_name'])
+                            || !is_numeric($upload['error'])
+                            || !is_numeric($upload['size'])
+                        ) {
+                            $errorMessage = 'Choose a profile picture to upload.';
+                        } elseif ((int) $upload['error'] !== UPLOAD_ERR_OK) {
+                            $errorMessage = match ((int) $upload['error']) {
+                                UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'The profile picture must be no larger than 2 MB.',
+                                UPLOAD_ERR_NO_FILE => 'Choose a profile picture to upload.',
+                                default => 'The profile picture could not be uploaded. Please try again.',
+                            };
+                        } elseif ((int) $upload['size'] < 1 || (int) $upload['size'] > 2 * 1024 * 1024) {
+                            $errorMessage = 'The profile picture must be no larger than 2 MB.';
+                        } else {
+                            $fileInfo = new finfo(FILEINFO_MIME_TYPE);
+                            $mimeType = $fileInfo->file($upload['tmp_name']);
+                            $imageInfo = @getimagesize($upload['tmp_name']);
+                            $allowedImageTypes = [
+                                'image/jpeg' => 'jpg',
+                                'image/png' => 'png',
+                                'image/webp' => 'webp',
+                            ];
+                            if (
+                                !is_string($mimeType)
+                                || !isset($allowedImageTypes[$mimeType])
+                                || !is_array($imageInfo)
+                                || ($imageInfo['mime'] ?? null) !== $mimeType
+                                || (int) ($imageInfo[0] ?? 0) < 1
+                                || (int) ($imageInfo[1] ?? 0) < 1
+                                || (int) $imageInfo[0] > 5000
+                                || (int) $imageInfo[1] > 5000
+                            ) {
+                                $errorMessage = 'Upload a valid JPG, PNG, or WebP image no larger than 5000 × 5000 pixels.';
+                            } elseif (!is_uploaded_file($upload['tmp_name'])) {
+                                $errorMessage = 'The profile picture upload could not be verified. Please try again.';
+                            } else {
+                                if (!is_dir($profilePictureDirectory) && !mkdir($profilePictureDirectory, 0755, true) && !is_dir($profilePictureDirectory)) {
+                                    throw new RuntimeException('Unable to create the profile picture upload directory.');
+                                }
+                                $newFilename = bin2hex(random_bytes(16)) . '.' . $allowedImageTypes[$mimeType];
+                                if (!move_uploaded_file(
+                                    $upload['tmp_name'],
+                                    $profilePictureDirectory . DIRECTORY_SEPARATOR . $newFilename
+                                )) {
+                                    throw new RuntimeException('Unable to save the uploaded profile picture.');
+                                }
+                            }
+                        }
+                    }
+
+                    if ($errorMessage === '') {
+                        $storedFilename = $action === 'remove_profile_picture' ? null : $newFilename;
+                        if ($storedFilename === null && $action === 'update_profile_picture') {
+                            $errorMessage = 'Choose a valid profile picture before uploading.';
+                        } else {
+                            $pictureStmt = $conn->prepare('UPDATE users SET profile_picture = ? WHERE id = ?');
+                            if (!$pictureStmt) {
+                                if ($newFilename !== null) {
+                                    $deleteStoredProfilePicture($newFilename);
+                                }
+                                throw new RuntimeException('Unable to prepare the profile picture update: ' . $conn->error);
+                            }
+                            $pictureStmt->bind_param('si', $storedFilename, $userId);
+                            if (!$pictureStmt->execute()) {
+                                $error = $pictureStmt->error;
+                                $pictureStmt->close();
+                                if ($newFilename !== null) {
+                                    $deleteStoredProfilePicture($newFilename);
+                                }
+                                throw new RuntimeException('Unable to save the profile picture: ' . $error);
+                            }
+                            $pictureStmt->close();
+
+                            recordSystemAudit(
+                                $conn,
+                                $currentAdminId,
+                                (string) $_SESSION['name'],
+                                $action === 'remove_profile_picture' ? 'profile_picture_removed' : 'profile_picture_updated',
+                                'user',
+                                $userId,
+                                ($action === 'remove_profile_picture' ? 'Removed the profile picture for ' : 'Updated the profile picture for ')
+                                    . (string) $pictureAccount['name'] . '.'
+                            );
+                            if ($userId === $currentAdminId) {
+                                if ($storedFilename === null) {
+                                    unset($_SESSION['profile_picture']);
+                                } else {
+                                    $_SESSION['profile_picture'] = $storedFilename;
+                                }
+                            }
+                            $deleteStoredProfilePicture(
+                                isset($pictureAccount['profile_picture']) ? (string) $pictureAccount['profile_picture'] : null
+                            );
+                            $_SESSION['admin_flash'] = $action === 'remove_profile_picture'
+                                ? 'Profile picture removed.'
+                                : 'Profile picture updated for ' . (string) $pictureAccount['name'] . '.';
+                            header('Location: admin.php?section=accounts');
+                            exit();
+                        }
+                    }
+                }
+            }
+        } elseif ($action === 'link_employee') {
+            $userId = filter_var($_POST['user_id'] ?? null, FILTER_VALIDATE_INT);
+            $employeeId = filter_var($_POST['employee_id'] ?? null, FILTER_VALIDATE_INT);
+            if (!$userId || $userId < 1 || $employeeId === false || $employeeId < 0) {
+                $errorMessage = 'Choose a valid account and employee profile.';
+            } else {
+                if (!$conn->begin_transaction()) {
+                    throw new RuntimeException('Unable to start the employee account-link update: ' . $conn->error);
+                }
+                $userStmt = $conn->prepare('SELECT id FROM users WHERE id = ? LIMIT 1 FOR UPDATE');
+                if (!$userStmt) {
+                    throw new RuntimeException('Unable to prepare the account-link lookup: ' . $conn->error);
+                }
+                $userStmt->bind_param('i', $userId);
+                if (!$userStmt->execute()) {
+                    $error = $userStmt->error;
+                    $userStmt->close();
+                    throw new RuntimeException('Unable to load the account for linking: ' . $error);
+                }
+                $userExists = $userStmt->get_result()->num_rows === 1;
+                $userStmt->close();
+
+                if (!$userExists) {
+                    $conn->rollback();
+                    $errorMessage = 'The selected account no longer exists.';
+                } else {
+                    $linkedEmployeeId = $employeeId === 0 ? null : $employeeId;
+                    if ($linkedEmployeeId !== null) {
+                        $employeeStmt = $conn->prepare('SELECT employee_id FROM employee WHERE employee_id = ? LIMIT 1');
+                        if (!$employeeStmt) {
+                            throw new RuntimeException('Unable to prepare the employee profile lookup: ' . $conn->error);
+                        }
+                        $employeeStmt->bind_param('i', $linkedEmployeeId);
+                        if (!$employeeStmt->execute()) {
+                            $error = $employeeStmt->error;
+                            $employeeStmt->close();
+                            throw new RuntimeException('Unable to verify the employee profile: ' . $error);
+                        }
+                        $employeeExists = $employeeStmt->get_result()->num_rows === 1;
+                        $employeeStmt->close();
+
+                        $linkedUserStmt = $conn->prepare('SELECT id FROM users WHERE employee_id = ? AND id <> ? LIMIT 1 FOR UPDATE');
+                        if (!$linkedUserStmt) {
+                            throw new RuntimeException('Unable to prepare the duplicate profile-link check: ' . $conn->error);
+                        }
+                        $linkedUserStmt->bind_param('ii', $linkedEmployeeId, $userId);
+                        if (!$linkedUserStmt->execute()) {
+                            $error = $linkedUserStmt->error;
+                            $linkedUserStmt->close();
+                            throw new RuntimeException('Unable to check for an existing profile link: ' . $error);
+                        }
+                        $profileAlreadyLinked = $linkedUserStmt->get_result()->num_rows > 0;
+                        $linkedUserStmt->close();
+
+                        if (!$employeeExists || $profileAlreadyLinked) {
+                            $conn->rollback();
+                            $errorMessage = !$employeeExists
+                                ? 'The selected employee profile no longer exists.'
+                                : 'That employee profile is already linked to another account.';
+                        }
+                    }
+
+                    if ($errorMessage === '') {
+                        $linkStmt = $conn->prepare('UPDATE users SET employee_id = ? WHERE id = ?');
+                        if (!$linkStmt) {
+                            throw new RuntimeException('Unable to prepare the employee account-link update: ' . $conn->error);
+                        }
+                        $linkStmt->bind_param('ii', $linkedEmployeeId, $userId);
+                        if (!$linkStmt->execute()) {
+                            $error = $linkStmt->error;
+                            $linkStmt->close();
+                            throw new RuntimeException('Unable to update the employee account link: ' . $error);
+                        }
+                        $linkStmt->close();
+                        recordSystemAudit(
+                            $conn,
+                            $currentAdminId,
+                            (string) $_SESSION['name'],
+                            'employee_account_link_updated',
+                            'user',
+                            $userId,
+                            $linkedEmployeeId === null
+                                ? 'Removed the employee profile link from account #' . $userId . '.'
+                                : 'Linked account #' . $userId . ' to employee profile #' . $linkedEmployeeId . '.'
+                        );
+                        if (!$conn->commit()) {
+                            throw new RuntimeException('Unable to save the employee account link: ' . $conn->error);
+                        }
+                        $_SESSION['admin_flash'] = 'Employee profile link updated.';
+                        header('Location: admin.php?section=accounts');
+                        exit();
+                    }
+                }
+            }
+        } elseif ($action === 'create_account') {
             $employeeId = filter_var($_POST['employee_id'] ?? null, FILTER_VALIDATE_INT);
             $role = (string) ($_POST['role'] ?? '');
             $password = (string) ($_POST['password'] ?? '');
@@ -119,12 +354,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                         $name = (string) $employee['username'];
                         $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
                         $insertStmt = $conn->prepare(
-                            'INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)'
+                            'INSERT INTO users (name, email, employee_id, password, role) VALUES (?, ?, ?, ?, ?)'
                         );
                         if (!$insertStmt) {
                             throw new RuntimeException('Unable to prepare the account creation: ' . $conn->error);
                         }
-                        $insertStmt->bind_param('ssss', $name, $employeeEmail, $hashedPassword, $role);
+                        $insertStmt->bind_param('sisss', $name, $employeeEmail, $employeeId, $hashedPassword, $role);
                         if (!$insertStmt->execute()) {
                             $error = $insertStmt->error;
                             $insertStmt->close();
@@ -401,8 +636,12 @@ $employees = [];
 $employeeResult = $conn->query(
     "SELECT e.employee_id, e.username, e.email, e.position
      FROM employee e
-     LEFT JOIN users u ON LOWER(TRIM(u.email)) = LOWER(TRIM(e.email))
-     WHERE u.id IS NULL AND e.email IS NOT NULL AND TRIM(e.email) <> ''
+     WHERE e.email IS NOT NULL AND TRIM(e.email) <> ''
+       AND NOT EXISTS (
+           SELECT 1 FROM users u
+           WHERE u.employee_id = e.employee_id
+              OR LOWER(TRIM(u.email)) = LOWER(TRIM(e.email))
+       )
      ORDER BY e.username"
 );
 if (!$employeeResult) {
@@ -413,8 +652,23 @@ while ($employee = $employeeResult->fetch_assoc()) {
 }
 $employeeResult->free();
 
+$employeeProfiles = [];
+$profileResult = $conn->query('SELECT employee_id, username, email FROM employee ORDER BY username, employee_id');
+if (!$profileResult) {
+    throw new RuntimeException('Unable to load employee profiles for account linking: ' . $conn->error);
+}
+while ($profile = $profileResult->fetch_assoc()) {
+    $employeeProfiles[] = $profile;
+}
+$profileResult->free();
+
 $accounts = [];
-$accountResult = $conn->query('SELECT id, name, email, role, is_active FROM users ORDER BY name, id');
+$accountResult = $conn->query(
+    'SELECT u.id, u.name, u.email, u.role, u.is_active, u.employee_id, u.profile_picture, e.username AS employee_username
+     FROM users u
+     LEFT JOIN employee e ON e.employee_id = u.employee_id
+     ORDER BY u.name, u.id'
+);
 if (!$accountResult) {
     throw new RuntimeException('Unable to load system accounts: ' . $conn->error);
 }
@@ -434,7 +688,15 @@ while ($row = $roleResult->fetch_assoc()) {
 $roleResult->free();
 
 $taskCounts = [];
-$taskResult = $conn->query('SELECT COALESCE(status, "pending") AS item_status, COUNT(*) AS item_count FROM office GROUP BY COALESCE(status, "pending")');
+$taskResult = $conn->query(
+    "SELECT CASE WHEN completion_review_status = 'pending_review'
+                     THEN 'Awaiting review'
+                     ELSE COALESCE(status, 'pending')
+                END AS item_status,
+            COUNT(*) AS item_count
+     FROM office
+     GROUP BY item_status"
+);
 if (!$taskResult) {
     throw new RuntimeException('Unable to load office task summary: ' . $conn->error);
 }
@@ -664,11 +926,60 @@ $tasktrackActive = $section === 'dashboard' ? 'dashboard' : $section;
         </section>
         <section class="admin-panel">
             <div class="admin-panel-heading"><div><p class="admin-eyebrow">SYSTEM ACCESS</p><h2>Registered accounts</h2></div><span><?= $userCount; ?> accounts</span></div>
-            <div class="admin-table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Account status</th><th>Reset password</th></tr></thead><tbody>
+            <div class="admin-table-wrap"><table><thead><tr><th>Name</th><th>Profile picture</th><th>Email</th><th>Employee profile</th><th>Role</th><th>Account status</th><th>Reset password</th></tr></thead><tbody>
             <?php foreach ($accounts as $account): ?>
                 <tr>
                     <td><?= $escape($account['name']); ?><?= (int) $account['id'] === $currentAdminId ? ' (you)' : ''; ?></td>
+                    <td class="admin-profile-picture-cell">
+                        <form method="post" enctype="multipart/form-data" class="admin-profile-picture-form">
+                            <input type="hidden" name="csrf_token" value="<?= $escape($_SESSION['admin_csrf']); ?>">
+                            <input type="hidden" name="action" value="update_profile_picture">
+                            <input type="hidden" name="user_id" value="<?= (int) $account['id']; ?>">
+                            <label class="admin-profile-picture-picker">
+                                <input type="file" name="profile_picture" accept="image/jpeg,image/png,image/webp" required data-profile-picture-input aria-label="Choose profile picture for <?= $escape($account['name']); ?>">
+                                <span class="admin-profile-picture-preview">
+                                    <?php if (!empty($account['profile_picture']) && preg_match('/^[a-f0-9]{32}\.(jpg|png|webp)$/', (string) $account['profile_picture'])): ?>
+                                        <img src="uploads/profile-pictures/<?= $escape($account['profile_picture']); ?>" alt="">
+                                    <?php else: ?>
+                                        <?= $escape(mb_strtoupper(mb_substr(trim((string) $account['name']), 0, 1)) ?: 'U'); ?>
+                                    <?php endif; ?>
+                                    <span class="admin-profile-picture-picker-icon" aria-hidden="true">+</span>
+                                </span>
+                                <span class="admin-profile-picture-picker-hint">Change photo</span>
+                            </label>
+                            <?php if (!empty($account['profile_picture']) && preg_match('/^[a-f0-9]{32}\.(jpg|png|webp)$/', (string) $account['profile_picture'])): ?>
+                                <button type="button" class="admin-profile-picture-edit-button" data-profile-picture-edit>
+                                    Edit current crop
+                                </button>
+                            <?php endif; ?>
+                            <button type="submit" class="admin-secondary-button" data-profile-picture-submit hidden>Save photo</button>
+                        </form>
+                        <?php if (!empty($account['profile_picture'])): ?>
+                            <form method="post" class="admin-profile-picture-remove" onsubmit="return confirm('Remove this profile picture?');">
+                                <input type="hidden" name="csrf_token" value="<?= $escape($_SESSION['admin_csrf']); ?>">
+                                <input type="hidden" name="action" value="remove_profile_picture">
+                                <input type="hidden" name="user_id" value="<?= (int) $account['id']; ?>">
+                                <button type="submit" class="admin-profile-picture-remove-button">Remove</button>
+                            </form>
+                        <?php endif; ?>
+                    </td>
                     <td><?= $escape($account['email']); ?></td>
+                    <td>
+                        <form method="post" class="admin-inline-form">
+                            <input type="hidden" name="csrf_token" value="<?= $escape($_SESSION['admin_csrf']); ?>">
+                            <input type="hidden" name="action" value="link_employee">
+                            <input type="hidden" name="user_id" value="<?= (int) $account['id']; ?>">
+                            <select name="employee_id" aria-label="Employee profile for <?= $escape($account['name']); ?>">
+                                <option value="0">Not linked</option>
+                                <?php foreach ($employeeProfiles as $profile): ?>
+                                    <option value="<?= (int) $profile['employee_id']; ?>" <?= (int) ($account['employee_id'] ?? 0) === (int) $profile['employee_id'] ? 'selected' : ''; ?>>
+                                        <?= $escape($profile['username'] . ' · ' . $profile['email']); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <button type="submit" class="admin-secondary-button">Link</button>
+                        </form>
+                    </td>
                     <td>
                         <?php if ((int) $account['id'] === $currentAdminId): ?>
                             <?= $escape($roles[$account['role']] ?? ucfirst($account['role'])); ?>
@@ -711,6 +1022,7 @@ $tasktrackActive = $section === 'dashboard' ? 'dashboard' : $section;
                     </td>
                 </tr>
             <?php endforeach; ?>
+            <?php if ($accounts === []): ?><tr><td colspan="7">No system accounts.</td></tr><?php endif; ?>
             </tbody></table></div>
         </section>
     <?php elseif ($section === 'audit'): ?>
@@ -738,6 +1050,32 @@ $tasktrackActive = $section === 'dashboard' ? 'dashboard' : $section;
         </section>
     <?php endif; ?>
 </main>
+<dialog class="admin-profile-crop-dialog" data-profile-crop-dialog aria-labelledby="admin-profile-crop-title">
+    <div class="admin-profile-crop-content">
+        <div class="admin-profile-crop-heading">
+            <div>
+                <p class="admin-eyebrow">PROFILE PHOTO</p>
+                <h2 id="admin-profile-crop-title">Crop your photo</h2>
+            </div>
+            <button type="button" class="admin-profile-crop-close" data-profile-crop-cancel aria-label="Cancel crop">×</button>
+        </div>
+        <p class="admin-profile-crop-help">Drag the image to reposition it. Use the slider to zoom in or out.</p>
+        <div class="admin-profile-crop-stage">
+            <canvas data-profile-crop-canvas width="512" height="512" tabindex="0" aria-label="Square photo crop area. Use arrow keys to reposition the image."></canvas>
+            <span class="admin-profile-crop-loading" data-profile-crop-loading>Loading image…</span>
+        </div>
+        <label class="admin-profile-crop-zoom" for="admin-profile-crop-zoom">
+            <span>Zoom</span>
+            <input id="admin-profile-crop-zoom" type="range" min="1" max="3" step="0.01" value="1" data-profile-crop-zoom disabled>
+        </label>
+        <p class="admin-profile-crop-error" data-profile-crop-error role="alert" hidden></p>
+        <div class="admin-profile-crop-actions">
+            <button type="button" class="admin-profile-crop-cancel-button" data-profile-crop-cancel>Cancel</button>
+            <button type="button" class="admin-secondary-button" data-profile-crop-apply disabled>Use crop</button>
+        </div>
+    </div>
+</dialog>
 <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
+<script src="js/admin-profile-picture.js?v=<?= filemtime(__DIR__ . '/js/admin-profile-picture.js'); ?>"></script>
 </body>
 </html>

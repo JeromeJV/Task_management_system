@@ -23,6 +23,7 @@
     </style>
 </head>
 <body>
+    <?php include __DIR__ . '/config/theme_toggle.php'; ?>
 
 <div class="clock-card">
     <h2>Real-Time Attendance</h2>
@@ -62,7 +63,7 @@
     let currentEmployeeName = '';
     let nextAction = null;
 
-    function renderNextAction(action) {
+    function renderNextAction(action, emptyMessage = 'Attendance is complete for today.') {
         nextAction = action;
         if (action && actionLabels[action]) {
             submitButton.innerText = 'Submit';
@@ -71,7 +72,7 @@
         } else {
             submitButton.innerText = 'Submit';
             submitButton.disabled = true;
-            employeeName.innerText = `Name: ${currentEmployeeName} | Attendance is complete for today.`;
+            employeeName.innerText = `Name: ${currentEmployeeName} | ${emptyMessage}`;
         }
     }
 
@@ -116,7 +117,7 @@
             if (data.status === 'success') {
                 resolvedEmployeeId = employeeId;
                 currentEmployeeName = data.employee_name;
-                renderNextAction(data.next_action);
+                renderNextAction(data.next_action, data.message || undefined);
             } else {
                 employeeName.innerText = data.message;
             }

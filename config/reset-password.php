@@ -1,83 +1,80 @@
 <?php
-include 'config/connection.php';
+require_once __DIR__ . '/connection.php';
 
-// Ung token para sa pag reset ng pass
-$token = $_GET['token'] ?? $_POST['token'] ?? null;
-
-if (!$token) {
-    die("Invalid request. Missing token.");
-}
-
-// Vinavalidate ung token dto kung expired na o hindi pa
-$stmt = mysqli_prepare($conn, "SELECT id, reset_expires_at FROM users WHERE reset_token = ?");
-mysqli_stmt_bind_param($stmt, "s", $token);
-mysqli_stmt_execute($stmt);
-$result = mysqli_stmt_get_result($stmt);
-$user = mysqli_fetch_assoc($result);
-
-if (!$user) {
-    die("This link is invalid or has expired.");
-}
-
+$token = $_POST['token'] ?? $_GET['token'] ?? '';
 $errors = [];
 $success = false;
+$tokenIsValid = false;
+$userId = 0;
 
-// Dto ung Sa new password
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $newPassword = $_POST['password'];
-    $confirmPassword = $_POST['confirm_password'];
+if (!is_string($token) || $token === '') {
+    $errors[] = 'Invalid request. The reset link is missing its token.';
+} else {
+    $lookup = $conn->prepare(
+        'SELECT id
+         FROM users
+         WHERE reset_token = ?
+           AND reset_expires_at > NOW()
+         LIMIT 1'
+    );
+    if (!$lookup) {
+        throw new RuntimeException('Unable to prepare password reset token lookup: ' . $conn->error);
+    }
+    $lookup->bind_param('s', $token);
+    if (!$lookup->execute()) {
+        $error = $lookup->error;
+        $lookup->close();
+        throw new RuntimeException('Unable to verify password reset token: ' . $error);
+    }
+    $user = $lookup->get_result()->fetch_assoc();
+    $lookup->close();
 
-    if (strlen($newPassword) < 8) {
-        $errors[] = "Password must be at least 8 characters long.";
-    } elseif ($newPassword !== $confirmPassword) {
-        $errors[] = "Passwords do not match.";
+    if ($user) {
+        $tokenIsValid = true;
+        $userId = (int) $user['id'];
     } else {
+        $errors[] = 'This link is invalid or has expired.';
+    }
+}
 
-        $updateStmt = mysqli_prepare($conn, "UPDATE users SET password = ?, reset_token = NULL, reset_expires_at = NULL WHERE id = ?");
-        mysqli_stmt_bind_param($updateStmt, "si", $newPassword, $user['id']); // $newPassword na ang ginamit sa halip na $hashedPassword
-        
-        if (mysqli_stmt_execute($updateStmt)) {
-            $success = true;
-        } else {
-            $errors[] = "Something went wrong updating your password.";
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $tokenIsValid) {
+    $newPassword = $_POST['password'] ?? '';
+    $confirmPassword = $_POST['confirm_password'] ?? '';
+
+    if (!is_string($newPassword) || strlen($newPassword) < 8) {
+        $errors[] = 'Password must be at least 8 characters long.';
+    } elseif (!is_string($confirmPassword) || $newPassword !== $confirmPassword) {
+        $errors[] = 'Passwords do not match.';
+    } else {
+        $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
+        if ($hashedPassword === false) {
+            throw new RuntimeException('Unable to securely hash the new password.');
+        }
+
+        $update = $conn->prepare(
+            'UPDATE users
+             SET password = ?, reset_token = NULL, reset_expires_at = NULL,
+                 login_attempts = 0, lockout_time = NULL
+             WHERE id = ?
+               AND reset_token = ?
+               AND reset_expires_at > NOW()'
+        );
+        if (!$update) {
+            throw new RuntimeException('Unable to prepare password reset update: ' . $conn->error);
+        }
+        $update->bind_param('sis', $hashedPassword, $userId, $token);
+        if (!$update->execute()) {
+            $error = $update->error;
+            $update->close();
+            throw new RuntimeException('Unable to update password: ' . $error);
+        }
+        $success = $update->affected_rows === 1;
+        $update->close();
+
+        if (!$success) {
+            $tokenIsValid = false;
+            $errors[] = 'This link is invalid or has expired.';
         }
     }
 }
 ?>
-
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <title>Reset Password</title>
-</head>
-<body>
-    <h2>Create New Password</h2>
-
-    <!-- Dto lahat ng error msg -->
-    <?php if (!empty($errors)): ?>
-        <div style="color: red;">
-            <?php foreach ($errors as $error) echo htmlspecialchars($error) . "<br>"; ?>
-        </div>
-    <?php endif; ?>
-
-    <?php if ($success): ?>
-        <div style="color: green;">
-            Password successfully updated! You can now <a href="login.php">log in</a>.
-        </div>
-    <?php else: ?>
-        <form method="POST">
-            <input type="hidden" name="token" value="<?php echo htmlspecialchars($token); ?>">
-            
-            <div>
-                <input type="password" name="password" placeholder="New Password" required>
-            </div>
-            <br>
-            <div>
-                <input type="password" name="confirm_password" placeholder="Confirm New Password" required>
-            </div>
-            <br>
-            <button type="submit">Update Password</button>
-        </form>
-    <?php endif; ?>
-</body>
-</html>

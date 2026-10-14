@@ -75,22 +75,28 @@ function getTaskNotificationUserIdsForEmployee(mysqli $conn, int $employeeId): a
     $stmt = $conn->prepare(
         "SELECT DISTINCT u.id
          FROM users u
-         WHERE EXISTS (
-             SELECT 1
-             FROM employee e
-             WHERE e.employee_id = ?
-               AND e.email IS NOT NULL AND e.email <> ''
-               AND LOWER(TRIM(e.email)) = LOWER(TRIM(u.email))
-         )
-         OR EXISTS (
-             SELECT 1 FROM attendance a
-             WHERE a.employee_id = ? AND a.user_id = u.id
-         )"
+        WHERE u.employee_id = ?
+           OR (
+            u.employee_id IS NULL
+            AND (
+                EXISTS (
+                    SELECT 1
+                    FROM employee e
+                    WHERE e.employee_id = ?
+                      AND e.email IS NOT NULL AND e.email <> ''
+                      AND LOWER(TRIM(e.email)) = LOWER(TRIM(u.email))
+                )
+                OR EXISTS (
+                    SELECT 1 FROM attendance a
+                    WHERE a.employee_id = ? AND a.user_id = u.id
+                )
+            )
+        )"
     );
     if (!$stmt) {
         throw new RuntimeException('Unable to prepare employee notification recipient lookup: ' . $conn->error);
     }
-    $stmt->bind_param('ii', $employeeId, $employeeId);
+    $stmt->bind_param('iii', $employeeId, $employeeId, $employeeId);
     if (!$stmt->execute()) {
         $error = $stmt->error;
         $stmt->close();

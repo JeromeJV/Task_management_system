@@ -14,6 +14,9 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 
 $raw_employee_id = $_POST['employee_id'] ?? '';
 $action_type = $_POST['action_type'] ?? '';
+$nowTime = date('H:i:s');
+$timeInClosed = $nowTime >= '17:01:00' || $nowTime < '05:01:00';
+$timeInActions = ['time_in', 'time_in_2'];
 
 // Sanitize & validate action types
 $allowed_actions = ['time_in', 'time_out', 'time_in_2', 'time_out_2', 'lookup', 'submit'];
@@ -43,19 +46,28 @@ if ($action_type === 'lookup') {
     }
 
     $today = date('Y-m-d');
-    finalizeDailyAttendance($conn, $today, date('H:i:s'));
+    finalizeDailyAttendance($conn, $today, $nowTime);
     $attendanceQuery = $conn->prepare("SELECT time_in, time_out, time_in_2, time_out_2 FROM attendance WHERE employee_id = ? AND attendance_date = ? ORDER BY attendance_id DESC LIMIT 1");
     $attendanceQuery->bind_param("is", $lookupEmployeeId, $today);
     $attendanceQuery->execute();
     $attendanceRow = $attendanceQuery->get_result()->fetch_assoc();
     $isLogistics = isLogisticsEmployee($conn, $lookupEmployeeId);
     $nextAction = getNextAttendanceAction($attendanceRow, $isLogistics);
+    $lookupMessage = null;
+    if ($timeInClosed && in_array($nextAction, $timeInActions, true)) {
+        $nextAction = null;
+        $lookupMessage = 'Time In is closed from 5:01 PM to 5:00 AM. It opens again at 5:01 AM.';
+    }
 
-    echo json_encode([
+    $lookupResponse = [
         'status' => 'success',
         'employee_name' => $employeeRow['username'],
         'next_action' => $nextAction
-    ]);
+    ];
+    if ($lookupMessage !== null) {
+        $lookupResponse['message'] = $lookupMessage;
+    }
+    echo json_encode($lookupResponse);
     exit;
 }
 
@@ -114,7 +126,6 @@ if (!$employee_id && !$user_id) {
 
 // Tamang Oras at Petsa para sa Pilipinas
 $today = date('Y-m-d');
-$nowTime = date('H:i:s');
 $isLogistics = isLogisticsEmployee($conn, (int) ($employee_id ?? 0), $user_id);
 finalizeDailyAttendance($conn, $today, $nowTime);
 
@@ -131,6 +142,15 @@ if ($action_type === 'submit') {
         echo json_encode(['status' => 'error', 'message' => "{$username}'s attendance is already complete for today.", 'next_action' => null]);
         exit;
     }
+}
+
+if ($timeInClosed && in_array($action_type, $timeInActions, true)) {
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'Time In is closed from 5:01 PM to 5:00 AM. It opens again at 5:01 AM.',
+        'next_action' => null
+    ]);
+    exit;
 }
 
 if ($attRow) {

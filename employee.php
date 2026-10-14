@@ -20,6 +20,7 @@ if ($currentUserId < 1) {
     exit('A valid signed-in account is required to assign tasks.');
 }
 $isSupervisor = strtolower(trim((string) $_SESSION['role'])) === 'super';
+$canReviewOfficeTasks = $isSupervisor || strtolower(trim((string) $_SESSION['role'])) === 'hr';
 $currentEmployeeId = 0;
 if ($isSupervisor) {
     $currentEmployeeStmt = $conn->prepare(
@@ -27,25 +28,34 @@ if ($isSupervisor) {
          FROM users u
          JOIN employee e
            ON (
-               LOWER(TRIM(e.email)) = LOWER(TRIM(u.email))
-               OR EXISTS (
-                   SELECT 1
-                   FROM attendance a
-                   WHERE a.employee_id = e.employee_id
-                     AND a.user_id = u.id
+               (u.employee_id IS NOT NULL AND e.employee_id = u.employee_id)
+               OR (
+                   u.employee_id IS NULL
+                   AND (
+                       LOWER(TRIM(e.email)) = LOWER(TRIM(u.email))
+                       OR EXISTS (
+                           SELECT 1
+                           FROM attendance a
+                           WHERE a.employee_id = e.employee_id
+                             AND a.user_id = u.id
+                       )
+                   )
                )
            )
           AND (
-              SELECT COUNT(*)
-              FROM employee matched_employee
-              WHERE LOWER(TRIM(matched_employee.email)) = LOWER(TRIM(u.email))
-                 OR EXISTS (
-                     SELECT 1
-                     FROM attendance matched_attendance
-                     WHERE matched_attendance.employee_id = matched_employee.employee_id
-                       AND matched_attendance.user_id = u.id
-                 )
-          ) = 1
+              u.employee_id IS NOT NULL
+              OR (
+                  SELECT COUNT(*)
+                  FROM employee matched_employee
+                  WHERE LOWER(TRIM(matched_employee.email)) = LOWER(TRIM(u.email))
+                     OR EXISTS (
+                         SELECT 1
+                         FROM attendance matched_attendance
+                         WHERE matched_attendance.employee_id = matched_employee.employee_id
+                           AND matched_attendance.user_id = u.id
+                     )
+              ) = 1
+          )
          WHERE u.id = ?
          LIMIT 1"
     );
@@ -69,10 +79,131 @@ if (empty($_SESSION['office_task_csrf'])) {
 $flashMessage = $_SESSION['office_task_flash'] ?? '';
 unset($_SESSION['office_task_flash']);
 $errorMessage = '';
-$allowedCategories = ['General', 'HR', 'Payroll', 'IT'];
 $maxActiveTasks = 8;
 $presentAttendanceStatuses = ['present', 'early', 'late', 'overtime', 'undertime', 'half day'];
 ensureTaskNotificationSchema($conn);
+
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['review_task'])) {
+    $postedToken = (string) ($_POST['csrf_token'] ?? '');
+    $employeeId = filter_var($_POST['employee_id'] ?? null, FILTER_VALIDATE_INT);
+    $officeId = filter_var($_POST['office_id'] ?? null, FILTER_VALIDATE_INT);
+    $decision = (string) ($_POST['review_task'] ?? '');
+    $reviewNote = trim((string) ($_POST['review_note'] ?? ''));
+    $canReviewOfficeTasksValue = $canReviewOfficeTasks ? 1 : 0;
+
+    if (!hash_equals($_SESSION['office_task_csrf'], $postedToken)) {
+        $errorMessage = 'Your session token expired. Refresh the page and try again.';
+    } elseif (!$employeeId || $employeeId < 1 || !$officeId || $officeId < 1) {
+        $errorMessage = 'Choose a valid employee and task to review.';
+    } elseif (!in_array($decision, ['approve', 'reject'], true)) {
+        $errorMessage = 'Choose approve or request changes for this task.';
+    } elseif ($decision === 'reject' && $reviewNote === '') {
+        $errorMessage = 'Add a short explanation when requesting changes.';
+    } elseif (mb_strlen($reviewNote) > 1000) {
+        $errorMessage = 'The review note must be no more than 1000 characters.';
+    } else {
+        if (!$conn->begin_transaction()) {
+            throw new RuntimeException('Unable to start the task review: ' . $conn->error);
+        }
+        $reviewTaskStmt = $conn->prepare(
+            "SELECT title
+             FROM office
+             WHERE office_id = ? AND employee_id = ?
+               AND completion_review_status = 'pending_review'
+               AND ? = 1
+             LIMIT 1
+             FOR UPDATE"
+        );
+        if (!$reviewTaskStmt) {
+            throw new RuntimeException('Unable to prepare the task review lookup: ' . $conn->error);
+        }
+        $reviewTaskStmt->bind_param('iii', $officeId, $employeeId, $canReviewOfficeTasksValue);
+        if (!$reviewTaskStmt->execute()) {
+            $error = $reviewTaskStmt->error;
+            $reviewTaskStmt->close();
+            throw new RuntimeException('Unable to load the task for review: ' . $error);
+        }
+        $reviewTask = $reviewTaskStmt->get_result()->fetch_assoc();
+        $reviewTaskStmt->close();
+
+        if (!$reviewTask) {
+            $conn->rollback();
+            $errorMessage = 'This task is no longer waiting for review.';
+        } else {
+            $approved = $decision === 'approve';
+            $reviewStatus = $approved ? 'approved' : 'rejected';
+            $taskStatus = $approved ? 'completed' : 'pending';
+            $reviewNoteValue = $reviewNote !== '' ? $reviewNote : null;
+            $updateReviewStmt = $conn->prepare(
+                'UPDATE office
+                 SET status = ?, completion_review_status = ?, completion_review_note = ?,
+                     completion_reviewed_by = ?, completion_reviewed_at = CURRENT_TIMESTAMP,
+                     progress = IF(? = 1, 100, progress)
+                 WHERE office_id = ? AND employee_id = ?
+                   AND completion_review_status = \'pending_review\'
+                   AND ? = 1'
+            );
+            if (!$updateReviewStmt) {
+                throw new RuntimeException('Unable to prepare the task review update: ' . $conn->error);
+            }
+            $updateReviewStmt->bind_param(
+                'sssiiiii',
+                $taskStatus,
+                $reviewStatus,
+                $reviewNoteValue,
+                $currentUserId,
+                $approved,
+                $officeId,
+                $employeeId,
+                $canReviewOfficeTasksValue
+            );
+            if (!$updateReviewStmt->execute() || $updateReviewStmt->affected_rows !== 1) {
+                $error = $updateReviewStmt->error ?: 'The task review could not be saved.';
+                $updateReviewStmt->close();
+                $conn->rollback();
+                throw new RuntimeException('Unable to save the task review: ' . $error);
+            }
+            $updateReviewStmt->close();
+
+            recordSystemAudit(
+                $conn,
+                $currentUserId,
+                (string) ($_SESSION['name'] ?? 'TaskTrack reviewer'),
+                $approved ? 'office_task_approved' : 'office_task_changes_requested',
+                'office_task',
+                $officeId,
+                ($approved ? 'Approved' : 'Requested changes to') . ' task "' . (string) $reviewTask['title']
+                    . '" for employee #' . $employeeId
+                    . ($reviewNoteValue !== null ? '. Review note: ' . $reviewNoteValue : '.')
+            );
+            notifyEmployeeTaskAssignee(
+                $conn,
+                $employeeId,
+                $currentUserId,
+                $approved ? 'office_task_approved' : 'office_task_changes_requested',
+                $approved ? 'Task approved' : 'Changes requested',
+                $approved
+                    ? 'Your task "' . (string) $reviewTask['title'] . '" was reviewed and approved.'
+                    : 'Your task "' . (string) $reviewTask['title'] . '" needs changes: ' . $reviewNote,
+                'office_employee.php?task_id=' . $officeId,
+                'office',
+                (string) $officeId
+            );
+            if (!$conn->commit()) {
+                throw new RuntimeException('Unable to commit the task review: ' . $conn->error);
+            }
+            $_SESSION['office_task_flash'] = $approved
+                ? 'Task approved and marked completed.'
+                : 'Changes requested and sent to the employee.';
+            if (($_POST['review_return'] ?? '') === 'supervisor.php') {
+                header('Location: supervisor.php#page-dashboard');
+            } else {
+                header('Location: employee.php?employee_id=' . $employeeId);
+            }
+            exit();
+        }
+    }
+}
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
     && (isset($_POST['create_task']) || isset($_POST['update_task']))) {
@@ -82,7 +213,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
     $officeId = filter_var($_POST['office_id'] ?? null, FILTER_VALIDATE_INT);
     $title = trim((string) ($_POST['title'] ?? ''));
     $description = trim((string) ($_POST['description'] ?? ''));
-    $category = trim((string) ($_POST['category'] ?? ''));
     $priority = strtolower(trim((string) ($_POST['priority'] ?? 'medium')));
     $dueDate = trim((string) ($_POST['due_date'] ?? ''));
     $allowedPriorities = ['low', 'medium', 'high', 'urgent'];
@@ -97,8 +227,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
         $errorMessage = 'Enter a task title of no more than 150 characters.';
     } elseif ($description === '') {
         $errorMessage = 'Enter a description for the task.';
-    } elseif (!in_array($category, $allowedCategories, true)) {
-        $errorMessage = 'Select a valid task category.';
     } elseif (!in_array($priority, $allowedPriorities, true)) {
         $errorMessage = 'Select a valid priority.';
     } else {
@@ -120,26 +248,35 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
                        FROM users u
                        WHERE LOWER(TRIM(u.role)) IN ('hr', 'payroll', 'super', 'employee')
                          AND (
-                             LOWER(TRIM(u.email)) = LOWER(TRIM(e.email))
-                             OR EXISTS (
-                                 SELECT 1
-                                 FROM attendance a
-                                 WHERE a.employee_id = e.employee_id
-                                   AND a.user_id = u.id
+                             (u.employee_id IS NOT NULL AND u.employee_id = e.employee_id)
+                             OR (
+                                 u.employee_id IS NULL
+                                 AND (
+                                     LOWER(TRIM(u.email)) = LOWER(TRIM(e.email))
+                                     OR EXISTS (
+                                         SELECT 1
+                                         FROM attendance a
+                                         WHERE a.employee_id = e.employee_id
+                                           AND a.user_id = u.id
+                                     )
+                                 )
                              )
                          )
                          AND (
-                             SELECT COUNT(*)
-                             FROM employee matched_employee
-                             WHERE LOWER(TRIM(matched_employee.email)) = LOWER(TRIM(u.email))
-                                OR EXISTS (
-                                    SELECT 1
-                                    FROM attendance matched_attendance
-                                    WHERE matched_attendance.employee_id = matched_employee.employee_id
-                                      AND matched_attendance.user_id = u.id
-                                )
-                         ) = 1
+                             u.employee_id IS NOT NULL
+                             OR (
+                                 SELECT COUNT(*)
+                                 FROM employee matched_employee
+                                 WHERE LOWER(TRIM(matched_employee.email)) = LOWER(TRIM(u.email))
+                                    OR EXISTS (
+                                        SELECT 1
+                                        FROM attendance matched_attendance
+                                        WHERE matched_attendance.employee_id = matched_employee.employee_id
+                                          AND matched_attendance.user_id = u.id
+                                    )
+                             ) = 1
                    )
+                 )
                  LIMIT 1
                  FOR UPDATE"
             );
@@ -218,6 +355,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
                          FROM office
                          WHERE office_id = ?
                            AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done')
+                           AND completion_review_status <> 'pending_review'
                          LIMIT 1"
                     );
                     if (!$activeTaskStmt) {
@@ -239,18 +377,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
                     } else {
                         $updateStmt = $conn->prepare(
                             "UPDATE office
-                             SET employee_id = ?, data_type = ?, title = ?, content = ?,
+                             SET employee_id = ?, title = ?, content = ?,
                                  priority_level = ?, due_date = ?
                              WHERE office_id = ?
-                               AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done')"
+                               AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done')
+                               AND completion_review_status <> 'pending_review'"
                         );
                         if (!$updateStmt) {
                             throw new RuntimeException('Unable to prepare the task update: ' . $conn->error);
                         }
                         $updateStmt->bind_param(
-                            'isssssi',
+                            'issssi',
                             $employeeId,
-                            $category,
                             $title,
                             $description,
                             $priority,
@@ -269,6 +407,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
                              FROM office
                              WHERE office_id = ? AND employee_id = ?
                                AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done')
+                               AND completion_review_status <> 'pending_review'
                              LIMIT 1"
                         );
                         if (!$verifyStmt) {
@@ -338,11 +477,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
                     if (!$insertStmt) {
                         throw new RuntimeException('Unable to prepare the task assignment: ' . $conn->error);
                     }
+                    $defaultCategory = 'General';
                     $insertStmt->bind_param(
                         'iisssss',
                         $currentUserId,
                         $employeeId,
-                        $category,
+                        $defaultCategory,
                         $title,
                         $description,
                         $priority,
@@ -408,25 +548,34 @@ $employeeResult = $conn->query(
      FROM users u
      LEFT JOIN employee e
        ON (
-           LOWER(TRIM(e.email)) = LOWER(TRIM(u.email))
-           OR EXISTS (
-               SELECT 1
-               FROM attendance a
-               WHERE a.employee_id = e.employee_id
-                 AND a.user_id = u.id
+           (u.employee_id IS NOT NULL AND e.employee_id = u.employee_id)
+           OR (
+               u.employee_id IS NULL
+               AND (
+                   LOWER(TRIM(e.email)) = LOWER(TRIM(u.email))
+                   OR EXISTS (
+                       SELECT 1
+                       FROM attendance a
+                       WHERE a.employee_id = e.employee_id
+                         AND a.user_id = u.id
+                   )
+               )
            )
        )
       AND (
-          SELECT COUNT(*)
-          FROM employee matched_employee
-          WHERE LOWER(TRIM(matched_employee.email)) = LOWER(TRIM(u.email))
-             OR EXISTS (
-                 SELECT 1
-                 FROM attendance matched_attendance
-                 WHERE matched_attendance.employee_id = matched_employee.employee_id
-                   AND matched_attendance.user_id = u.id
-             )
-      ) = 1
+          u.employee_id IS NOT NULL
+          OR (
+              SELECT COUNT(*)
+              FROM employee matched_employee
+              WHERE LOWER(TRIM(matched_employee.email)) = LOWER(TRIM(u.email))
+                 OR EXISTS (
+                     SELECT 1
+                     FROM attendance matched_attendance
+                     WHERE matched_attendance.employee_id = matched_employee.employee_id
+                       AND matched_attendance.user_id = u.id
+                 )
+          ) = 1
+      )
      WHERE LOWER(TRIM(u.role)) IN ('hr', 'payroll', 'super', 'employee')
      ORDER BY u.name ASC, u.id ASC"
 );
@@ -479,10 +628,11 @@ $canAssignTask = $selectedEmployee !== null
     && $selectedIsPresent
     && $selectedActiveTaskCount < $maxActiveTasks;
 
-$tasks = ['completed' => [], 'pending' => [], 'overdue' => []];
+$tasks = ['review' => [], 'completed' => [], 'pending' => [], 'overdue' => []];
 if ($selectedEmployee) {
     $taskStmt = $conn->prepare(
-        'SELECT office_id, data_type, title, content, status, priority_level, due_date
+        'SELECT office_id, supervisor_id, data_type, title, content, status, priority_level, due_date,
+                progress, completion_review_status
          FROM office
          WHERE employee_id = ?
          ORDER BY due_date IS NULL ASC, due_date ASC, submission_date DESC, office_id DESC'
@@ -499,8 +649,12 @@ if ($selectedEmployee) {
     $taskResult = $taskStmt->get_result();
     while ($task = $taskResult->fetch_assoc()) {
         $normalizedStatus = strtolower(trim((string) ($task['status'] ?? 'pending')));
+        $task['progress'] = max(0, min(100, (int) ($task['progress'] ?? 0)));
         if (in_array($normalizedStatus, ['completed', 'complete', 'done'], true)) {
+            $task['progress'] = 100;
             $tasks['completed'][] = $task;
+        } elseif (($task['completion_review_status'] ?? '') === 'pending_review') {
+            $tasks['review'][] = $task;
         } elseif (!empty($task['due_date']) && $task['due_date'] < date('Y-m-d')) {
             $tasks['overdue'][] = $task;
         } else {
@@ -512,7 +666,6 @@ if ($selectedEmployee) {
 
 $formTitle = (string) ($_POST['title'] ?? '');
 $formDescription = (string) ($_POST['description'] ?? '');
-$formCategory = (string) ($_POST['category'] ?? '');
 $formPriority = (string) ($_POST['priority'] ?? 'medium');
 $formDueDate = (string) ($_POST['due_date'] ?? date('Y-m-d'));
 $escape = static fn ($value): string => htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
@@ -532,6 +685,7 @@ $accountRoleLabels = [
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Employee Tasks | TaskTrack</title>
     <link rel="stylesheet" href="css/employee.css?v=<?= filemtime(__DIR__ . '/css/employee.css'); ?>">
+    <link rel="stylesheet" href="css/task-review-dialog.css?v=<?= filemtime(__DIR__ . '/css/task-review-dialog.css'); ?>">
     <link rel="stylesheet" href="css/calendar-picker.css?v=<?= filemtime(__DIR__ . '/css/calendar-picker.css'); ?>">
     <link rel="stylesheet" href="css/task-form-controls.css?v=<?= filemtime(__DIR__ . '/css/task-form-controls.css'); ?>">
     <link rel="stylesheet" href="css/role-form-controls.css?v=<?= filemtime(__DIR__ . '/css/role-form-controls.css'); ?>">
@@ -652,6 +806,7 @@ $accountRoleLabels = [
                     <section class="task-columns" aria-label="Employee task status">
                         <?php
                         $columnLabels = [
+                            'review' => ['Awaiting review', 'is-review'],
                             'completed' => ['Completed', 'is-completed'],
                             'pending' => ['Pending', 'is-pending'],
                             'overdue' => ['Overdue', 'is-overdue'],
@@ -665,13 +820,32 @@ $accountRoleLabels = [
                                         <p class="task-empty">No <?= strtolower($label); ?> tasks.</p>
                                     <?php else: ?>
                                         <?php foreach ($tasks[$group] as $task): ?>
-                                            <?php $taskIsEditable = $group !== 'completed'; ?>
+                                            <?php $taskIsEditable = !in_array($group, ['completed', 'review'], true); ?>
+                                            <?php
+                                            $taskCanReview = $group === 'review'
+                                                && $canReviewOfficeTasks;
+                                            ?>
                                             <article class="task-card">
                                                 <span class="task-marker" aria-hidden="true"></span>
                                                 <div class="task-copy">
                                                     <h4><?= $escape($task['title'] ?? 'Untitled task'); ?></h4>
                                                     <p><?= $escape($task['content'] ?? ''); ?></p>
                                                     <div class="task-meta"><span><?= $escape($task['due_date'] ?: 'No due date'); ?></span><span class="priority-tag priority-<?= $escape(strtolower($task['priority_level'] ?? 'medium')); ?>"><?= $escape(ucfirst($task['priority_level'] ?? 'Medium')); ?></span></div>
+                                                    <div class="task-actions">
+                                                        <button
+                                                            class="task-view-button"
+                                                            type="button"
+                                                            data-title="<?= $escape($task['title'] ?? 'Untitled task'); ?>"
+                                                            data-content="<?= $escape($task['content'] ?? ''); ?>"
+                                                            data-status="<?= $escape($label); ?>"
+                                                            data-priority="<?= $escape(ucfirst($task['priority_level'] ?? 'Medium')); ?>"
+                                                            data-due-date="<?= $escape($task['due_date'] ?: 'No due date'); ?>"
+                                                            data-progress="<?= (int) $task['progress']; ?>"
+                                                            data-can-review="<?= $taskCanReview ? '1' : '0'; ?>"
+                                                            data-office-id="<?= $taskCanReview ? (int) $task['office_id'] : ''; ?>"
+                                                            data-employee-id="<?= $taskCanReview ? (int) $selectedEmployeeId : ''; ?>"
+                                                            data-csrf-token="<?= $taskCanReview ? $escape($_SESSION['office_task_csrf']) : ''; ?>"
+                                                        >View</button>
                                                     <?php if ($taskIsEditable && !$selectedIsCurrentSupervisor): ?>
                                                         <button
                                                             class="task-edit-button"
@@ -679,11 +853,11 @@ $accountRoleLabels = [
                                                             data-office-id="<?= (int) $task['office_id']; ?>"
                                                             data-title="<?= $escape($task['title'] ?? ''); ?>"
                                                             data-content="<?= $escape($task['content'] ?? ''); ?>"
-                                                            data-category="<?= $escape($task['data_type'] ?? 'General'); ?>"
                                                             data-priority="<?= $escape(strtolower($task['priority_level'] ?? 'medium')); ?>"
                                                             data-due-date="<?= $escape($task['due_date'] ?? ''); ?>"
                                                         >Edit / reassign</button>
                                                     <?php endif; ?>
+                                                    </div>
                                                 </div>
                                             </article>
                                         <?php endforeach; ?>
@@ -721,17 +895,7 @@ $accountRoleLabels = [
         <p class="assigning-to">Assigning to <strong><?= $escape($selectedName); ?></strong></p>
         <label class="form-field">Task title<input type="text" name="title" maxlength="150" placeholder="Enter task title" value="<?= $escape($formTitle); ?>" required></label>
         <label class="form-field">Description<textarea name="description" rows="4" placeholder="Describe the task" required><?= $escape($formDescription); ?></textarea></label>
-        <div class="form-grid">
-            <label class="form-field">Category
-                <select name="category" required>
-                    <option value="" disabled <?= $formCategory === '' ? 'selected' : ''; ?>>Select category</option>
-                    <?php foreach ($allowedCategories as $categoryOption): ?>
-                        <option value="<?= $escape($categoryOption); ?>" <?= $formCategory === $categoryOption ? 'selected' : ''; ?>><?= $escape($categoryOption); ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </label>
-            <label class="form-field">Due date<input type="date" class="calendar-control" name="due_date" min="<?= $escape(date('Y-m-d')); ?>" value="<?= $escape($formDueDate); ?>" required></label>
-        </div>
+        <label class="form-field">Due date<input type="date" class="calendar-control" name="due_date" min="<?= $escape(date('Y-m-d')); ?>" value="<?= $escape($formDueDate); ?>" required></label>
         <fieldset class="priority-field">
             <legend>Priority</legend>
             <div class="priority-options">
@@ -767,16 +931,7 @@ $accountRoleLabels = [
         </label>
         <label class="form-field">Task title<input type="text" name="title" id="editTaskTitle" maxlength="150" required></label>
         <label class="form-field">Description<textarea name="description" id="editTaskDescription" rows="4" required></textarea></label>
-        <div class="form-grid">
-            <label class="form-field">Category
-                <select name="category" id="editTaskCategory" required>
-                    <?php foreach ($allowedCategories as $categoryOption): ?>
-                        <option value="<?= $escape($categoryOption); ?>"><?= $escape($categoryOption); ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </label>
-            <label class="form-field">Due date<input type="date" class="calendar-control" name="due_date" id="editTaskDueDate" required></label>
-        </div>
+        <label class="form-field">Due date<input type="date" class="calendar-control" name="due_date" id="editTaskDueDate" required></label>
         <fieldset class="priority-field">
             <legend>Priority</legend>
             <div class="priority-options">
@@ -791,9 +946,77 @@ $accountRoleLabels = [
         </div>
     </form>
 </dialog>
-<script>
+<dialog class="task-dialog task-view-dialog" id="viewTaskDialog" aria-labelledby="viewTaskTitle">
+    <div class="task-view-content">
+        <header class="task-view-header">
+            <div class="task-view-header-copy">
+                <span class="task-view-icon" aria-hidden="true">✓</span>
+                <div><span class="eyebrow">TASK DETAILS</span><p>Assignment overview</p></div>
+            </div>
+            <button class="dialog-close" id="closeViewTaskModal" type="button" aria-label="Close">×</button>
+        </header>
+        <div class="task-view-body">
+            <h2 id="viewTaskTitle"></h2>
+            <div class="task-detail-summary">
+                <article class="task-summary-card">
+                    <span class="task-summary-icon" aria-hidden="true">◷</span>
+                    <div><span class="task-summary-label">Status</span><strong class="task-detail-badge" id="viewTaskStatus"></strong></div>
+                </article>
+                <article class="task-summary-card">
+                    <span class="task-summary-icon" aria-hidden="true">⚑</span>
+                    <div><span class="task-summary-label">Priority</span><strong class="task-detail-badge" id="viewTaskPriority"></strong></div>
+                </article>
+                <article class="task-summary-card">
+                    <span class="task-summary-icon" aria-hidden="true">▣</span>
+                    <div><span class="task-summary-label">Due date</span><strong class="task-summary-value" id="viewTaskDueDate"></strong></div>
+                </article>
+            </div>
+            <section class="task-detail-progress" aria-label="Task progress">
+                <div class="task-view-section-heading"><div><span class="task-view-section-kicker">COMPLETION</span><h3>Progress</h3></div><strong id="viewTaskProgress"></strong></div>
+                <div class="task-detail-progress-track"><span id="viewTaskProgressBar"></span></div>
+                <div class="task-progress-scale"><span>Not started</span><span>Completed</span></div>
+            </section>
+            <section class="task-detail-description">
+                <div class="task-view-section-heading"><div><span class="task-view-section-kicker">TASK INFORMATION</span><h3>Description</h3></div></div>
+                <p id="viewTaskDescription"></p>
+            </section>
+        </div>
+        <footer class="task-view-footer">
+            <button class="task-review-open-button" id="viewTaskRequestChangesButton" type="button" hidden>Request changes</button>
+            <form method="post" class="task-view-approve-form">
+                <input type="hidden" name="csrf_token" id="viewTaskReviewCsrf">
+                <input type="hidden" name="employee_id" id="viewTaskReviewEmployeeId">
+                <input type="hidden" name="office_id" id="viewTaskReviewOfficeId">
+                <button class="task-approve-button task-view-approve-button" id="viewTaskApproveButton" type="submit" name="review_task" value="approve" hidden>Approve</button>
+            </form>
+            <button class="cancel-button" id="doneViewTaskModal" type="button">Close</button>
+        </footer>
+    </div>
+</dialog>
+    <dialog class="task-review-dialog" id="officeTaskReviewDialog" aria-labelledby="officeTaskReviewTitle">
+        <form method="post" class="task-review-dialog-card" id="officeTaskReviewForm">
+            <input type="hidden" name="csrf_token" id="officeReviewCsrf">
+            <input type="hidden" name="employee_id" id="officeReviewEmployeeId">
+            <input type="hidden" name="office_id" id="officeReviewTaskId">
+            <span class="task-review-dialog-kicker">EMPLOYEE TASK</span>
+            <h2 id="officeTaskReviewTitle">Review submission</h2>
+            <p class="task-review-dialog-description" id="officeTaskReviewDescription"></p>
+            <label class="task-review-note-label" for="officeReviewNote">Reason for requesting changes</label>
+            <textarea id="officeReviewNote" name="review_note" maxlength="1000" rows="4" placeholder="Explain what needs to be changed"></textarea>
+            <p class="task-review-dialog-hint">A reason is required only when you request changes.</p>
+            <div class="task-review-dialog-actions">
+                <button class="task-review-cancel-button" type="button" id="closeOfficeTaskReview">Cancel</button>
+                <button class="task-reject-button" type="submit" name="review_task" value="reject">Request changes</button>
+                <button class="task-approve-button" type="submit" name="review_task" value="approve">Approve</button>
+            </div>
+        </form>
+    </dialog>
+    <script>
     const taskDialog = document.getElementById('taskDialog');
     const editTaskDialog = document.getElementById('editTaskDialog');
+    const viewTaskDialog = document.getElementById('viewTaskDialog');
+    const viewTaskRequestChangesButton = document.getElementById('viewTaskRequestChangesButton');
+    const viewTaskApproveButton = document.getElementById('viewTaskApproveButton');
     document.getElementById('openTaskModal').addEventListener('click', () => taskDialog.showModal());
     document.getElementById('closeTaskModal').addEventListener('click', () => taskDialog.close());
     document.getElementById('cancelTaskModal').addEventListener('click', () => taskDialog.close());
@@ -807,7 +1030,6 @@ $accountRoleLabels = [
             editEmployeeSelect.value = '<?= (int) $selectedEmployeeId; ?>';
             document.getElementById('editTaskTitle').value = button.dataset.title;
             document.getElementById('editTaskDescription').value = button.dataset.content;
-            document.getElementById('editTaskCategory').value = button.dataset.category;
             document.getElementById('editTaskDueDate').value = button.dataset.dueDate;
             document.querySelectorAll('#editTaskDialog input[name="priority"]').forEach((input) => {
                 input.checked = input.value === button.dataset.priority;
@@ -821,13 +1043,70 @@ $accountRoleLabels = [
     editTaskDialog.addEventListener('click', (event) => {
         if (event.target === editTaskDialog) editTaskDialog.close();
     });
+    document.querySelectorAll('.task-view-button').forEach((button) => {
+        button.addEventListener('click', () => {
+            document.getElementById('viewTaskTitle').textContent = button.dataset.title;
+            document.getElementById('viewTaskDescription').textContent = button.dataset.content || 'No description provided.';
+            const statusBadge = document.getElementById('viewTaskStatus');
+            statusBadge.textContent = button.dataset.status;
+            statusBadge.className = `task-detail-badge is-${button.dataset.status.toLowerCase()}`;
+            const priorityBadge = document.getElementById('viewTaskPriority');
+            priorityBadge.textContent = button.dataset.priority;
+            const priorityClass = button.dataset.priority.toLowerCase();
+            priorityBadge.className = `task-detail-badge is-${['low', 'medium', 'high', 'urgent'].includes(priorityClass) ? priorityClass : 'medium'}`;
+            document.getElementById('viewTaskDueDate').textContent = button.dataset.dueDate;
+            const progress = Number(button.dataset.progress);
+            document.getElementById('viewTaskProgress').textContent = `${progress}%`;
+            document.getElementById('viewTaskProgressBar').style.width = `${progress}%`;
+            const canReviewTask = button.dataset.canReview === '1';
+            viewTaskRequestChangesButton.hidden = !canReviewTask;
+            viewTaskRequestChangesButton.dataset.officeId = button.dataset.officeId || '';
+            viewTaskRequestChangesButton.dataset.employeeId = button.dataset.employeeId || '';
+            viewTaskRequestChangesButton.dataset.csrfToken = button.dataset.csrfToken || '';
+            viewTaskRequestChangesButton.dataset.taskTitle = button.dataset.title;
+            viewTaskApproveButton.hidden = !canReviewTask;
+            document.getElementById('viewTaskReviewCsrf').value = button.dataset.csrfToken || '';
+            document.getElementById('viewTaskReviewEmployeeId').value = button.dataset.employeeId || '';
+            document.getElementById('viewTaskReviewOfficeId').value = button.dataset.officeId || '';
+            viewTaskDialog.showModal();
+        });
+    });
+    document.getElementById('closeViewTaskModal').addEventListener('click', () => viewTaskDialog.close());
+    document.getElementById('doneViewTaskModal').addEventListener('click', () => viewTaskDialog.close());
+    viewTaskDialog.addEventListener('click', (event) => {
+        if (event.target === viewTaskDialog) viewTaskDialog.close();
+    });
+    const officeTaskReviewDialog = document.getElementById('officeTaskReviewDialog');
+    const officeReviewNote = document.getElementById('officeReviewNote');
+    document.querySelectorAll('.task-review-open-button').forEach((button) => {
+        button.addEventListener('click', () => {
+            document.getElementById('officeReviewCsrf').value = button.dataset.csrfToken;
+            document.getElementById('officeReviewEmployeeId').value = button.dataset.employeeId;
+            document.getElementById('officeReviewTaskId').value = button.dataset.officeId;
+            document.getElementById('officeTaskReviewDescription').textContent =
+                `Choose whether to approve "${button.dataset.taskTitle}" or request changes.`;
+            officeReviewNote.value = '';
+            officeReviewNote.required = false;
+            if (viewTaskDialog.open) viewTaskDialog.close();
+            officeTaskReviewDialog.showModal();
+        });
+    });
+    officeTaskReviewDialog.querySelector('[value="reject"]').addEventListener('click', () => {
+        officeReviewNote.required = true;
+    });
+    officeTaskReviewDialog.querySelector('[value="approve"]').addEventListener('click', () => {
+        officeReviewNote.required = false;
+    });
+    document.getElementById('closeOfficeTaskReview').addEventListener('click', () => officeTaskReviewDialog.close());
+    officeTaskReviewDialog.addEventListener('click', (event) => {
+        if (event.target === officeTaskReviewDialog) officeTaskReviewDialog.close();
+    });
     if (<?= json_encode($errorMessage !== '' && isset($_POST['create_task'])); ?>) taskDialog.showModal();
     if (<?= json_encode($errorMessage !== '' && isset($_POST['update_task'])); ?>) {
         document.getElementById('editOfficeId').value = <?= json_encode((string) ($_POST['office_id'] ?? '')); ?>;
         document.getElementById('editEmployeeId').value = <?= json_encode((string) ($_POST['employee_id'] ?? '')); ?>;
         document.getElementById('editTaskTitle').value = <?= json_encode((string) ($_POST['title'] ?? '')); ?>;
         document.getElementById('editTaskDescription').value = <?= json_encode((string) ($_POST['description'] ?? '')); ?>;
-        document.getElementById('editTaskCategory').value = <?= json_encode((string) ($_POST['category'] ?? 'General')); ?>;
         document.getElementById('editTaskDueDate').value = <?= json_encode((string) ($_POST['due_date'] ?? '')); ?>;
         document.querySelectorAll('#editTaskDialog input[name="priority"]').forEach((input) => {
             input.checked = input.value === <?= json_encode((string) ($_POST['priority'] ?? 'medium')); ?>;

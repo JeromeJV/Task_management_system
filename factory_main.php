@@ -66,6 +66,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && ($_POST['action'] ?? '')
 }
 $production_error = $_SESSION['production_error'] ?? '';
 unset($_SESSION['production_error']);
+$production_success = $_SESSION['production_success'] ?? '';
+unset($_SESSION['production_success']);
 
 $production_users = [];
 $production_team_result = mysqli_query($conn, "
@@ -226,6 +228,9 @@ $stage_progress = static function (array $row): array {
     if ($status === 'Done') {
         return ['key' => 'completed', 'label' => 'Completed'];
     }
+    if ($status === 'Awaiting Approval') {
+        return ['key' => 'review', 'label' => 'Awaiting supervisor approval'];
+    }
     if ($status === 'Waiting for Cooking') {
         return ['key' => 'waiting', 'label' => 'Waiting for Cooking'];
     }
@@ -249,6 +254,7 @@ $stage_progress = static function (array $row): array {
 
     <title>Production Management - TASKTRACK</title>
   <link rel="stylesheet" href="css/Factory_main1.css?v=<?= filemtime(__DIR__ . '/css/Factory_main1.css'); ?>">
+  <link rel="stylesheet" href="css/task-review-dialog.css?v=<?= filemtime(__DIR__ . '/css/task-review-dialog.css'); ?>">
   <link rel="stylesheet" href="css/table-scroll.css?v=<?= filemtime(__DIR__ . '/css/table-scroll.css'); ?>">
     <link rel="stylesheet" href="css/calendar-picker.css?v=<?= filemtime(__DIR__ . '/css/calendar-picker.css'); ?>">
     <link rel="stylesheet" href="css/select-control.css?v=<?= filemtime(__DIR__ . '/css/select-control.css'); ?>">
@@ -766,6 +772,11 @@ $stage_progress = static function (array $row): array {
                 <?= htmlspecialchars($production_error); ?>
             </div>
         <?php endif; ?>
+        <?php if ($production_success !== ''): ?>
+            <div role="status" style="padding: 10px; background-color: #d4edda; color: #155724; margin: 15px 0; border-radius: 4px;">
+                <?= htmlspecialchars($production_success); ?>
+            </div>
+        <?php endif; ?>
 
 
         <!-- =====================================================
@@ -863,6 +874,7 @@ $stage_progress = static function (array $row): array {
                     <select id="productionStatusFilter">
                         <option value="">All statuses</option>
                         <option value="in_progress">In progress</option>
+                        <option value="review">Waiting for approval</option>
                         <option value="ready">Waiting for Packaging</option>
                         <option value="waiting">Waiting for Cooking</option>
                         <option value="unassigned">Unassigned</option>
@@ -1042,23 +1054,36 @@ $stage_progress = static function (array $row): array {
                                                 onclick="openProductionActivity('<?= htmlspecialchars($row['production_id'] ?? '', ENT_QUOTES); ?>', '<?= htmlspecialchars($row['product_name'] ?? '', ENT_QUOTES); ?>')"
                                             >Activity</button>
 
-                                            <button
-                                                type="button"
-                                                class="edit-btn"
-                                                data-production-id="<?= htmlspecialchars($row['production_id'] ?? '', ENT_QUOTES); ?>"
-                                                data-product-name="<?= htmlspecialchars($row['product_name'] ?? '', ENT_QUOTES); ?>"
-                                                data-assigned-employee="<?= htmlspecialchars($row['assigned_employee_id'] ?? '', ENT_QUOTES); ?>"
-                                                data-assigned-work-type="<?= htmlspecialchars($row['assigned_work_type'] ?? '', ENT_QUOTES); ?>"
-                                                data-assigned-work-status="<?= htmlspecialchars($row['assigned_work_status'] ?? 'Pending', ENT_QUOTES); ?>"
-                                                onclick="openReassignmentModal(this)"
-                                                <?= in_array($row['assigned_work_status'] ?? '', ['Done', 'Waiting for Cooking'], true) ? 'disabled' : ''; ?>
-                                            >
-                                                <?= ($row['assigned_work_status'] ?? 'Pending') === 'Done'
-                                                    ? 'Completed'
-                                                    : (($row['assigned_work_status'] ?? '') === 'Waiting for Cooking'
-                                                        ? 'Waiting for Cooking'
-                                                        : (empty($row['assigned_employee_id']) ? 'Assign' : 'Reassign')); ?>
-                                            </button>
+                                            <?php if (!in_array($row['assigned_work_status'] ?? '', ['Waiting for Cooking', 'Awaiting Approval'], true)): ?>
+                                                <button
+                                                    type="button"
+                                                    class="edit-btn"
+                                                    data-production-id="<?= htmlspecialchars($row['production_id'] ?? '', ENT_QUOTES); ?>"
+                                                    data-product-name="<?= htmlspecialchars($row['product_name'] ?? '', ENT_QUOTES); ?>"
+                                                    data-assigned-employee="<?= htmlspecialchars($row['assigned_employee_id'] ?? '', ENT_QUOTES); ?>"
+                                                    data-assigned-work-type="<?= htmlspecialchars($row['assigned_work_type'] ?? '', ENT_QUOTES); ?>"
+                                                    data-assigned-work-status="<?= htmlspecialchars($row['assigned_work_status'] ?? 'Pending', ENT_QUOTES); ?>"
+                                                    onclick="openReassignmentModal(this)"
+                                                    <?= ($row['assigned_work_status'] ?? '') === 'Done' ? 'disabled' : ''; ?>
+                                                >
+                                                    <?= ($row['assigned_work_status'] ?? 'Pending') === 'Done'
+                                                        ? 'Completed'
+                                                        : (empty($row['assigned_employee_id']) ? 'Assign' : 'Reassign'); ?>
+                                                </button>
+                                            <?php endif; ?>
+
+                                            <?php if (
+                                                ($row['assigned_work_status'] ?? '') === 'Awaiting Approval'
+                                                && (empty($row['assigned_by']) || (int) $row['assigned_by'] === (int) $current_user_id)
+                                            ): ?>
+                                                <button
+                                                    type="button"
+                                                    class="edit-btn production-review-open-button"
+                                                    data-production-id="<?= htmlspecialchars((string) ($row['production_id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                                                    data-work-type="<?= htmlspecialchars($work_type, ENT_QUOTES, 'UTF-8'); ?>"
+                                                    data-product-name="<?= htmlspecialchars($row['product_name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                                >Review submission</button>
+                                            <?php endif; ?>
 
                                             <!-- UPDATE -->
 
@@ -1889,9 +1914,13 @@ async function openProductionActivity(productionId, productName) {
                 stage_assigned: `${activity.actor_name} assigned ${stageName} to ${targetName}.`,
                 stage_reassigned: `${activity.actor_name} reassigned ${stageName} from ${fromName} to ${targetName}.`,
                 stage_completed: `${activity.actor_name} marked the ${stageName} as done.`,
-                product_updated: `${activity.actor_name} updated this product.`
+                stage_submitted_for_review: `${activity.actor_name} submitted the ${stageName} for supervisor approval.`,
+                stage_approved: `${activity.actor_name} approved the ${stageName} submission.`,
+                stage_changes_requested: `${activity.actor_name} requested changes to the ${stageName} submission.`,
+                product_updated: `${activity.actor_name} updated the production product details.`
             };
-            summary.textContent = messages[activity.event_type] || `${activity.actor_name} updated this production task.`;
+            summary.textContent = messages[activity.event_type]
+                || `${activity.actor_name} performed this production action: ${activity.event_type.replaceAll('_', ' ')}.`;
             const time = document.createElement('time');
             time.dateTime = activity.occurred_at.replace(' ', 'T');
             time.textContent = activity.occurred_at;
@@ -2254,6 +2283,49 @@ document.getElementById('dismissProductionResult').addEventListener('click', () 
 
 </script>
 
+<dialog class="task-review-dialog" id="productionReviewDialog" aria-labelledby="productionReviewTitle">
+    <form action="factory_main.php" method="post" class="task-review-dialog-card">
+        <input type="hidden" name="task_review_csrf" value="<?= htmlspecialchars($_SESSION['task_review_csrf'], ENT_QUOTES, 'UTF-8'); ?>">
+        <input type="hidden" name="production_id" id="productionReviewId">
+        <input type="hidden" name="work_type" id="productionReviewWorkType">
+        <span class="task-review-dialog-kicker">PRODUCTION TASK</span>
+        <h2 id="productionReviewTitle">Review submission</h2>
+        <p class="task-review-dialog-description" id="productionReviewDescription"></p>
+        <label class="task-review-note-label" for="productionReviewNote">Reason for requesting changes</label>
+        <textarea id="productionReviewNote" name="review_note" maxlength="1000" rows="4" placeholder="Explain what needs to be changed"></textarea>
+        <p class="task-review-dialog-hint">A reason is required only when you request changes.</p>
+        <div class="task-review-dialog-actions">
+            <button class="task-review-cancel-button" type="button" id="closeProductionReview">Cancel</button>
+            <button class="task-reject-button" type="submit" name="review_production_stage" value="reject">Request changes</button>
+            <button class="task-approve-button" type="submit" name="review_production_stage" value="approve">Approve</button>
+        </div>
+    </form>
+</dialog>
+<script>
+    const productionReviewDialog = document.getElementById('productionReviewDialog');
+    const productionReviewNote = document.getElementById('productionReviewNote');
+    document.querySelectorAll('.production-review-open-button').forEach((button) => {
+        button.addEventListener('click', () => {
+            document.getElementById('productionReviewId').value = button.dataset.productionId;
+            document.getElementById('productionReviewWorkType').value = button.dataset.workType;
+            document.getElementById('productionReviewDescription').textContent =
+                `Choose whether to approve the ${button.dataset.workType} stage for "${button.dataset.productName}" or request changes.`;
+            productionReviewNote.value = '';
+            productionReviewNote.required = false;
+            productionReviewDialog.showModal();
+        });
+    });
+    productionReviewDialog.querySelector('[value="reject"]').addEventListener('click', () => {
+        productionReviewNote.required = true;
+    });
+    productionReviewDialog.querySelector('[value="approve"]').addEventListener('click', () => {
+        productionReviewNote.required = false;
+    });
+    document.getElementById('closeProductionReview').addEventListener('click', () => productionReviewDialog.close());
+    productionReviewDialog.addEventListener('click', (event) => {
+        if (event.target === productionReviewDialog) productionReviewDialog.close();
+    });
+</script>
 <script src="js/assignment-dropdown.js?v=<?= filemtime(__DIR__ . '/js/assignment-dropdown.js'); ?>"></script>
 <script src="js/calendar-picker.js?v=<?= filemtime(__DIR__ . '/js/calendar-picker.js'); ?>"></script>
 <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>

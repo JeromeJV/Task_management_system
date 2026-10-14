@@ -3,6 +3,7 @@ if (empty($_SESSION['notification_csrf'])) {
     $_SESSION['notification_csrf'] = bin2hex(random_bytes(32));
 }
 ?>
+<?php include __DIR__ . '/theme_toggle.php'; ?>
 <div class="task-notification" data-notification-root data-csrf="<?= htmlspecialchars((string) $_SESSION['notification_csrf'], ENT_QUOTES, 'UTF-8'); ?>">
     <button class="task-notification__toggle" type="button" aria-label="Notifications" aria-expanded="false" aria-controls="taskNotificationPanel">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>

@@ -511,6 +511,13 @@ a {
     font-weight: 750;
 }
 
+.hr-employee-avatar img {
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+    object-fit: cover;
+}
+
 .hr-employee-status {
     display: inline-flex;
     align-items: center;

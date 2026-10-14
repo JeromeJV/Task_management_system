@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="css/select-control.css?v=<?= filemtime(__DIR__ . '/css/select-control.css'); ?>" />
 </head>
 <body>
+    <?php include __DIR__ . '/config/theme_toggle.php'; ?>
 
     <div class="header">
         <div class="steps">

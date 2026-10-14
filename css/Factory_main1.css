@@ -1715,6 +1715,11 @@ textarea:focus-visible {
     color: #17618C;
 }
 
+.status-pill.status-review {
+    background: #FFF4D6;
+    color: #946C00;
+}
+
 .status-pill.status-waiting {
     background: #FFF4D6;
     color: #946C00;

@@ -56,6 +56,42 @@ tbody tr:last-child td { border-bottom: 0; }
 .admin-status { display: inline-flex; align-items: center; padding: 5px 8px; border-radius: 999px; font-size: 11px; font-weight: 750; white-space: nowrap; }
 .admin-status.is-active { background: #e6f5ec; color: #17663f; }
 .admin-status.is-disabled { background: #fff0ed; color: #a63320; }
+.admin-profile-picture-cell { min-width: 220px; }
+.admin-profile-picture-form { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.admin-profile-picture-picker { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; }
+.admin-profile-picture-picker:focus-within .admin-profile-picture-preview { outline: 3px solid rgba(31, 117, 76, .24); outline-offset: 2px; }
+.admin-profile-picture-picker input[type="file"] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; clip-path: inset(50%); }
+.admin-profile-picture-preview { position: relative; display: grid; width: 42px; height: 42px; place-items: center; overflow: hidden; border: 1px solid #d9ebe0; border-radius: 50%; background: #e9f5ee; color: #176b49; font-size: 15px; font-weight: 750; transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+.admin-profile-picture-preview img { width: 100%; height: 100%; object-fit: cover; }
+.admin-profile-picture-picker:hover .admin-profile-picture-preview { transform: translateY(-1px); border-color: #7caf91; box-shadow: 0 3px 9px rgba(31, 117, 76, .18); }
+.admin-profile-picture-picker-icon { position: absolute; right: -1px; bottom: -1px; display: grid; width: 17px; height: 17px; place-items: center; border: 2px solid #fff; border-radius: 50%; background: #1f754c; color: #fff; font-size: 14px; line-height: 1; }
+.admin-profile-picture-picker-hint { color: #68766e; font-size: 10px; white-space: nowrap; }
+.admin-profile-picture-form .admin-secondary-button { min-height: 29px; padding: 0 10px; }
+.admin-profile-picture-form .admin-secondary-button[hidden] { display: none; }
+.admin-profile-picture-edit-button { padding: 0; border: 0; background: transparent; color: #1e754c; font: inherit; font-size: 11px; font-weight: 650; cursor: pointer; }
+.admin-profile-picture-edit-button:hover { text-decoration: underline; }
+.admin-profile-picture-remove { margin-top: 6px; }
+.admin-profile-picture-remove-button { padding: 0; border: 0; background: transparent; color: #a63320; font: inherit; font-size: 11px; font-weight: 650; cursor: pointer; }
+.admin-profile-crop-dialog { width: min(440px, calc(100vw - 28px)); max-width: none; max-height: calc(100vh - 28px); padding: 0; overflow: auto; border: 1px solid #d9e1dc; border-radius: 16px; background: #fff; color: #202b24; box-shadow: 0 20px 70px rgba(10, 24, 16, .28); }
+.admin-profile-crop-dialog::backdrop { background: rgba(14, 24, 18, .66); }
+.admin-profile-crop-content { padding: 22px; }
+.admin-profile-crop-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.admin-profile-crop-heading .admin-eyebrow { margin: 0 0 5px; }
+.admin-profile-crop-heading h2 { margin: 0; font-size: 21px; }
+.admin-profile-crop-close { display: grid; width: 34px; height: 34px; place-items: center; border: 0; border-radius: 50%; background: #f0f4f1; color: #334238; font-size: 23px; line-height: 1; cursor: pointer; }
+.admin-profile-crop-help { margin: 13px 0; color: #68766e; font-size: 13px; line-height: 1.5; }
+.admin-profile-crop-stage { position: relative; display: grid; width: min(100%, 320px); aspect-ratio: 1; margin: 0 auto; place-items: center; overflow: hidden; border-radius: 12px; background: #17231c; }
+.admin-profile-crop-stage canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+.admin-profile-crop-stage canvas:active { cursor: grabbing; }
+.admin-profile-crop-loading { position: absolute; color: #fff; font-size: 13px; pointer-events: none; }
+.admin-profile-crop-zoom { display: flex; align-items: center; gap: 14px; margin: 17px 0 0; color: #49564e; font-size: 12px; font-weight: 700; }
+.admin-profile-crop-zoom input { flex: 1; accent-color: #1f754c; }
+.admin-profile-crop-error { margin: 12px 0 0; color: #a63320; font-size: 12px; line-height: 1.45; }
+.admin-profile-crop-error[hidden] { display: none; }
+.admin-profile-crop-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 20px; }
+.admin-profile-crop-actions button { min-height: 37px; padding: 0 14px; border-radius: 7px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.admin-profile-crop-actions .admin-secondary-button:disabled { background: #9aa79f; cursor: not-allowed; }
+.admin-profile-crop-cancel-button { border: 1px solid #d9e1dc; background: #fff; color: #445248; }
 .admin-report-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .admin-report-grid article { padding: 15px; border: 1px solid #e9eeea; border-radius: 10px; }
 .admin-report-grid h3 { margin: 0 0 12px; font-size: 14px; }

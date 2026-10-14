@@ -31,7 +31,8 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'super') {
     <link rel="stylesheet" href="css/calendar-picker.css?v=<?= filemtime(__DIR__ . '/css/calendar-picker.css'); ?>">
     <link rel="stylesheet" href="css/role-form-controls.css?v=<?= filemtime(__DIR__ . '/css/role-form-controls.css'); ?>">
 </head>
-<body> 
+<body>
+    <?php include __DIR__ . '/config/theme_toggle.php'; ?>
         <h1>Record System</h1>
 
     <!-- Display Backend Response Message -->

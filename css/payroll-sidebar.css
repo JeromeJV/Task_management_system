@@ -1,0 +1,183 @@
+.payroll-tasks-layout {
+    display: flex;
+    min-height: 100vh;
+}
+
+.payroll-tasks-layout > .payroll-sidebar,
+.payroll-app-layout > .payroll-sidebar {
+    width: 72px;
+    flex: 0 0 72px;
+    overflow: hidden;
+    transition: width .35s cubic-bezier(.4, 0, .2, 1), flex-basis .35s cubic-bezier(.4, 0, .2, 1), box-shadow .35s ease;
+}
+
+.payroll-tasks-layout > .payroll-sidebar:hover,
+.payroll-tasks-layout > .payroll-sidebar:focus-within,
+.payroll-app-layout > .payroll-sidebar:hover,
+.payroll-app-layout > .payroll-sidebar:focus-within {
+    width: 256px;
+    flex-basis: 256px;
+    box-shadow: 6px 0 24px rgb(0 0 0 / 8%);
+}
+
+.payroll-sidebar > div:first-child > div:first-child {
+    min-height: 82px;
+    justify-content: center;
+    padding-right: 0;
+    padding-left: 0;
+}
+
+.payroll-sidebar > div:first-child > div:first-child > div:last-child {
+    display: none;
+    min-width: 0;
+}
+
+.payroll-sidebar .nav-item {
+    justify-content: center;
+    gap: 0;
+    overflow: hidden;
+    padding-right: 0;
+    padding-left: 0;
+    white-space: nowrap;
+}
+
+.payroll-sidebar .nav-item > span {
+    display: none;
+}
+
+.payroll-sidebar > div:last-child > a {
+    justify-content: center;
+    gap: 0;
+    overflow: hidden;
+    padding-right: 0;
+    padding-left: 0;
+    white-space: nowrap;
+}
+
+.payroll-sidebar > div:last-child > a > span {
+    display: none;
+}
+
+.payroll-sidebar:hover > div:first-child > div:first-child,
+.payroll-sidebar:focus-within > div:first-child > div:first-child {
+    justify-content: flex-start;
+    padding-right: 1.25rem;
+    padding-left: 1.25rem;
+}
+
+.payroll-sidebar:hover > div:first-child > div:first-child > div:last-child,
+.payroll-sidebar:focus-within > div:first-child > div:first-child > div:last-child,
+.payroll-sidebar:hover .nav-item > span,
+.payroll-sidebar:focus-within .nav-item > span,
+.payroll-sidebar:hover > div:last-child > a > span,
+.payroll-sidebar:focus-within > div:last-child > a > span {
+    display: block;
+}
+
+.payroll-sidebar:hover .nav-item,
+.payroll-sidebar:focus-within .nav-item,
+.payroll-sidebar:hover > div:last-child > a,
+.payroll-sidebar:focus-within > div:last-child > a {
+    justify-content: flex-start;
+    gap: 1rem;
+    padding-right: 1.25rem;
+    padding-left: 1.25rem;
+}
+
+.payroll-sidebar .nav-item.active {
+    color: #000;
+    background-color: #f9fafb;
+    font-weight: 700;
+}
+
+.payroll-sidebar .nav-item.active::before {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 3px;
+    background: #16a34a;
+    content: '';
+}
+
+body .payroll-tasks-main {
+    flex: 1;
+    min-width: 0;
+    margin-left: 0;
+}
+
+@media (max-width: 760px) {
+    .payroll-app-layout > .payroll-sidebar {
+        width: 58px;
+        flex-basis: 58px;
+    }
+
+    .payroll-app-layout > .payroll-sidebar:hover,
+    .payroll-app-layout > .payroll-sidebar:focus-within {
+        width: 58px;
+        flex-basis: 58px;
+    }
+
+    .payroll-tasks-layout {
+        display: block;
+    }
+
+    .payroll-tasks-layout > .payroll-sidebar {
+        position: relative;
+        width: 100%;
+        height: auto;
+        flex-basis: 100%;
+    }
+
+    .payroll-tasks-layout > .payroll-sidebar:hover,
+    .payroll-tasks-layout > .payroll-sidebar:focus-within {
+        width: 100%;
+        flex-basis: 100%;
+        box-shadow: none;
+    }
+
+    .payroll-tasks-layout > .payroll-sidebar > div:first-child > div:first-child {
+        justify-content: flex-start;
+        padding: 12px 16px;
+    }
+
+    .payroll-tasks-layout > .payroll-sidebar > div:first-child > div:first-child > div:last-child,
+    .payroll-tasks-layout > .payroll-sidebar .nav-item > span,
+    .payroll-tasks-layout > .payroll-sidebar > div:last-child > a > span {
+        display: block;
+    }
+
+    .payroll-tasks-layout > .payroll-sidebar nav {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .payroll-tasks-layout > .payroll-sidebar nav .nav-item,
+    .payroll-tasks-layout > .payroll-sidebar:hover nav .nav-item,
+    .payroll-tasks-layout > .payroll-sidebar:focus-within nav .nav-item {
+        justify-content: flex-start;
+        gap: 1rem;
+        padding-right: 1.25rem;
+        padding-left: 1.25rem;
+    }
+
+    .payroll-tasks-layout > .payroll-sidebar > div:last-child,
+    .payroll-tasks-layout > .payroll-sidebar:hover > div:last-child,
+    .payroll-tasks-layout > .payroll-sidebar:focus-within > div:last-child {
+        padding: 8px 16px;
+    }
+
+    .payroll-tasks-layout > .payroll-sidebar > div:last-child > a {
+        justify-content: flex-start;
+        gap: 1rem;
+        padding-right: 1.25rem;
+        padding-left: 1.25rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .payroll-tasks-layout > .payroll-sidebar,
+    .payroll-app-layout > .payroll-sidebar {
+        transition-duration: .01ms;
+    }
+}

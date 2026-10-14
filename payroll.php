@@ -8,6 +8,10 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'payroll') {
     header("Location: index.php");
     exit();
 }   
+$initialPayrollTab = $_GET['tab'] ?? 'dashboard';
+if (!in_array($initialPayrollTab, ['dashboard', 'employees', 'calculator'], true)) {
+    $initialPayrollTab = 'dashboard';
+}
 
 // Fetch Metrics
 $total_emp_res = $conn->query("SELECT COUNT(*) as cnt FROM employee");
@@ -124,6 +128,7 @@ while ($r = $payrolls->fetch_assoc()) {
   <link rel="stylesheet" href="css/calendar-picker.css?v=<?= filemtime(__DIR__ . '/css/calendar-picker.css'); ?>">
   <link rel="stylesheet" href="css/role-form-controls.css?v=<?= filemtime(__DIR__ . '/css/role-form-controls.css'); ?>">
   <link rel="stylesheet" href="css/select-control.css?v=<?= filemtime(__DIR__ . '/css/select-control.css'); ?>">
+  <link rel="stylesheet" href="css/payroll-sidebar.css?v=<?= filemtime(__DIR__ . '/css/payroll-sidebar.css'); ?>">
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -349,66 +354,9 @@ while ($r = $payrolls->fetch_assoc()) {
 <?php include __DIR__ . '/config/notification_bell.php'; ?>
 
   <!-- App Wrapper -->
-  <div class="flex h-screen overflow-hidden">
+  <div class="payroll-app-layout flex h-screen overflow-hidden">
 
-    <!-- SUPERVISOR STYLE SIDEBAR -->
-    <aside class="w-64 bg-white border-r border-zinc-200 flex flex-col justify-between h-screen sticky top-0 z-30 shrink-0 select-none">
-      
-      <div class="flex flex-col w-full">
-        <!-- Profile Header (Top Box + User Info) -->
-        <div class="p-5 border-b border-zinc-200 flex items-center gap-3">
-          <!-- Gray Square Box -->
-          <div class="w-10 h-10 bg-zinc-300 rounded-xs shrink-0"></div>
-          
-          <!-- User Info -->
-          <div class="overflow-hidden leading-tight">
-            <h4 class="font-bold text-sm text-zinc-900 truncate">
-              <?php echo htmlspecialchars(explode('@', $_SESSION['email'])[0]); ?>
-            </h4>
-            <p class="text-[11px] text-zinc-400 capitalize truncate">
-              Payroll Manager
-            </p>
-          </div>
-        </div>
-
-        <!-- Navigation Menu -->
-        <nav class="flex flex-col pt-4 w-full">
-          
-          <!-- Dashboard -->
-          <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-item active w-full px-5 py-3.5 flex items-center gap-4 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 transition text-xs font-semibold relative">
-            <i class="fa-solid fa-house text-sm w-5 text-center"></i>
-            <span>Dashboard</span>
-          </button>
-
-          <!-- Employee Masterlist -->
-          <button onclick="switchTab('employees')" id="nav-employees" class="nav-item w-full px-5 py-3.5 flex items-center gap-4 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 transition text-xs font-semibold relative">
-            <i class="fa-solid fa-user text-sm w-5 text-center"></i>
-            <span>Employee Masterlist</span>
-          </button>
-
-          <!-- Calculate Payroll -->
-          <button onclick="switchTab('calculator')" id="nav-calc" class="nav-item w-full px-5 py-3.5 flex items-center gap-4 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 transition text-xs font-semibold relative">
-            <i class="fa-solid fa-calculator text-sm w-5 text-center"></i>
-            <span>Calculate Payroll</span>
-          </button>
-
-          <a href="office_employee.php" class="nav-item w-full px-5 py-3.5 flex items-center gap-4 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 transition text-xs font-semibold relative">
-            <i class="fa-solid fa-list-check text-sm w-5 text-center"></i>
-            <span>My Tasks</span>
-          </a>
-
-        </nav>
-      </div>
-
-      <!-- Logout Button at Bottom -->
-      <div class="p-4 border-t border-zinc-100 w-full">
-        <a href="logout.php" class="w-full px-3 py-2.5 flex items-center gap-4 text-zinc-600 hover:text-red-600 transition text-xs font-semibold">
-          <i class="fa-solid fa-right-from-bracket text-sm w-5 text-center"></i>
-          <span>Log out</span>
-        </a>
-      </div>
-
-    </aside>
+    <?php $payrollSidebarActive = 'dashboard'; include __DIR__ . '/config/payroll_sidebar.php'; ?>
 
     <!-- RIGHT CONTENT AREA -->
     <div class="flex-1 flex flex-col min-w-0 overflow-y-auto">
@@ -1082,6 +1030,10 @@ while ($r = $payrolls->fetch_assoc()) {
         sessionStorage.removeItem('payrollTabAfterReload');
         switchTab('employees');
       }
+      <?php if ($initialPayrollTab !== 'dashboard'): ?>
+      sessionStorage.removeItem('payrollTabAfterReload');
+      switchTab(<?= json_encode($initialPayrollTab); ?>);
+      <?php endif; ?>
     });
   </script>
   <?php include __DIR__ . '/config/chatbot_widget.php'; ?>

@@ -206,6 +206,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </style>
 </head>
 <body>
+    <?php include __DIR__ . '/config/theme_toggle.php'; ?>
     <div class="forgot-page">
         <header class="forgot-header">
             <a class="forgot-brand" href="index.php">

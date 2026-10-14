@@ -1,0 +1,163 @@
+.task-review-dialog {
+    position: fixed;
+    inset: 50% auto auto 50%;
+    transform: translate(-50%, -50%);
+    width: min(480px, calc(100% - 32px));
+    max-width: 480px;
+    max-height: calc(100vh - 32px);
+    padding: 0;
+    overflow: auto;
+    border: 0;
+    border-radius: 18px;
+    background: #fff;
+    color: #1e2923;
+    box-shadow: 0 24px 70px rgba(10, 18, 35, .25);
+}
+
+.task-review-dialog::backdrop {
+    background: rgba(15, 23, 42, .56);
+    backdrop-filter: blur(3px);
+}
+
+.task-review-dialog[open] {
+    display: block;
+}
+
+.task-review-dialog-card {
+    display: grid;
+    gap: 12px;
+    padding: 26px;
+}
+
+.task-review-dialog-kicker {
+    color: #1f6e4a;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .12em;
+}
+
+.task-review-dialog-card h2 {
+    margin: 0;
+    color: #1e2923;
+    font-size: 22px;
+}
+
+.task-review-dialog-description,
+.task-review-dialog-hint {
+    margin: 0;
+    color: #647067;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.task-review-note-label {
+    margin-top: 5px;
+    color: #34423a;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.task-review-dialog-card textarea {
+    width: 100%;
+    min-height: 96px;
+    padding: 11px 12px;
+    resize: vertical;
+    border: 1px solid #d6dfd8;
+    border-radius: 9px;
+    color: #1e2923;
+    font-size: 14px;
+}
+
+.task-review-dialog-card textarea:focus {
+    border-color: #39845c;
+    outline: 3px solid rgba(57, 132, 92, .15);
+}
+
+.task-review-dialog-hint {
+    margin-top: -6px;
+    font-size: 12px;
+}
+
+.task-review-dialog-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 9px;
+    margin-top: 8px;
+}
+
+.task-review-dialog-actions button,
+.task-review-open-button,
+.delivery-review-open-button,
+.production-review-open-button,
+.office-review-open-button {
+    padding: 7px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 7px;
+    background: #fff;
+    color: #374151;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.4;
+    transition: background .2s ease, border-color .2s ease, color .2s ease;
+}
+
+.task-review-open-button:hover,
+.delivery-review-open-button:hover,
+.production-review-open-button:hover,
+.office-review-open-button:hover {
+    border-color: #1f6e4a;
+    background: #1f6e4a;
+    color: #fff;
+}
+
+.task-review-dialog-actions .task-review-cancel-button {
+    border-color: #dce3de;
+    background: #fff;
+    color: #526158;
+}
+
+.task-review-dialog-actions .task-approve-button {
+    border-color: #1f6e4a;
+    background: #1f6e4a;
+    color: #fff;
+}
+
+.task-review-dialog-actions .task-reject-button {
+    border-color: #f0cccc;
+    background: #fff5f4;
+    color: #a13b32;
+}
+
+.task-review-open-button,
+.delivery-review-open-button,
+.production-review-open-button,
+.office-review-open-button {
+    white-space: nowrap;
+}
+
+.task-review-open-button:focus-visible,
+.delivery-review-open-button:focus-visible,
+.production-review-open-button:focus-visible,
+.office-review-open-button:focus-visible {
+    outline: 3px solid rgba(57, 132, 92, .25);
+    outline-offset: 2px;
+}
+
+@media (max-width: 480px) {
+    .task-review-dialog-card {
+        padding: 21px 18px;
+    }
+
+    .task-review-dialog-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .task-review-dialog-actions .task-review-cancel-button {
+        grid-column: 1 / -1;
+        grid-row: 2;
+    }
+}

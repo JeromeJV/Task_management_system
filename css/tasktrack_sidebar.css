@@ -18,35 +18,57 @@
     box-shadow: 6px 0 24px rgba(0, 0, 0, .08);
 }
 
+.tasktrack-sidebar:hover .tasktrack-account,
+.tasktrack-sidebar:focus-within .tasktrack-account {
+    justify-content: flex-start;
+    padding: 0 17px;
+}
+
 .tasktrack-brand {
     display: grid;
-    width: 40px;
-    height: 40px;
-    flex: 0 0 40px;
+    width: 52px;
+    height: 52px;
+    flex: 0 0 52px;
     place-items: center;
     align-self: center;
-    border-radius: 9px;
-    background: #1f6e4a;
-    color: #fff;
-    font-size: 18px;
+    overflow: hidden;
+    border: 1px solid #d9ebe0;
+    border-radius: 50%;
+    background: #e9f5ee;
+    color: #176b49;
+    font-size: 20px;
     font-weight: 800;
+    text-decoration: none;
+}
+
+.tasktrack-brand img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
 .tasktrack-account {
     display: flex;
     min-height: 82px;
-    flex-direction: column;
+    align-items: center;
     justify-content: center;
-    gap: 3px;
+    gap: 10px;
     overflow: hidden;
     margin: 17px 0 13px;
-    padding: 0 17px;
+    padding: 0 8px;
     border-bottom: 1px solid #e5e7eb;
     white-space: nowrap;
 }
 
-.tasktrack-account strong,
-.tasktrack-account span,
+.tasktrack-account-details {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.tasktrack-account-details strong,
+.tasktrack-account-details span,
 .tasktrack-nav-label {
     overflow: hidden;
     opacity: 0;
@@ -54,22 +76,22 @@
     transition: opacity .2s ease, transform .2s ease;
 }
 
-.tasktrack-account strong {
+.tasktrack-account-details strong {
     color: #202b23;
     font-size: 13px;
     font-weight: 750;
 }
 
-.tasktrack-account span {
+.tasktrack-account-details span {
     color: #788179;
     font-size: 10px;
     text-overflow: ellipsis;
 }
 
-.tasktrack-sidebar:hover .tasktrack-account strong,
-.tasktrack-sidebar:hover .tasktrack-account span,
-.tasktrack-sidebar:focus-within .tasktrack-account strong,
-.tasktrack-sidebar:focus-within .tasktrack-account span,
+.tasktrack-sidebar:hover .tasktrack-account-details strong,
+.tasktrack-sidebar:hover .tasktrack-account-details span,
+.tasktrack-sidebar:focus-within .tasktrack-account-details strong,
+.tasktrack-sidebar:focus-within .tasktrack-account-details span,
 .tasktrack-sidebar:hover .tasktrack-nav-label,
 .tasktrack-sidebar:focus-within .tasktrack-nav-label {
     opacity: 1;
@@ -189,8 +211,8 @@ body .employee-main {
         width: 100%;
     }
 
-    .tasktrack-sidebar.open .tasktrack-account strong,
-    .tasktrack-sidebar.open .tasktrack-account span,
+    .tasktrack-sidebar.open .tasktrack-account-details strong,
+    .tasktrack-sidebar.open .tasktrack-account-details span,
     .tasktrack-sidebar.open .tasktrack-nav-label {
         opacity: 1;
         transform: translateX(0);

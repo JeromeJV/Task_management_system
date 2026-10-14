@@ -6,6 +6,33 @@ let lineChart;
 let productPieChart;
 let chartRequestId = 0;
 
+function applyChartTheme() {
+    const dark = document.documentElement.dataset.theme === 'dark';
+    const textColor = dark ? '#c2cdc7' : '#666';
+    const gridColor = dark ? 'rgba(194, 205, 199, 0.14)' : 'rgba(0, 0, 0, 0.1)';
+
+    if (lineChart) {
+        ['x', 'y'].forEach(axis => {
+            lineChart.options.scales[axis].ticks.color = textColor;
+            lineChart.options.scales[axis].grid.color = gridColor;
+            lineChart.options.scales[axis].title.color = textColor;
+        });
+        lineChart.update('none');
+    }
+
+    if (productPieChart) {
+        productPieChart.options.plugins.legend.labels.color = textColor;
+        productPieChart.options.plugins.tooltip.backgroundColor = dark ? '#20282c' : '#fff';
+        productPieChart.options.plugins.tooltip.titleColor = dark ? '#e6ece9' : '#222';
+        productPieChart.options.plugins.tooltip.bodyColor = dark ? '#e1e8e4' : '#333';
+        productPieChart.options.plugins.tooltip.borderColor = dark ? '#465258' : '#dce3df';
+        productPieChart.options.plugins.tooltip.borderWidth = 1;
+        productPieChart.update('none');
+    }
+}
+
+document.addEventListener('tasktrack-theme-change', applyChartTheme);
+
 function showPage(page) {
     const pages = ['dashboard', 'task'];
     pages.forEach(pageName => {
@@ -59,6 +86,7 @@ function renderCharts(chartData) {
             }
         }
     });
+    applyChartTheme();
 
     const canvas = document.getElementById('productPieChart');
     const emptyMessage = document.getElementById('pieChartEmpty');
@@ -101,6 +129,7 @@ function renderCharts(chartData) {
             }
         }
     });
+    applyChartTheme();
 }
 
 async function loadCharts() {

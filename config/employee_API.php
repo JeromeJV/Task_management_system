@@ -337,7 +337,10 @@ if (isset($_POST['submit']) && isset($_POST['is_update'])) {
 // -----------------------------------------------------
 // 4. View / Fetch All Records
 // -----------------------------------------------------
-$sql    = "SELECT * FROM employee ORDER BY employee_id ASC";
+$sql    = "SELECT e.*, u.profile_picture AS account_profile_picture
+           FROM employee e
+           LEFT JOIN users u ON u.employee_id = e.employee_id
+           ORDER BY e.employee_id ASC";
 $result = mysqli_query($conn, $sql);
 $count  = mysqli_num_rows($result);
 

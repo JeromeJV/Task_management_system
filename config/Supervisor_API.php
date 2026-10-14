@@ -16,6 +16,9 @@ if (!isset($_SESSION['email'])) {
 }
 requireActiveAccount($conn);
 ensureTaskNotificationSchema($conn);
+if (empty($_SESSION['task_review_csrf'])) {
+    $_SESSION['task_review_csrf'] = bin2hex(random_bytes(32));
+}
 
 $allowed_roles = ($module === 'factory') ? ['super', 'pro', 'cooking', 'packaging'] : ['super', 'log'];
 if (!in_array($_SESSION['role'], $allowed_roles, true)) {
@@ -62,6 +65,122 @@ if ($module === 'delivery') {
     ensureDeliveryActivitySchema($conn);
     $current_role = (string) ($_SESSION['role'] ?? '');
     $current_user_id = (int) ($_SESSION['id'] ?? $_SESSION['user_id'] ?? 0);
+
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['review_delivery'])) {
+        $posted_token = (string) ($_POST['task_review_csrf'] ?? '');
+        $delivery_id = filter_var($_POST['delivery_id'] ?? null, FILTER_VALIDATE_INT);
+        $decision = (string) $_POST['review_delivery'];
+        $review_note = trim((string) ($_POST['review_note'] ?? ''));
+
+        if ($current_role !== 'super') {
+            http_response_code(403);
+            exit('Only a supervisor can review delivery completion.');
+        }
+        if (!hash_equals((string) $_SESSION['task_review_csrf'], $posted_token)) {
+            $_SESSION['delivery_error'] = 'Your session token expired. Refresh the page and try again.';
+        } elseif (!$delivery_id || $delivery_id < 1 || !in_array($decision, ['approve', 'reject'], true)) {
+            $_SESSION['delivery_error'] = 'Choose a valid delivery and review decision.';
+        } elseif ($decision === 'reject' && $review_note === '') {
+            $_SESSION['delivery_error'] = 'Add an explanation when requesting delivery changes.';
+        } elseif (mb_strlen($review_note) > 1000) {
+            $_SESSION['delivery_error'] = 'The review note must be no more than 1000 characters.';
+        } else {
+            if (!$conn->begin_transaction()) {
+                throw new RuntimeException('Unable to start the delivery review: ' . $conn->error);
+            }
+            $review_stmt = $conn->prepare(
+                "SELECT route, driver_id
+                 FROM delivery
+                 WHERE delivery_id = ? AND (assigned_by = ? OR assigned_by IS NULL)
+                   AND status = 'Awaiting Approval'
+                   AND completion_review_status = 'pending_review'
+                 LIMIT 1 FOR UPDATE"
+            );
+            if (!$review_stmt) {
+                throw new RuntimeException('Unable to prepare the delivery review lookup: ' . $conn->error);
+            }
+            $review_stmt->bind_param('ii', $delivery_id, $current_user_id);
+            if (!$review_stmt->execute()) {
+                $error = $review_stmt->error;
+                $review_stmt->close();
+                throw new RuntimeException('Unable to load the delivery for review: ' . $error);
+            }
+            $delivery_to_review = $review_stmt->get_result()->fetch_assoc();
+            $review_stmt->close();
+
+            if (!$delivery_to_review) {
+                $conn->rollback();
+                $_SESSION['delivery_error'] = 'This delivery is no longer waiting for your review.';
+            } else {
+                $approved = $decision === 'approve';
+                $review_status = $approved ? 'approved' : 'rejected';
+                $delivery_status = $approved ? 'Delivered' : 'Pending';
+                $review_note_value = $review_note !== '' ? $review_note : null;
+                $update_stmt = $conn->prepare(
+                    "UPDATE delivery
+                     SET status = ?, completion_review_status = ?, completion_review_note = ?,
+                         completion_reviewed_by = ?, completion_reviewed_at = NOW(),
+                         delivered_at = IF(? = 1, delivered_at, NULL)
+                     WHERE delivery_id = ?
+                       AND status = 'Awaiting Approval'
+                       AND completion_review_status = 'pending_review'
+                       AND (assigned_by = ? OR assigned_by IS NULL)"
+                );
+                if (!$update_stmt) {
+                    throw new RuntimeException('Unable to prepare the delivery review update: ' . $conn->error);
+                }
+                $update_stmt->bind_param(
+                    'sssiiii',
+                    $delivery_status,
+                    $review_status,
+                    $review_note_value,
+                    $current_user_id,
+                    $approved,
+                    $delivery_id,
+                    $current_user_id
+                );
+                if (!$update_stmt->execute() || $update_stmt->affected_rows !== 1) {
+                    $error = $update_stmt->error ?: 'The delivery review could not be saved.';
+                    $update_stmt->close();
+                    $conn->rollback();
+                    throw new RuntimeException('Unable to save the delivery review: ' . $error);
+                }
+                $update_stmt->close();
+                $actor_name = (string) ($_SESSION['name'] ?? 'Supervisor');
+                recordDeliveryActivity(
+                    $conn,
+                    $delivery_id,
+                    $current_user_id,
+                    $actor_name,
+                    $approved ? 'delivery_approved' : 'delivery_changes_requested'
+                );
+                createTaskNotification(
+                    $conn,
+                    (int) $delivery_to_review['driver_id'],
+                    $current_user_id,
+                    $approved ? 'delivery_approved' : 'delivery_changes_requested',
+                    $approved ? 'Delivery approved' : 'Delivery changes requested',
+                    $approved
+                        ? 'Your delivery to ' . $delivery_to_review['route'] . ' was reviewed and approved.'
+                        : 'Your delivery to ' . $delivery_to_review['route'] . ' needs changes: ' . $review_note,
+                    'logistic.php',
+                    'delivery',
+                    (string) $delivery_id
+                );
+                if (!$conn->commit()) {
+                    throw new RuntimeException('Unable to commit the delivery review: ' . $conn->error);
+                }
+                $_SESSION['delivery_success'] = $approved
+                    ? 'Delivery approved and marked completed.'
+                    : 'Delivery changes requested and sent to the driver.';
+            }
+        }
+        $reviewReturn = (string) ($_POST['review_return'] ?? '');
+        header('Location: ' . ($reviewReturn === 'delivery_main.php'
+            ? 'delivery_main.php'
+            : 'supervisor.php#page-dashboard'));
+        exit();
+    }
 
     if (isset($_GET['activity_log'])) {
         header('Content-Type: application/json; charset=utf-8');
@@ -309,8 +428,8 @@ if ($module === 'delivery') {
                     throw new RuntimeException('Unable to prepare the existing-delivery check: ' . $conn->error);
                 }
                 $insert_delivery = $conn->prepare(
-                    "INSERT INTO delivery (production_id, route, pieces, stock, driver_id, delivery_date)
-                     VALUES (?, ?, ?, ?, ?, ?)"
+                    "INSERT INTO delivery (production_id, route, pieces, stock, driver_id, assigned_by, delivery_date)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)"
                 );
                 if (!$insert_delivery) {
                     throw new RuntimeException('Unable to prepare delivery creation: ' . $conn->error);
@@ -352,12 +471,13 @@ if ($module === 'delivery') {
                     $stock = $prod_data['Stock_number'];
                     $stock = $prod_data['Stock_number'];
                     $insert_delivery->bind_param(
-                        'ssssss',
+                        'ssiiiis',
                         $production_id,
                         $route,
                         $pieces,
                         $stock,
                         $driver_id,
+                        $current_user_id,
                         $delivery_date
                     );
                     if (!$insert_delivery->execute()) {
@@ -427,7 +547,7 @@ if ($module === 'delivery') {
         }
 
         if (!empty($delivery_id) && empty($errors)) {
-            $old_delivery_stmt = $conn->prepare("SELECT driver_id FROM delivery WHERE delivery_id = ? AND status != 'Delivered' LIMIT 1");
+            $old_delivery_stmt = $conn->prepare("SELECT driver_id FROM delivery WHERE delivery_id = ? AND status != 'Delivered' AND completion_review_status <> 'pending_review' LIMIT 1");
             $old_delivery_stmt->bind_param('i', $delivery_id);
             $old_delivery_stmt->execute();
             $old_delivery = $old_delivery_stmt->get_result()->fetch_assoc();
@@ -438,8 +558,25 @@ if ($module === 'delivery') {
         }
 
         if (!empty($delivery_id) && empty($errors)) {
-            $stmt = $conn->prepare("UPDATE delivery SET route = ?, pieces = ?, stock = ?, driver_id = ?, delivery_date = ? WHERE delivery_id = ? AND status != 'Delivered'");
-            $stmt->bind_param("ssssss", $route, $pieces, $stock, $driver_id, $delivery_date, $delivery_id);
+            $stmt = $conn->prepare(
+                "UPDATE delivery
+                 SET route = ?, pieces = ?, stock = ?, driver_id = ?, delivery_date = ?,
+                     assigned_by = ?, completion_review_status = 'none',
+                     completion_review_note = NULL, completion_reviewed_by = NULL,
+                     completion_reviewed_at = NULL
+                 WHERE delivery_id = ? AND status != 'Delivered'
+                   AND completion_review_status <> 'pending_review'"
+            );
+            $stmt->bind_param(
+                'siiisii',
+                $route,
+                $pieces,
+                $stock,
+                $driver_id,
+                $delivery_date,
+                $current_user_id,
+                $delivery_id
+            );
 
             $conn->begin_transaction();
             if ($stmt->execute()) {
@@ -507,7 +644,16 @@ if ($module === 'delivery') {
         $current_user_id = $_SESSION['id'] ?? $_SESSION['user_id'] ?? null;
 
         if ($delivery_id && $current_user_id !== null) {
-            $stmt = $conn->prepare("UPDATE delivery SET status = 'Delivered', delivered_at = NOW() WHERE delivery_id = ? AND driver_id = ? AND (status != 'Delivered' OR status IS NULL)");
+            $stmt = $conn->prepare(
+                "UPDATE delivery
+                 SET status = 'Awaiting Approval', delivered_at = NOW(),
+                     completion_review_status = 'pending_review',
+                     completion_review_note = NULL, completion_reviewed_by = NULL,
+                     completion_reviewed_at = NULL
+                 WHERE delivery_id = ? AND driver_id = ?
+                   AND status <> 'Delivered'
+                   AND completion_review_status <> 'pending_review'"
+            );
             $stmt->bind_param("ii", $delivery_id, $current_user_id);
             $conn->begin_transaction();
             if ($stmt->execute() && $stmt->affected_rows === 1) {
@@ -516,13 +662,8 @@ if ($module === 'delivery') {
                     $actor_name = 'User #' . $current_user_id;
                 }
                 try {
-                    recordDeliveryActivity($conn, $delivery_id, $current_user_id, $actor_name, 'delivery_completed');
-                    $assignerStmt = $conn->prepare(
-                        "SELECT actor_user_id
-                         FROM delivery_activity
-                         WHERE delivery_id = ? AND event_type = 'delivery_assigned'
-                         ORDER BY activity_id ASC LIMIT 1"
-                    );
+                    recordDeliveryActivity($conn, $delivery_id, (int) $current_user_id, $actor_name, 'delivery_submitted_for_review');
+                    $assignerStmt = $conn->prepare('SELECT assigned_by FROM delivery WHERE delivery_id = ?');
                     if (!$assignerStmt) {
                         throw new RuntimeException('Unable to prepare delivery assigner lookup: ' . $conn->error);
                     }
@@ -532,22 +673,50 @@ if ($module === 'delivery') {
                         $assignerStmt->close();
                         throw new RuntimeException('Unable to load delivery assigner: ' . $error);
                     }
-                    $assignerId = (int) ($assignerStmt->get_result()->fetch_assoc()['actor_user_id'] ?? 0);
+                    $assignerId = (int) ($assignerStmt->get_result()->fetch_assoc()['assigned_by'] ?? 0);
                     $assignerStmt->close();
-                    createTaskNotification(
-                        $conn,
-                        $assignerId,
-                        (int) $current_user_id,
-                        'delivery_completed',
-                        'Delivery completed',
-                        'A delivery task you assigned has been marked delivered.',
-                        'supervisor.php',
-                        'delivery',
-                        (string) $delivery_id
-                    );
+                    if ($assignerId > 0) {
+                        createTaskNotification(
+                            $conn,
+                            $assignerId,
+                            (int) $current_user_id,
+                            'delivery_review_requested',
+                            'Delivery submitted for review',
+                            $actor_name . ' submitted the delivery to ' . $delivery_id . ' for your approval.',
+                            'supervisor.php#page-dashboard',
+                            'delivery',
+                            (string) $delivery_id
+                        );
+                    } else {
+                        $supervisor_stmt = $conn->prepare("SELECT id FROM users WHERE role = 'super' AND is_active = 1");
+                        if (!$supervisor_stmt) {
+                            throw new RuntimeException('Unable to prepare supervisor review notifications: ' . $conn->error);
+                        }
+                        if (!$supervisor_stmt->execute()) {
+                            $error = $supervisor_stmt->error;
+                            $supervisor_stmt->close();
+                            throw new RuntimeException('Unable to load supervisors for delivery review: ' . $error);
+                        }
+                        $supervisor_result = $supervisor_stmt->get_result();
+                        while ($supervisor_row = $supervisor_result->fetch_assoc()) {
+                            createTaskNotification(
+                                $conn,
+                                (int) $supervisor_row['id'],
+                                (int) $current_user_id,
+                                'delivery_review_requested',
+                                'Delivery submitted for review',
+                                $actor_name . ' submitted delivery #' . $delivery_id . ' for supervisor approval.',
+                                'supervisor.php#page-dashboard',
+                                'delivery',
+                                (string) $delivery_id
+                            );
+                        }
+                        $supervisor_stmt->close();
+                    }
                     if (!$conn->commit()) {
                         throw new RuntimeException('Unable to commit delivery completion.');
                     }
+                    $_SESSION['delivery_success'] = 'Delivery submitted for supervisor approval.';
                 } catch (RuntimeException $exception) {
                     $conn->rollback();
                     $_SESSION['delivery_error'] = 'Delivery completion could not be saved with its activity history: ' . $exception->getMessage();
@@ -571,12 +740,16 @@ if ($module === 'delivery') {
     // --- FETCH PENDING DELIVERIES ---
     if ($current_role === 'super') {
         // PAG SUPERVISOR: Nakikita lahat ng delivery ng kahit sinong driver
-        $sql_pending = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.delivery_date, d.status, d.delivered_at,
+        $sql_pending = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.assigned_by, d.delivery_date, d.status, d.delivered_at,
+                               d.completion_review_status, d.completion_review_note, d.completion_reviewed_by, d.completion_reviewed_at,
+                               assigner.name AS assigned_by_name, reviewer.name AS completion_reviewed_by_name,
                                p.product_name, p.product_status,
                                u.name AS driver_name
                         FROM delivery d 
                         LEFT JOIN production p ON d.production_id = p.production_id 
                         LEFT JOIN users u ON d.driver_id = u.id
+                        LEFT JOIN users assigner ON d.assigned_by = assigner.id
+                        LEFT JOIN users reviewer ON d.completion_reviewed_by = reviewer.id
                         WHERE d.status != 'Delivered' OR d.status IS NULL
                         GROUP BY d.delivery_id
                         ORDER BY d.delivery_id DESC";
@@ -584,12 +757,16 @@ if ($module === 'delivery') {
     } else {
         // PAG DRIVER / LOGISTICS ('log'): ACCOUNT-LEVEL FILTERING
         // I-filter gamit ang d.driver_id = ? para KANYANG ACCOUNT LANG ANG LUMABAS
-        $sql_pending = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.delivery_date, d.status, d.delivered_at,
+        $sql_pending = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.assigned_by, d.delivery_date, d.status, d.delivered_at,
+                               d.completion_review_status, d.completion_review_note, d.completion_reviewed_by, d.completion_reviewed_at,
+                               assigner.name AS assigned_by_name, reviewer.name AS completion_reviewed_by_name,
                                p.product_name, p.product_status,
                                u.name AS driver_name
                         FROM delivery d 
                         LEFT JOIN production p ON d.production_id = p.production_id 
                         LEFT JOIN users u ON d.driver_id = u.id
+                        LEFT JOIN users assigner ON d.assigned_by = assigner.id
+                        LEFT JOIN users reviewer ON d.completion_reviewed_by = reviewer.id
                         WHERE (d.status != 'Delivered' OR d.status IS NULL)
                           AND d.driver_id = ?
                         GROUP BY d.delivery_id
@@ -610,24 +787,32 @@ if ($module === 'delivery') {
     // --- FETCH DELIVERY HISTORY ---
     if ($current_role === 'super') {
         // PAG SUPERVISOR: Nakikita ang buong kasaysayan ng delivery ng lahat
-        $sql_history = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.delivery_date, d.status, d.delivered_at,
+        $sql_history = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.assigned_by, d.delivery_date, d.status, d.delivered_at,
+                               d.completion_review_status, d.completion_review_note, d.completion_reviewed_by, d.completion_reviewed_at,
+                               assigner.name AS assigned_by_name, reviewer.name AS completion_reviewed_by_name,
                                p.product_name, p.product_status,
                                u.name AS driver_name 
                         FROM delivery d 
                         LEFT JOIN production p ON d.production_id = p.production_id 
                         LEFT JOIN users u ON d.driver_id = u.id
+                        LEFT JOIN users assigner ON d.assigned_by = assigner.id
+                        LEFT JOIN users reviewer ON d.completion_reviewed_by = reviewer.id
                         WHERE d.status = 'Delivered' 
                         GROUP BY d.delivery_id
                         ORDER BY d.delivery_id DESC";
         $stmt_history = $conn->prepare($sql_history);
     } else {
         // PAG DRIVER / LOGISTICS ('log'): ACCOUNT-LEVEL FILTERING
-        $sql_history = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.delivery_date, d.status, d.delivered_at,
+        $sql_history = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.assigned_by, d.delivery_date, d.status, d.delivered_at,
+                               d.completion_review_status, d.completion_review_note, d.completion_reviewed_by, d.completion_reviewed_at,
+                               assigner.name AS assigned_by_name, reviewer.name AS completion_reviewed_by_name,
                                p.product_name, p.product_status,
                                u.name AS driver_name 
                         FROM delivery d 
                         LEFT JOIN production p ON d.production_id = p.production_id 
                         LEFT JOIN users u ON d.driver_id = u.id
+                        LEFT JOIN users assigner ON d.assigned_by = assigner.id
+                        LEFT JOIN users reviewer ON d.completion_reviewed_by = reviewer.id
                         WHERE d.status = 'Delivered'
                           AND d.driver_id = ?
                         GROUP BY d.delivery_id
@@ -744,6 +929,7 @@ elseif ($module === 'factory') {
     ensureProductionActivitySchema($conn);
 
     $current_role = (string) ($_SESSION['role'] ?? '');
+    $current_user_id = (int) ($_SESSION['id'] ?? $_SESSION['user_id'] ?? 0);
     $is_production_worker = in_array($current_role, ['pro', 'cooking', 'packaging'], true);
     $is_production_supervisor = $current_role === 'super';
     $current_work_type = [
@@ -751,6 +937,165 @@ elseif ($module === 'factory') {
         'packaging' => 'Packaging',
     ][$current_role] ?? null;
     $current_employee_id = null;
+
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['review_production_stage'])) {
+        $posted_token = (string) ($_POST['task_review_csrf'] ?? '');
+        $production_id = trim((string) ($_POST['production_id'] ?? ''));
+        $work_type = (string) ($_POST['work_type'] ?? '');
+        $decision = (string) $_POST['review_production_stage'];
+        $review_note = trim((string) ($_POST['review_note'] ?? ''));
+
+        if (!$is_production_supervisor) {
+            http_response_code(403);
+            exit('Only a supervisor can review production completion.');
+        }
+        if (!hash_equals((string) $_SESSION['task_review_csrf'], $posted_token)) {
+            $_SESSION['production_error'] = 'Your session token expired. Refresh the page and try again.';
+        } elseif ($production_id === '' || strlen($production_id) > 64
+            || !in_array($work_type, ['Cooking', 'Packaging'], true)
+            || !in_array($decision, ['approve', 'reject'], true)) {
+            $_SESSION['production_error'] = 'Choose a valid production stage and review decision.';
+        } elseif ($decision === 'reject' && $review_note === '') {
+            $_SESSION['production_error'] = 'Add an explanation when requesting production changes.';
+        } elseif (mb_strlen($review_note) > 1000) {
+            $_SESSION['production_error'] = 'The review note must be no more than 1000 characters.';
+        } else {
+            if (!$conn->begin_transaction()) {
+                throw new RuntimeException('Unable to start the production review: ' . $conn->error);
+            }
+            $review_stmt = $conn->prepare(
+                "SELECT pa.employee_id, pa.assigned_by, p.product_name
+                 FROM production_assignments pa
+                 INNER JOIN production p ON p.production_id = pa.production_id
+                 WHERE pa.production_id = ? AND pa.work_type = ?
+                   AND pa.work_status = 'Pending'
+                   AND pa.completion_review_status = 'pending_review'
+                   AND (pa.assigned_by = ? OR pa.assigned_by IS NULL)
+                 LIMIT 1 FOR UPDATE"
+            );
+            if (!$review_stmt) {
+                throw new RuntimeException('Unable to prepare the production review lookup: ' . $conn->error);
+            }
+            $review_stmt->bind_param('ssi', $production_id, $work_type, $current_user_id);
+            if (!$review_stmt->execute()) {
+                $error = $review_stmt->error;
+                $review_stmt->close();
+                throw new RuntimeException('Unable to load the production stage for review: ' . $error);
+            }
+            $stage_to_review = $review_stmt->get_result()->fetch_assoc();
+            $review_stmt->close();
+
+            if (!$stage_to_review) {
+                $conn->rollback();
+                $_SESSION['production_error'] = 'This production stage is no longer waiting for your review.';
+            } else {
+                $approved = $decision === 'approve';
+                $review_status = $approved ? 'approved' : 'rejected';
+                $review_note_value = $review_note !== '' ? $review_note : null;
+                $update_stmt = $conn->prepare(
+                    "UPDATE production_assignments
+                     SET work_status = IF(? = 1, 'Done', 'Pending'),
+                         completed_at = IF(? = 1, NOW(), NULL),
+                         completion_review_status = ?, completion_review_note = ?,
+                         completion_reviewed_by = ?, completion_reviewed_at = NOW()
+                     WHERE production_id = ? AND work_type = ?
+                       AND (assigned_by = ? OR assigned_by IS NULL)
+                       AND work_status = 'Pending'
+                       AND completion_review_status = 'pending_review'"
+                );
+                if (!$update_stmt) {
+                    throw new RuntimeException('Unable to prepare the production review update: ' . $conn->error);
+                }
+                $update_stmt->bind_param(
+                    'iississi',
+                    $approved,
+                    $approved,
+                    $review_status,
+                    $review_note_value,
+                    $current_user_id,
+                    $production_id,
+                    $work_type,
+                    $current_user_id
+                );
+                if (!$update_stmt->execute() || $update_stmt->affected_rows !== 1) {
+                    $error = $update_stmt->error ?: 'The production review could not be saved.';
+                    $update_stmt->close();
+                    $conn->rollback();
+                    throw new RuntimeException('Unable to save the production review: ' . $error);
+                }
+                $update_stmt->close();
+
+                if ($approved && $work_type === 'Packaging') {
+                    $production_stmt = $conn->prepare(
+                        "UPDATE production SET product_status = 'product done'
+                         WHERE production_id = ?
+                           AND LOWER(TRIM(COALESCE(product_status, ''))) <> 'product done'"
+                    );
+                    if (!$production_stmt) {
+                        throw new RuntimeException('Unable to prepare final production approval: ' . $conn->error);
+                    }
+                    $production_stmt->bind_param('s', $production_id);
+                    if (!$production_stmt->execute() || $production_stmt->affected_rows !== 1) {
+                        $error = $production_stmt->error ?: 'The final production status could not be updated.';
+                        $production_stmt->close();
+                        $conn->rollback();
+                        throw new RuntimeException('Unable to complete the production item: ' . $error);
+                    }
+                    $production_stmt->close();
+                }
+
+                $actor_name = (string) ($_SESSION['name'] ?? 'Supervisor');
+                $stage_employee_id = (int) $stage_to_review['employee_id'];
+                recordProductionActivity(
+                    $conn,
+                    $production_id,
+                    $current_user_id,
+                    $actor_name,
+                    $approved ? 'stage_approved' : 'stage_changes_requested',
+                    $work_type,
+                    null,
+                    null,
+                    $stage_employee_id,
+                    getProductionEmployeeName($conn, $stage_employee_id)
+                );
+                $employee_user_stmt = $conn->prepare('SELECT id FROM users WHERE employee_id = ?');
+                if (!$employee_user_stmt) {
+                    throw new RuntimeException('Unable to prepare the production employee notification lookup: ' . $conn->error);
+                }
+                $employee_user_stmt->bind_param('i', $stage_employee_id);
+                if (!$employee_user_stmt->execute()) {
+                    $error = $employee_user_stmt->error;
+                    $employee_user_stmt->close();
+                    throw new RuntimeException('Unable to load the production employee notification recipient: ' . $error);
+                }
+                $employee_users = $employee_user_stmt->get_result();
+                while ($employee_user = $employee_users->fetch_assoc()) {
+                    createTaskNotification(
+                        $conn,
+                        (int) $employee_user['id'],
+                        $current_user_id,
+                        $approved ? 'production_stage_approved' : 'production_stage_changes_requested',
+                        $approved ? 'Production stage approved' : 'Production changes requested',
+                        $approved
+                            ? 'Your ' . $work_type . ' stage for ' . $stage_to_review['product_name'] . ' was approved.'
+                            : 'Your ' . $work_type . ' stage for ' . $stage_to_review['product_name'] . ' needs changes: ' . $review_note,
+                        'Production.php',
+                        'production',
+                        $production_id
+                    );
+                }
+                $employee_user_stmt->close();
+                if (!$conn->commit()) {
+                    throw new RuntimeException('Unable to commit the production review: ' . $conn->error);
+                }
+                $_SESSION['production_success'] = $approved
+                    ? 'Production stage approved.'
+                    : 'Production changes requested and sent to the employee.';
+            }
+        }
+        header('Location: factory_main.php');
+        exit();
+    }
 
     if ($is_production_worker) {
         $current_user_id = (int) ($_SESSION['id'] ?? $_SESSION['user_id'] ?? 0);
@@ -914,7 +1259,7 @@ elseif ($module === 'factory') {
 
         if (empty($errors)) {
             $check_stage = $conn->prepare(
-                "SELECT work_status, employee_id
+                "SELECT work_status, employee_id, completion_review_status
                  FROM production_assignments
                  WHERE production_id = ? AND work_type = ?
                  LIMIT 1"
@@ -926,6 +1271,8 @@ elseif ($module === 'factory') {
 
             if ($stage_row && $stage_row['work_status'] === 'Done') {
                 $errors['assignment'] = "A completed work area cannot be reassigned.";
+            } elseif ($stage_row && $stage_row['completion_review_status'] === 'pending_review') {
+                $errors['assignment'] = "A work area awaiting supervisor approval cannot be reassigned.";
             }
         }
 
@@ -941,7 +1288,12 @@ elseif ($module === 'factory') {
                  ON DUPLICATE KEY UPDATE
                     employee_id = VALUES(employee_id),
                     assigned_by = VALUES(assigned_by),
-                    assigned_at = CURRENT_TIMESTAMP"
+                    assigned_at = CURRENT_TIMESTAMP,
+                    completion_review_status = 'none',
+                    completion_review_note = NULL,
+                    completion_reviewed_by = NULL,
+                    completion_reviewed_at = NULL,
+                    completed_at = NULL"
             );
             $stmt->bind_param("sisi", $production_id, $employee_id, $work_type, $assigned_by);
             $conn->begin_transaction();
@@ -1252,7 +1604,7 @@ elseif ($module === 'factory') {
             $stage_completed = false;
             $assignment_work_type_filter = $current_work_type === null ? '' : " AND work_type = '$current_work_type'";
             $assignment_check = $conn->prepare(
-                "SELECT work_type, work_status, assigned_by
+                "SELECT work_type, work_status, assigned_by, completion_review_status
                  FROM production_assignments
                  WHERE production_id = ? AND employee_id = ?$assignment_work_type_filter
                  LIMIT 1
@@ -1263,7 +1615,9 @@ elseif ($module === 'factory') {
             $worker_assignment = $assignment_check->get_result()->fetch_assoc();
             $assignment_check->close();
 
-            $can_complete_stage = $worker_assignment && $worker_assignment['work_status'] === 'Pending';
+            $can_complete_stage = $worker_assignment
+                && $worker_assignment['work_status'] === 'Pending'
+                && $worker_assignment['completion_review_status'] !== 'pending_review';
             if ($can_complete_stage && $worker_assignment['work_type'] === 'Packaging') {
                 $cooking_check = $conn->prepare(
                     "SELECT work_status
@@ -1282,26 +1636,18 @@ elseif ($module === 'factory') {
             if ($can_complete_stage) {
                 $complete_stage = $conn->prepare(
                     "UPDATE production_assignments
-                     SET work_status = 'Done', completed_at = NOW()
-                     WHERE production_id = ? AND employee_id = ? AND work_type = ? AND work_status = 'Pending'"
+                     SET completion_review_status = 'pending_review',
+                         completion_review_note = NULL,
+                         completion_reviewed_by = NULL,
+                         completion_reviewed_at = NULL
+                     WHERE production_id = ? AND employee_id = ? AND work_type = ?
+                       AND work_status = 'Pending'
+                       AND completion_review_status <> 'pending_review'"
                 );
                 $complete_stage->bind_param("sis", $production_id, $current_employee_id, $worker_assignment['work_type']);
                 $stage_completed = $complete_stage->execute() && $complete_stage->affected_rows === 1;
                 $complete_stage->close();
 
-                if ($stage_completed && $worker_assignment['work_type'] === 'Packaging') {
-                    $complete_production = $conn->prepare(
-                        "UPDATE production
-                         SET product_status = 'product done'
-                         WHERE production_id = ?
-                           AND (product_status != 'product done' OR product_status IS NULL)"
-                    );
-                    $complete_production->bind_param("s", $production_id);
-                    if (!$complete_production->execute() || $complete_production->affected_rows !== 1) {
-                        $completion_error = "The packaging stage was completed, but the production status could not be updated.";
-                    }
-                    $complete_production->close();
-                }
                 if ($stage_completed) {
                     $actor_user_id = (int) ($_SESSION['id'] ?? $_SESSION['user_id'] ?? 0);
                     $actor_name = trim((string) ($_SESSION['name'] ?? ''));
@@ -1314,31 +1660,36 @@ elseif ($module === 'factory') {
                             (string) $production_id,
                             $actor_user_id,
                             $actor_name,
-                            'stage_completed',
+                            'stage_submitted_for_review',
                             $worker_assignment['work_type'],
                             null,
                             null,
                             $current_employee_id,
                             getProductionEmployeeName($conn, $current_employee_id)
                         );
-                        createTaskNotification(
-                            $conn,
-                            (int) ($worker_assignment['assigned_by'] ?? 0),
-                            $actor_user_id,
-                            'production_stage_completed',
-                            'Production stage completed',
-                            $actor_name . ' completed the ' . $worker_assignment['work_type'] . ' stage for item #' . $production_id . '.',
-                            'factory_main.php',
-                            'production',
-                            (string) $production_id
-                        );
+                        $assigner_id = (int) ($worker_assignment['assigned_by'] ?? 0);
+                        if ($assigner_id > 0) {
+                            createTaskNotification(
+                                $conn,
+                                $assigner_id,
+                                $actor_user_id,
+                                'production_stage_review_requested',
+                                'Production stage submitted for review',
+                                $actor_name . ' submitted the ' . $worker_assignment['work_type'] . ' stage for item #' . $production_id . ' for your approval.',
+                                'factory_main.php',
+                                'production',
+                                (string) $production_id
+                            );
+                        }
                     } catch (RuntimeException $exception) {
                         $completion_error = "This stage could not be completed with its activity history: " . $exception->getMessage();
                     }
                 }
             } else {
-                $completion_error = $worker_assignment && $worker_assignment['work_type'] === 'Packaging'
-                    ? "Packaging can only be completed after Cooking is done."
+                $completion_error = $worker_assignment
+                    && $worker_assignment['work_type'] === 'Packaging'
+                    && $worker_assignment['completion_review_status'] !== 'pending_review'
+                    ? "Packaging can only be submitted after Cooking is approved."
                     : "This task is not assigned to your account or is already completed.";
             }
 
@@ -1349,7 +1700,9 @@ elseif ($module === 'factory') {
             if ($completion_error === null) {
                 if (!$conn->commit()) {
                     $conn->rollback();
-                    $_SESSION['production_error'] = "The completed stage could not be saved.";
+                    $_SESSION['production_error'] = "The production stage submission could not be saved.";
+                } else {
+                    $_SESSION['production_success'] = "Production stage submitted for supervisor review.";
                 }
             } else {
                 $conn->rollback();
@@ -1361,7 +1714,7 @@ elseif ($module === 'factory') {
             $_SESSION['production_error'] = "Production stages can only be completed by the assigned Cooking and Packaging workers.";
         }
         
-        $redirect_page = $is_production_worker ? 'production.php' : 'factory_main.php';
+        $redirect_page = $is_production_worker ? 'Production.php' : 'factory_main.php';
         header("Location: $redirect_page");
         exit();
     }
@@ -1391,7 +1744,9 @@ elseif ($module === 'factory') {
             $pending_assignment_source = "INNER JOIN production_assignments pa
                                             ON pa.production_id = CAST(p.production_id AS CHAR)
                                            AND pa.work_type IN ('Cooking', 'Packaging')
-                                         LEFT JOIN employee e ON e.employee_id = pa.employee_id";
+                                         LEFT JOIN employee e ON e.employee_id = pa.employee_id
+                                         LEFT JOIN users assignment_user ON assignment_user.id = pa.assigned_by
+                                         LEFT JOIN users review_user ON review_user.id = pa.completion_reviewed_by";
             $history_assignment_source = $pending_assignment_source;
             $pending_stage_visibility_filter = $assignment_employee_filter . $role_stage_filter . $stage_visibility_filter;
             $history_assignment_filter = $assignment_employee_filter . $role_stage_filter;
@@ -1403,14 +1758,23 @@ elseif ($module === 'factory') {
                                          LEFT JOIN production_assignments pa
                                            ON pa.production_id = CAST(p.production_id AS CHAR)
                                           AND pa.work_type = stages.work_type
-                                         LEFT JOIN employee e ON e.employee_id = pa.employee_id";
+                                         LEFT JOIN employee e ON e.employee_id = pa.employee_id
+                                         LEFT JOIN users assignment_user ON assignment_user.id = pa.assigned_by
+                                         LEFT JOIN users review_user ON review_user.id = pa.completion_reviewed_by";
             $history_assignment_source = $pending_assignment_source;
-            $pending_stage_visibility_filter = "";
+            $pending_stage_visibility_filter = " AND NOT (
+                                                stages.work_type = 'Cooking'
+                                                AND COALESCE(pa.work_status, '') = 'Done'
+                                            )";
             $history_assignment_filter = "";
         }
         $assigned_status_expression = $is_production_worker
-            ? "COALESCE(pa.work_status, 'Pending')"
+            ? "CASE
+                   WHEN pa.completion_review_status = 'pending_review' THEN 'Awaiting Approval'
+                   ELSE COALESCE(pa.work_status, 'Pending')
+               END"
             : "CASE
+                   WHEN pa.completion_review_status = 'pending_review' THEN 'Awaiting Approval'
                    WHEN stages.work_type = 'Packaging'
                      AND pa.employee_id IS NULL
                      AND EXISTS (
@@ -1449,6 +1813,10 @@ elseif ($module === 'factory') {
         $sql_pending = "SELECT p.production_id, p.product_name, p.target_pcs, p.Stock_number, p.quantity, p.due_date, p.product_status,
                                pa.employee_id AS assigned_employee_id, e.username AS assigned_employee_name,
                                e.position AS assigned_position,
+                               pa.assigned_by, assignment_user.name AS assigned_by_name,
+                               pa.completion_review_status, pa.completion_review_note,
+                               pa.completion_reviewed_by, review_user.name AS completion_reviewed_by_name,
+                               pa.completion_reviewed_at,
                                " . ($is_production_worker ? "pa.work_type" : "stages.work_type") . " AS assigned_work_type,
                                $assigned_status_expression AS assigned_work_status
                         FROM production p
@@ -1468,6 +1836,10 @@ elseif ($module === 'factory') {
         $sql_history = "SELECT p.production_id, p.product_name, p.target_pcs, p.Stock_number, p.quantity, p.due_date, p.product_status,
                                pa.employee_id AS assigned_employee_id, e.username AS assigned_employee_name,
                                e.position AS assigned_position,
+                               pa.assigned_by, assignment_user.name AS assigned_by_name,
+                               pa.completion_review_status, pa.completion_review_note,
+                               pa.completion_reviewed_by, review_user.name AS completion_reviewed_by_name,
+                               pa.completion_reviewed_at,
                                " . ($is_production_worker ? "pa.work_type" : "stages.work_type") . " AS assigned_work_type,
                                $history_status_expression AS assigned_work_status
                         FROM production p

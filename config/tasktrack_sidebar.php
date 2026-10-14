@@ -3,9 +3,32 @@ $tasktrackRole = (string) ($_SESSION['role'] ?? '');
 $tasktrackActive = $tasktrackActive ?? '';
 $tasktrackName = (string) ($_SESSION['name'] ?? 'TaskTrack User');
 $tasktrackEmail = (string) ($_SESSION['email'] ?? '');
+$tasktrackProfilePicture = null;
+if (isset($conn, $_SESSION['id']) && $conn instanceof mysqli) {
+    $profilePictureStmt = $conn->prepare('SELECT profile_picture FROM users WHERE id = ? LIMIT 1');
+    if (!$profilePictureStmt) {
+        throw new RuntimeException('Unable to prepare the signed-in profile picture lookup: ' . $conn->error);
+    }
+    $tasktrackUserId = (int) $_SESSION['id'];
+    $profilePictureStmt->bind_param('i', $tasktrackUserId);
+    if (!$profilePictureStmt->execute()) {
+        $error = $profilePictureStmt->error;
+        $profilePictureStmt->close();
+        throw new RuntimeException('Unable to load the signed-in profile picture: ' . $error);
+    }
+    $tasktrackProfilePicture = $profilePictureStmt->get_result()->fetch_assoc()['profile_picture'] ?? null;
+    $profilePictureStmt->close();
+    if (
+        !is_string($tasktrackProfilePicture)
+        || !preg_match('/^[a-f0-9]{32}\.(jpg|png|webp)$/', $tasktrackProfilePicture)
+    ) {
+        $tasktrackProfilePicture = null;
+    }
+}
 $tasktrackDashboard = match ($tasktrackRole) {
     'admin' => 'admin.php',
     'HR' => 'HR.php',
+    'payroll' => 'payroll.php',
     'super' => 'supervisor.php',
     'pro', 'cooking', 'packaging' => 'factory_main.php',
     'log' => 'delivery_main.php',
@@ -14,6 +37,7 @@ $tasktrackDashboard = match ($tasktrackRole) {
 $tasktrackRoleLabel = match ($tasktrackRole) {
     'admin' => 'Administrator',
     'HR' => 'Human Resources',
+    'payroll' => 'Payroll Manager',
     'super' => 'Supervisor',
     'pro' => 'Production Staff',
     'cooking' => 'Cooking Staff',
@@ -27,6 +51,9 @@ $tasktrackNavItems = match ($tasktrackRole) {
         'accounts' => ['Accounts', 'admin.php?section=accounts', 'employee'],
         'audit' => ['Audit log', 'admin.php?section=audit', 'tasks'],
         'reports' => ['Reports', 'admin.php?section=reports', 'production'],
+    ],
+    'payroll' => [
+        'dashboard' => ['Payroll Dashboard', 'payroll.php', 'dashboard'],
     ],
     'employee' => [],
     default => [
@@ -49,11 +76,19 @@ $tasktrackIcons = [
 ];
 ?>
 <aside class="tasktrack-sidebar" id="sidebar" aria-label="Main navigation">
-    <a class="tasktrack-brand" href="<?= htmlspecialchars($tasktrackDashboard, ENT_QUOTES, 'UTF-8'); ?>" aria-label="TaskTrack dashboard">T</a>
+    <a class="tasktrack-brand<?= $tasktrackProfilePicture === null ? ' is-placeholder' : ''; ?>" href="<?= htmlspecialchars($tasktrackDashboard, ENT_QUOTES, 'UTF-8'); ?>" aria-label="<?= htmlspecialchars($tasktrackName . ' dashboard', ENT_QUOTES, 'UTF-8'); ?>">
+        <?php if ($tasktrackProfilePicture !== null): ?>
+            <img src="uploads/profile-pictures/<?= htmlspecialchars($tasktrackProfilePicture, ENT_QUOTES, 'UTF-8'); ?>" alt="">
+        <?php else: ?>
+            <?= htmlspecialchars(mb_strtoupper(mb_substr(trim($tasktrackName), 0, 1)) ?: 'U', ENT_QUOTES, 'UTF-8'); ?>
+        <?php endif; ?>
+    </a>
     <div class="tasktrack-account">
-        <strong>TASKTRACK</strong>
-        <span><?= htmlspecialchars($tasktrackRoleLabel . ': ' . $tasktrackName, ENT_QUOTES, 'UTF-8'); ?></span>
-        <span><?= htmlspecialchars($tasktrackEmail, ENT_QUOTES, 'UTF-8'); ?></span>
+        <span class="tasktrack-account-details">
+            <strong><?= htmlspecialchars($tasktrackName, ENT_QUOTES, 'UTF-8'); ?></strong>
+            <span><?= htmlspecialchars($tasktrackRoleLabel, ENT_QUOTES, 'UTF-8'); ?></span>
+            <span><?= htmlspecialchars($tasktrackEmail, ENT_QUOTES, 'UTF-8'); ?></span>
+        </span>
     </div>
     <nav class="tasktrack-nav">
         <?php foreach ($tasktrackNavItems as $key => [$label, $url, $icon]): ?>

@@ -55,8 +55,30 @@ if (isset($_POST['Submit'])) {
                 // Dto mag veverify kung hindi naka lockout ung acc
                 
                 //I-verify ung password
-                if (password_verify($plain_password, $row1['password']) || $plain_password === $row1['password']) {
+                $storedPassword = (string) $row1['password'];
+                $passwordMatches = password_verify($plain_password, $storedPassword);
+                if (!$passwordMatches && hash_equals($storedPassword, $plain_password)) {
+                    $passwordMatches = true;
+                }
 
+                if ($passwordMatches) {
+                    if (!password_get_info($storedPassword)['algo'] || password_needs_rehash($storedPassword, PASSWORD_DEFAULT)) {
+                        $upgradedPassword = password_hash($plain_password, PASSWORD_DEFAULT);
+                        if ($upgradedPassword === false) {
+                            throw new RuntimeException('Unable to securely update the account password.');
+                        }
+                        $passwordUpdate = $conn->prepare('UPDATE users SET password = ? WHERE id = ?');
+                        if (!$passwordUpdate) {
+                            throw new RuntimeException('Unable to prepare legacy password upgrade: ' . $conn->error);
+                        }
+                        $passwordUpdate->bind_param('si', $upgradedPassword, $user_id);
+                        if (!$passwordUpdate->execute()) {
+                            $error = $passwordUpdate->error;
+                            $passwordUpdate->close();
+                            throw new RuntimeException('Unable to upgrade the account password: ' . $error);
+                        }
+                        $passwordUpdate->close();
+                    }
                     // Pag tama ung pass may rereset ung attempt's
                     mysqli_query($conn, "UPDATE `users` SET login_attempts = 0, lockout_time = NULL WHERE id = $user_id");
 
@@ -65,6 +87,7 @@ if (isset($_POST['Submit'])) {
                     $_SESSION['email'] = $row1['email'];
                     $_SESSION['name'] = $row1['name'];
                     $_SESSION['role'] = $row1['role']; 
+                    $_SESSION['profile_picture'] = $row1['profile_picture'] ?? null;
                     $_SESSION['last_activity'] = time();
 
                     switch ($row1['role']) {
@@ -80,7 +103,7 @@ if (isset($_POST['Submit'])) {
                         case 'pro':
                         case 'cooking':
                         case 'packaging':
-                            $redirect_url = 'production.php';
+                            $redirect_url = 'Production.php';
                             break;
                         case 'log': 
                             $redirect_url = 'logistic.php';

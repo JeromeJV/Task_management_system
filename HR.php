@@ -215,7 +215,11 @@ while ($attendance_row = mysqli_fetch_assoc($attendance_result)) {
                             >
                                 <div class="hr-employee-card-top">
                                     <span class="hr-employee-avatar" aria-hidden="true">
-                                        <?= htmlspecialchars(strtoupper(substr($row['username'] ?? 'E', 0, 1))); ?>
+                                        <?php if (!empty($row['account_profile_picture']) && preg_match('/^[a-f0-9]{32}\.(jpg|png|webp)$/', (string) $row['account_profile_picture'])): ?>
+                                            <img src="uploads/profile-pictures/<?= htmlspecialchars($row['account_profile_picture'], ENT_QUOTES, 'UTF-8'); ?>" alt="">
+                                        <?php else: ?>
+                                            <?= htmlspecialchars(strtoupper(substr($row['username'] ?? 'E', 0, 1))); ?>
+                                        <?php endif; ?>
                                     </span>
                                     <span class="hr-employee-status <?= $attendance_status === 'present' ? 'is-present' : 'is-absent'; ?>">
                                         <span class="hr-status-dot" aria-hidden="true"></span>

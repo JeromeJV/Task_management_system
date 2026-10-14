@@ -80,7 +80,14 @@ summary {
 .employee-avatar {
     width: 40px;
     height: 40px;
+    overflow: hidden;
     font-size: 12px;
+}
+
+.employee-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
 .employee-name {
@@ -145,7 +152,7 @@ summary {
 
 .summary-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 16px;
     margin-bottom: 16px;
 }
@@ -172,6 +179,11 @@ summary {
 .summary-card.is-pending {
     --accent: #f59e0b;
     --soft: #fff8e8;
+}
+
+.summary-card.is-review {
+    --accent: #ef3438;
+    --soft: #fff0f1;
 }
 
 .summary-card.is-completed {
@@ -221,6 +233,74 @@ summary {
     box-shadow: 0 4px 14px rgb(27 39 57 / 4%);
 }
 
+.task-view-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.task-view-tab {
+    min-height: 38px;
+    padding: 0 17px;
+    border: 1px solid #dfe5e2;
+    border-radius: 8px;
+    background: #fff;
+    color: #46504b;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 650;
+    box-shadow: 0 1px 3px rgb(24 47 36 / 3%);
+    transition: background-color .18s ease, border-color .18s ease, box-shadow .18s ease, color .18s ease, transform .18s ease;
+    white-space: nowrap;
+}
+
+.task-view-tab:hover:not(.is-active) {
+    border-color: #b9d2c5;
+    background: #f8fbf9;
+    color: #176b49;
+    box-shadow: 0 3px 8px rgb(24 79 55 / 8%);
+    transform: translateY(-1px);
+}
+
+.task-view-tab.is-active:hover {
+    border-color: #155f42;
+    background: #1b7352;
+    box-shadow: 0 4px 10px rgb(23 107 73 / 22%);
+    transform: translateY(-1px);
+}
+
+.task-view-tab:focus-visible {
+    outline: 3px solid rgb(27 115 82 / 28%);
+    outline-offset: 2px;
+}
+
+.task-view-tab.is-active {
+    border-color: #1b7352;
+    background: #1b7352;
+    color: #fff;
+    box-shadow: 0 2px 5px rgb(23 107 73 / 16%);
+}
+
+.task-view-panel[hidden] {
+    display: none;
+}
+
+.task-history-panel {
+    margin-top: 0;
+}
+
+.history-count {
+    flex: 0 0 auto;
+    padding: 6px 10px;
+    border: 1px solid #d4f5e7;
+    border-radius: 999px;
+    background: #f0fdf7;
+    color: #087a55;
+    font-size: 10px;
+    font-weight: 700;
+}
+
 .tasks-heading {
     display: flex;
     min-height: 45px;
@@ -230,7 +310,8 @@ summary {
     margin-bottom: 12px;
 }
 
-.tasks-heading h1 {
+.tasks-heading h1,
+.tasks-heading h2 {
     margin: 0;
     color: #172033;
     font-size: 20px;
@@ -378,6 +459,11 @@ summary {
     background: #f8fefb;
 }
 
+.task-row.is-review td {
+    border-color: #ffcfd1;
+    background: #fff7f7;
+}
+
 .task-row.is-overdue td {
     border-color: #ffe0e1;
     background: #fffafa;
@@ -497,6 +583,26 @@ summary {
     color: #059669;
 }
 
+.status-pill.is-review {
+    border-color: #ffcfd1;
+    background: #fff0f1;
+    color: #c62832;
+}
+
+.status-pill.is-review i {
+    background: #ef3438;
+}
+
+.status-pill.is-changes_requested {
+    border-color: #ffcfd1;
+    background: #fff0f1;
+    color: #c62832;
+}
+
+.status-pill.is-changes_requested i {
+    background: #ef3438;
+}
+
 .status-pill.is-overdue {
     border-color: #ffcfd1;
     background: #fff2f2;
@@ -598,6 +704,12 @@ summary {
     cursor: pointer;
     font-size: 10px;
     font-weight: 650;
+}
+
+.task-row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
 }
 
 .open-button:hover {
@@ -751,6 +863,40 @@ summary {
     background: #f1f7ff;
 }
 
+.review-pending-notice,
+.review-feedback {
+    margin-top: 15px;
+    padding: 12px 13px;
+    border: 1px solid #d5e2ff;
+    border-radius: 9px;
+    background: #f0f5ff;
+    color: #315fbd;
+    font-size: 11px;
+    line-height: 1.55;
+}
+
+.review-pending-notice {
+    border-color: #ffcfd1;
+    background: #fff0f1;
+    color: #b4232f;
+}
+
+.review-feedback {
+    border-color: #f0dfb4;
+    background: #fffaf0;
+    color: #72551a;
+}
+
+.review-feedback strong {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.review-feedback p {
+    margin: 0;
+    white-space: pre-wrap;
+}
+
 .progress-update-heading {
     justify-content: space-between;
     color: #1d4ed8;
@@ -880,6 +1026,9 @@ summary {
 }
 
 .completed-return {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     margin-top: 14px;
     padding: 9px 13px;
     border: 0;
@@ -889,6 +1038,59 @@ summary {
     cursor: pointer;
     font-size: 11px;
     font-weight: 650;
+}
+
+.task-review-history {
+    display: grid;
+    gap: 7px;
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px solid #e7ecef;
+    border-radius: 9px;
+    background: #fbfdfc;
+}
+
+.task-review-history > strong {
+    color: #26342a;
+    font-size: 11px;
+}
+
+.task-review-history article {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 5px 12px;
+    padding-top: 7px;
+    border-top: 1px solid #e7ecef;
+}
+
+.task-review-history article span {
+    color: #34423a;
+    font-size: 10px;
+    font-weight: 650;
+}
+
+.task-review-history article time,
+.task-review-history article small {
+    color: #78847d;
+    font-size: 10px;
+    line-height: 1.5;
+}
+
+.task-review-history article small {
+    flex: 1 0 100%;
+    overflow-wrap: anywhere;
+}
+
+.task-review-history article time {
+    color: #78847d;
+}
+
+.task-review-history-empty {
+    margin: 0;
+    color: #78847d;
+    font-size: 10px;
+    line-height: 1.5;
 }
 
 @media (max-width: 760px) {
@@ -918,6 +1120,16 @@ summary {
 
     .tasks-panel {
         padding: 14px 11px;
+    }
+
+    .task-view-tabs {
+        gap: 8px;
+    }
+
+    .task-view-tab {
+        min-height: 36px;
+        padding: 0 11px;
+        font-size: 10px;
     }
 
     .tasks-heading {

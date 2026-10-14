@@ -13,6 +13,8 @@ $message = (string) ($message ?? '');
 $status_message = (string) ($status_message ?? '');
 $delivery_error = $_SESSION['delivery_error'] ?? '';
 unset($_SESSION['delivery_error']);
+$delivery_review_success = $_SESSION['delivery_success'] ?? '';
+unset($_SESSION['delivery_success']);
 $active_delivery_section = isset($_GET['report_month']) || isset($_GET['report_year']) ? 'reports' : 'pending';
 $delivery_assignment_result = null;
 $delivery_assignment_feedback = '';
@@ -81,6 +83,7 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
     <link rel="stylesheet" href="css/table-scroll.css?v=<?= filemtime(__DIR__ . '/css/table-scroll.css'); ?>">
     <link rel="stylesheet" href="css/calendar-picker.css?v=<?= filemtime(__DIR__ . '/css/calendar-picker.css'); ?>">
     <link rel="stylesheet" href="css/select-control.css?v=<?= filemtime(__DIR__ . '/css/select-control.css'); ?>">
+    <link rel="stylesheet" href="css/task-review-dialog.css?v=<?= filemtime(__DIR__ . '/css/task-review-dialog.css'); ?>">
     <style>
         /* ============================================================
            MODAL
@@ -154,6 +157,13 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
             color: #dc3545;
             font-size: 0.85em;
             margin-top: 3px;
+        }
+        .delivery-review-success {
+            margin: 15px 0;
+            padding: 10px;
+            border-radius: 6px;
+            background: #d4edda;
+            color: #155724;
         }
         .delivery-product-status-note {
             display: block;
@@ -858,6 +868,9 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
         <?php if ($delivery_error !== ''): ?>
             <div role="alert" class="delivery-error-alert"><?= htmlspecialchars($delivery_error); ?></div>
         <?php endif; ?>
+        <?php if ($delivery_review_success !== ''): ?>
+            <div role="status" class="delivery-review-success"><?= htmlspecialchars($delivery_review_success); ?></div>
+        <?php endif; ?>
 
         <!-- ========================================================
              CONTENT
@@ -1061,6 +1074,10 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
                                         $delivery_is_overdue = $delivery_is_overdue && !$delivery_is_cancelled;
                                         $delivery_is_due_soon = $delivery_days_until_due !== null && $delivery_days_until_due >= 0 && $delivery_days_until_due <= 3;
                                         $delivery_driver_name = (string) ($row['driver_name'] ?? 'Unassigned');
+                                        $delivery_is_awaiting_review = ($row['completion_review_status'] ?? '') === 'pending_review';
+                                        $delivery_can_review = ($_SESSION['role'] ?? '') === 'super'
+                                            && $delivery_is_awaiting_review
+                                            && (empty($row['assigned_by']) || (int) $row['assigned_by'] === (int) ($_SESSION['id'] ?? 0));
                                         ?>
                                         <tr
                                             class="delivery-task-row <?= $delivery_is_overdue ? 'is-overdue' : ($delivery_is_due_soon ? 'is-due-soon' : ''); ?>"
@@ -1136,6 +1153,14 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
                                                     data-activity-id="<?= (int) $row['delivery_id']; ?>"
                                                     data-activity-product="<?= htmlspecialchars($row['product_name'] ?? 'N/A', ENT_QUOTES, 'UTF-8'); ?>"
                                                 >Activity</button>
+                                                <?php if ($delivery_can_review): ?>
+                                                    <button
+                                                        type="button"
+                                                        class="delivery-review-open-button edit-btn"
+                                                        data-delivery-id="<?= (int) $row['delivery_id']; ?>"
+                                                        data-route="<?= htmlspecialchars((string) ($row['product_name'] ?? 'this delivery') . ' to ' . (string) ($row['route'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                                                    >Review submission</button>
+                                                <?php endif; ?>
 
                                                 <form
                                                     action="delivery_main.php"
@@ -1752,6 +1777,25 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
 
 </div>
 
+<dialog class="task-review-dialog" id="deliveryReviewDialog" aria-labelledby="deliveryReviewTitle">
+    <form method="post" action="delivery_main.php" class="task-review-dialog-card">
+        <input type="hidden" name="task_review_csrf" value="<?= htmlspecialchars($_SESSION['task_review_csrf'], ENT_QUOTES, 'UTF-8'); ?>">
+        <input type="hidden" name="review_return" value="delivery_main.php">
+        <input type="hidden" name="delivery_id" id="deliveryReviewId">
+        <span class="task-review-dialog-kicker">LOGISTICS TASK</span>
+        <h2 id="deliveryReviewTitle">Review delivery submission</h2>
+        <p class="task-review-dialog-description" id="deliveryReviewDescription"></p>
+        <label class="task-review-note-label" for="deliveryReviewNote">Reason for requesting changes</label>
+        <textarea id="deliveryReviewNote" name="review_note" maxlength="1000" rows="4" placeholder="Explain what needs to be changed"></textarea>
+        <p class="task-review-dialog-hint">A reason is required only when you request changes.</p>
+        <div class="task-review-dialog-actions">
+            <button class="task-review-cancel-button" type="button" id="closeDeliveryReview">Cancel</button>
+            <button class="task-reject-button" type="submit" name="review_delivery" value="reject">Request changes</button>
+            <button class="task-approve-button" type="submit" name="review_delivery" value="approve">Approve delivery</button>
+        </div>
+    </form>
+</dialog>
+
 
 <div
     id="assignmentLoading"
@@ -1813,6 +1857,29 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
 ============================================================ -->
 
 <script>
+    const deliveryReviewDialog = document.getElementById('deliveryReviewDialog');
+    const deliveryReviewNote = document.getElementById('deliveryReviewNote');
+    document.querySelectorAll('.delivery-review-open-button').forEach((button) => {
+        button.addEventListener('click', () => {
+            document.getElementById('deliveryReviewId').value = button.dataset.deliveryId;
+            document.getElementById('deliveryReviewDescription').textContent =
+                `Choose whether to approve "${button.dataset.route}" or request changes from the driver.`;
+            deliveryReviewNote.value = '';
+            deliveryReviewNote.required = false;
+            deliveryReviewDialog.showModal();
+        });
+    });
+    deliveryReviewDialog.querySelector('[value="reject"]').addEventListener('click', () => {
+        deliveryReviewNote.required = true;
+    });
+    deliveryReviewDialog.querySelector('[value="approve"]').addEventListener('click', () => {
+        deliveryReviewNote.required = false;
+    });
+    document.getElementById('closeDeliveryReview').addEventListener('click', () => deliveryReviewDialog.close());
+    deliveryReviewDialog.addEventListener('click', (event) => {
+        if (event.target === deliveryReviewDialog) deliveryReviewDialog.close();
+    });
+
 
 
 /* ============================================================
