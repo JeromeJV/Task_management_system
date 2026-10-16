@@ -20,13 +20,17 @@ $sendApplicantStatusEmail = static function (string $email, string $applicantNam
     $mail = new PHPMailer(true);
     try {
         $mail->isSMTP();
-        $mail->Host       = 'smtp.gmail.com';
+        $mail->Host       = getenv('TASKTRACK_SMTP_HOST') ?: 'smtp.gmail.com';
         $mail->SMTPAuth   = true;
-        $mail->Username   = 'tasktrack74@gmail.com';
-        $mail->Password   = 'wukj ciyu ihsm xpqt';
+        $mail->Username   = getenv('TASKTRACK_SMTP_USERNAME') ?: '';
+        $mail->Password   = getenv('TASKTRACK_SMTP_PASSWORD') ?: '';
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        $mail->Port       = 587;
-        $mail->setFrom('tasktrack74@gmail.com', 'TaskTrack HR Team');
+        $mail->Port       = (int) (getenv('TASKTRACK_SMTP_PORT') ?: 587);
+        if ($mail->Username === '' || $mail->Password === '') {
+            error_log('Applicant status email not sent: SMTP credentials are not configured.');
+            return false;
+        }
+        $mail->setFrom(getenv('TASKTRACK_SMTP_FROM') ?: $mail->Username, 'TaskTrack HR Team');
         $mail->addAddress($email, $applicantName);
         $mail->isHTML(true);
         $mail->Subject = $subject;
@@ -133,41 +137,62 @@ if (isset($_POST['submit'])) {
 
     // --- File Upload Handling ---
     $new_resume_name = "";
-    if (isset($_FILES['resume']) && $_FILES['resume']['error'] == UPLOAD_ERR_OK) {
-        $fileTmpPath   = $_FILES['resume']['tmp_name'];
-        $fileName      = $_FILES['resume']['name'];
-        $fileSize      = $_FILES['resume']['size'];
-        $fileExtension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
-
-        $allowedExtensions = array('jpg', 'jpeg', 'png', 'pdf');
-        $allowedMimeTypes  = array('image/jpeg', 'image/png', 'application/pdf');
-
-        $finfo = new finfo(FILEINFO_MIME_TYPE);
-        $mimeType = $finfo->file($fileTmpPath);
-
-        if (!in_array($fileExtension, $allowedExtensions) || !in_array($mimeType, $allowedMimeTypes)) {
-            $resume_err = "Invalid file type. Only JPG, PNG, and PDF are allowed.";
-            $isValid = false;
-        } elseif ($fileSize > 10 * 1024 * 1024) { 
-            $resume_err = "File size must be less than 10MB.";
-            $isValid = false;
-        } else {
-            $new_resume_name = time() . '_' . bin2hex(random_bytes(4)) . '.' . $fileExtension;
-            $uploadFileDir   = './uploads/';
-            
-            if (!is_dir($uploadFileDir)) {
-                mkdir($uploadFileDir, 0755, true);
-            }
-            
-            $dest_path = $uploadFileDir . $new_resume_name;
-            if (!move_uploaded_file($fileTmpPath, $dest_path)) {
-                $resume_err = "Error uploading the file. Please try again.";
-                $isValid = false;
-            }
-        }
-    } else {
+    $resume_upload = $_FILES['resume'] ?? null;
+    if (!is_array($resume_upload) || !isset($resume_upload['error'], $resume_upload['tmp_name'], $resume_upload['name'], $resume_upload['size'])) {
         $resume_err = "Please upload your resume document.";
         $isValid = false;
+    } elseif ((int) $resume_upload['error'] !== UPLOAD_ERR_OK) {
+        $resume_err = match ((int) $resume_upload['error']) {
+            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => "The resume is too large. Please upload a file no larger than 10MB.",
+            UPLOAD_ERR_PARTIAL => "The resume upload was interrupted. Please try again.",
+            UPLOAD_ERR_NO_FILE => "Please upload your resume document.",
+            UPLOAD_ERR_NO_TMP_DIR, UPLOAD_ERR_CANT_WRITE, UPLOAD_ERR_EXTENSION => "The resume could not be uploaded. Please contact HR or try again later.",
+            default => "The resume could not be uploaded. Please try again."
+        };
+        $isValid = false;
+    } else {
+        $fileTmpPath = (string) $resume_upload['tmp_name'];
+        $fileName = (string) $resume_upload['name'];
+        $fileSize = (int) $resume_upload['size'];
+        $fileExtension = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+        $allowedMimeTypes = [
+            'jpg' => ['image/jpeg'],
+            'jpeg' => ['image/jpeg'],
+            'png' => ['image/png'],
+            'pdf' => ['application/pdf'],
+            'doc' => ['application/msword'],
+            'docx' => ['application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+        ];
+
+        if (!is_uploaded_file($fileTmpPath)) {
+            $resume_err = "The uploaded resume could not be verified. Please try again.";
+            $isValid = false;
+        } elseif ($fileSize < 1 || $fileSize > 10 * 1024 * 1024) {
+            $resume_err = "The resume must be no larger than 10MB.";
+            $isValid = false;
+        } else {
+            $finfo = new finfo(FILEINFO_MIME_TYPE);
+            $mimeType = $finfo->file($fileTmpPath);
+
+            if (!isset($allowedMimeTypes[$fileExtension]) || !in_array($mimeType, $allowedMimeTypes[$fileExtension], true)) {
+                $resume_err = "Invalid file type. Please upload a PDF, Word document, JPG, or PNG.";
+                $isValid = false;
+            } else {
+                $new_resume_name = time() . '_' . bin2hex(random_bytes(4)) . '.' . $fileExtension;
+                $uploadFileDir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'uploads';
+
+                if (!is_dir($uploadFileDir) && !mkdir($uploadFileDir, 0755, true) && !is_dir($uploadFileDir)) {
+                    $resume_err = "The resume could not be saved. Please contact HR or try again later.";
+                    $isValid = false;
+                } else {
+                    $dest_path = $uploadFileDir . DIRECTORY_SEPARATOR . $new_resume_name;
+                    if (!move_uploaded_file($fileTmpPath, $dest_path)) {
+                        $resume_err = "The resume could not be saved. Please try again.";
+                        $isValid = false;
+                    }
+                }
+            }
+        }
     }
 
     // --- Database Insertion ---
@@ -191,10 +216,22 @@ if (isset($_POST['submit'])) {
             if ($stmt->execute()) {
                 $message = "Your Application was successfully sent.";
             } else {
+                if ($new_resume_name !== '') {
+                    $uploadedResumePath = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . $new_resume_name;
+                    if (is_file($uploadedResumePath) && !unlink($uploadedResumePath)) {
+                        error_log('Unable to remove resume file after applicant insert failed.');
+                    }
+                }
                 $message = "Execution Error: " . htmlspecialchars($stmt->error);
             }
             $stmt->close();
         } else {
+            if ($new_resume_name !== '') {
+                $uploadedResumePath = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . $new_resume_name;
+                if (is_file($uploadedResumePath) && !unlink($uploadedResumePath)) {
+                    error_log('Unable to remove resume file after applicant insert could not be prepared.');
+                }
+            }
             $message = "Prepare Error: " . htmlspecialchars($conn->error);
         }
     }

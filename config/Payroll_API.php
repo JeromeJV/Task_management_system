@@ -5,6 +5,7 @@ require_once __DIR__ . '/attendance_helpers.php';
 require_once __DIR__ . '/payroll_helpers.php';
 require_once __DIR__ . '/system_audit.php';
 require_once __DIR__ . '/account_access.php';
+require_once __DIR__ . '/leave_helpers.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
@@ -20,9 +21,22 @@ if (!isset($_SESSION['email'])) {
     exit();
 }
 requireActiveAccount($conn, true);
+if (strtolower((string) ($_SESSION['role'] ?? '')) !== 'payroll') {
+    http_response_code(403);
+    echo json_encode(['status' => 'error', 'message' => 'Payroll access is required.']);
+    exit();
+}
+ensureLeaveSchema($conn);
 
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_REQUEST['action'] ?? ($method === 'GET' ? 'get_all' : '');
+if ($method === 'POST'
+    && (empty($_SESSION['payroll_csrf'])
+        || !hash_equals((string) $_SESSION['payroll_csrf'], (string) ($_POST['csrf_token'] ?? '')))) {
+    http_response_code(403);
+    echo json_encode(['status' => 'error', 'message' => 'Invalid or expired request token. Refresh the payroll page and try again.']);
+    exit();
+}
 
 // =================================================================
 // 1. GET ALL PAYROLL RECORDS, SINGLE RECORD, OR ATTENDANCE COUNT
@@ -113,6 +127,9 @@ if ($method === 'GET') {
             echo json_encode([
                 'status' => 'success',
                 'days_worked' => $summary['days_worked'],
+                'paid_leave_days' => $summary['paid_leave_days'],
+                'unpaid_leave_days' => $summary['unpaid_leave_days'],
+                'paid_leaves' => $summary['paid_leaves'],
                 'late_minutes' => $summary['late_minutes'],
                 'late_deduction' => $summary['late_deduction'],
                 'excessive_late_days' => $summary['excessive_late_days']
@@ -248,7 +265,7 @@ if ($method === 'POST' && $action === 'create_payroll') {
 
     // Earnings
     $regular_pay     = round($attendanceSummary['days_worked'] * $daily_rate, 2);
-    $paid_leaves     = floatval($_POST['paid_leaves'] ?? 0.00);
+    $paid_leaves     = $attendanceSummary['paid_leaves'];
     $daily_allowance = floatval($_POST['daily_allowance'] ?? 0.00);
     $reimbursement   = floatval($_POST['reimbursement'] ?? 0.00);
 
@@ -309,42 +326,170 @@ if ($method === 'POST' && $action === 'create_payroll') {
 // =================================================================
 if ($method === 'POST' && $action === 'mark_paid') {
     $payroll_id = intval($_POST['payroll_id'] ?? 0);
-
-    $stmt = $conn->prepare("
-        UPDATE payroll
-        SET status = 'Paid', paid_at = CURRENT_TIMESTAMP
-        WHERE payroll_id = ? AND status = 'Pending'
-    ");
-    if (!$stmt) {
-        http_response_code(500);
-        echo json_encode([
-            'status' => 'error',
-            'message' => 'Failed to prepare payment status update: ' . $conn->error
-        ]);
+    if ($payroll_id < 1 || ($_POST['review_confirmed'] ?? '') !== '1') {
+        http_response_code(400);
+        echo json_encode(['status' => 'error', 'message' => 'Confirm the payroll review before marking it Paid.']);
         exit();
     }
-    $stmt->bind_param("i", $payroll_id);
-
-    if ($stmt->execute() && $stmt->affected_rows === 1) {
+    $conn->begin_transaction();
+    try {
+        $stmt = $conn->prepare("UPDATE payroll SET status = 'Paid', paid_at = CURRENT_TIMESTAMP WHERE payroll_id = ? AND status = 'Pending'");
+        if (!$stmt) {
+            throw new RuntimeException('Failed to prepare review confirmation: ' . $conn->error);
+        }
+        $stmt->bind_param('i', $payroll_id);
+        if (!$stmt->execute()) {
+            throw new RuntimeException('Failed to confirm payroll review: ' . $stmt->error);
+        }
+        $changed = $stmt->affected_rows === 1;
+        $stmt->close();
+        if (!$changed) {
+            $conn->rollback();
+            http_response_code(409);
+            echo json_encode(['status' => 'error', 'message' => 'Payroll was not pending or could not be found.']);
+            exit();
+        }
         recordSystemAudit(
             $conn,
             (int) ($_SESSION['id'] ?? 0) ?: null,
             (string) ($_SESSION['name'] ?? 'Payroll user'),
-            'payroll_marked_paid',
+            'payroll_review_confirmed',
             'payroll',
             $payroll_id,
-            'Marked payroll #' . $payroll_id . ' as paid.'
+            'Confirmed payroll review and marked payroll #' . $payroll_id . ' as Paid. This status is not a payout receipt.'
         );
+        $conn->commit();
         echo json_encode([
             'status' => 'success',
-            'message' => 'Payroll marked as paid.'
+            'message' => 'Payroll review confirmed.'
         ]);
-    } else {
-        $error = $stmt->error;
-        http_response_code($error !== '' ? 500 : 409);
+    } catch (Throwable $error) {
+        $conn->rollback();
+        error_log('Payroll review confirmation failed: ' . $error->getMessage());
+        http_response_code(500);
         echo json_encode([
             'status' => 'error',
-            'message' => $error !== '' ? 'Failed to update payment status: ' . $error : 'Payroll was not pending or could not be found.'
+            'message' => 'Unable to confirm payroll review.'
+        ]);
+    }
+    exit();
+}
+
+if ($method === 'POST' && $action === 'edit_paid') {
+    $payrollId = filter_input(INPUT_POST, 'payroll_id', FILTER_VALIDATE_INT) ?: 0;
+    $reason = trim((string) ($_POST['reason'] ?? ''));
+    $fields = [
+        'regular_pay', 'paid_leaves', 'daily_allowance', 'reimbursement',
+        'late_deduction', 'sss', 'pagibig', 'philhealth', 'calamity_loan', 'hmo'
+    ];
+    $amounts = [];
+    $invalid = $payrollId < 1 || $reason === '' || strlen($reason) > 500;
+    foreach ($fields as $field) {
+        $rawValue = trim((string) ($_POST[$field] ?? ''));
+        if ($rawValue === '' || !is_numeric($rawValue) || !is_finite((float) $rawValue) || (float) $rawValue < 0) {
+            $invalid = true;
+            break;
+        }
+        $amounts[$field] = round((float) $rawValue, 2);
+    }
+    if ($invalid) {
+        http_response_code(400);
+        echo json_encode(['status' => 'error', 'message' => 'Enter a correction reason and valid non-negative payroll amounts.']);
+        exit();
+    }
+
+    $conn->begin_transaction();
+    try {
+        $lookup = $conn->prepare('SELECT * FROM payroll WHERE payroll_id = ? FOR UPDATE');
+        if (!$lookup) {
+            throw new RuntimeException('Unable to prepare paid payroll lookup: ' . $conn->error);
+        }
+        $lookup->bind_param('i', $payrollId);
+        if (!$lookup->execute()) {
+            throw new RuntimeException('Unable to read paid payroll record: ' . $lookup->error);
+        }
+        $oldRecord = $lookup->get_result()->fetch_assoc();
+        $lookup->close();
+        if (!$oldRecord || $oldRecord['status'] !== 'Paid') {
+            $conn->rollback();
+            http_response_code(409);
+            echo json_encode(['status' => 'error', 'message' => 'Only payroll records marked Paid can be corrected here.']);
+            exit();
+        }
+
+        $grossPay = round($amounts['regular_pay'] + $amounts['paid_leaves'] + $amounts['daily_allowance'], 2);
+        $totalDeductions = round(
+            $amounts['late_deduction'] + $amounts['sss'] + $amounts['pagibig']
+            + $amounts['philhealth'] + $amounts['calamity_loan'] + $amounts['hmo'],
+            2
+        );
+        $totalCredited = round($grossPay - $totalDeductions + $amounts['reimbursement'], 2);
+        if ($totalCredited < 0) {
+            throw new InvalidArgumentException('The correction cannot result in a negative net credited amount.');
+        }
+
+        $update = $conn->prepare(
+            'UPDATE payroll
+             SET regular_pay = ?, paid_leaves = ?, daily_allowance = ?, reimbursement = ?, gross_pay = ?,
+                 late_deduction = ?, sss = ?, pagibig = ?, philhealth = ?, calamity_loan = ?, hmo = ?,
+                 total_deductions = ?, total_credited = ?
+             WHERE payroll_id = ? AND status = \'Paid\''
+        );
+        if (!$update) {
+            throw new RuntimeException('Unable to prepare paid payroll correction: ' . $conn->error);
+        }
+        $update->bind_param(
+            'dddddddddddddi',
+            $amounts['regular_pay'],
+            $amounts['paid_leaves'],
+            $amounts['daily_allowance'],
+            $amounts['reimbursement'],
+            $grossPay,
+            $amounts['late_deduction'],
+            $amounts['sss'],
+            $amounts['pagibig'],
+            $amounts['philhealth'],
+            $amounts['calamity_loan'],
+            $amounts['hmo'],
+            $totalDeductions,
+            $totalCredited,
+            $payrollId
+        );
+        if (!$update->execute()) {
+            throw new RuntimeException('Unable to save paid payroll correction: ' . $update->error);
+        }
+        $update->close();
+
+        $oldValues = [];
+        foreach ($fields as $field) {
+            $oldValues[$field] = (float) $oldRecord[$field];
+        }
+        $oldValues['gross_pay'] = (float) $oldRecord['gross_pay'];
+        $oldValues['total_deductions'] = (float) $oldRecord['total_deductions'];
+        $oldValues['total_credited'] = (float) $oldRecord['total_credited'];
+        $newValues = $amounts + [
+            'gross_pay' => $grossPay,
+            'total_deductions' => $totalDeductions,
+            'total_credited' => $totalCredited
+        ];
+        recordSystemAudit(
+            $conn,
+            (int) ($_SESSION['id'] ?? 0) ?: null,
+            (string) ($_SESSION['name'] ?? 'Payroll user'),
+            'paid_payroll_corrected',
+            'payroll',
+            $payrollId,
+            json_encode(['old' => $oldValues, 'new' => $newValues, 'reason' => $reason], JSON_THROW_ON_ERROR)
+        );
+        $conn->commit();
+        echo json_encode(['status' => 'success', 'message' => 'Paid payroll corrected; the record remains marked Paid.']);
+    } catch (Throwable $error) {
+        $conn->rollback();
+        error_log('Paid payroll correction failed: ' . $error->getMessage());
+        http_response_code($error instanceof InvalidArgumentException ? 400 : 500);
+        echo json_encode([
+            'status' => 'error',
+            'message' => $error instanceof InvalidArgumentException ? $error->getMessage() : 'Unable to correct paid payroll.'
         ]);
     }
     exit();

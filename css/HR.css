@@ -538,6 +538,11 @@ a {
     color: #778179;
 }
 
+.hr-employee-status.is-leave {
+    background: #FFF4D6;
+    color: #8A5A00;
+}
+
 .hr-status-dot {
     width: 6px;
     height: 6px;

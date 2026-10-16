@@ -9,33 +9,43 @@ session_start();
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Application Form</title>
-    <link rel="stylesheet" href="./css/Applicants.css" />
+    <link rel="stylesheet" href="css/Applicants.css?v=<?= filemtime(__DIR__ . '/css/Applicants.css'); ?>" />
+    <link rel="stylesheet" href="css/HR.css?v=<?= filemtime(__DIR__ . '/css/HR.css'); ?>" />
     <link rel="stylesheet" href="css/select-control.css?v=<?= filemtime(__DIR__ . '/css/select-control.css'); ?>" />
+    <link rel="stylesheet" href="css/role-form-controls.css?v=<?= filemtime(__DIR__ . '/css/role-form-controls.css'); ?>" />
+    <link rel="stylesheet" href="css/calendar-picker.css?v=<?= filemtime(__DIR__ . '/css/calendar-picker.css'); ?>" />
 </head>
 <body>
     <?php include __DIR__ . '/config/theme_toggle.php'; ?>
 
     <div class="header">
+        <div class="application-header-bar">
+            <a class="application-back-link" href="TaskTrackWeb.php">
+                <span aria-hidden="true">←</span>
+                <span>Back to website</span>
+            </a>
+            <span class="application-header-title">TaskTrack Application</span>
+        </div>
         <div class="steps">
-            <div class="step active" data-step="1">
+            <div class="step active" data-step="1" role="button" tabindex="0" aria-current="step">
                 <div class="connector"><div class="fill"></div></div>
                 <div class="circle">1</div>
                 <div class="label">Contact Info</div>
             </div>
 
-            <div class="step" data-step="2">
+            <div class="step" data-step="2" role="button" tabindex="0" aria-disabled="true">
                 <div class="connector"><div class="fill"></div></div>
                 <div class="circle">2</div>
                 <div class="label">Work</div>
             </div>
 
-            <div class="step" data-step="3">
+            <div class="step" data-step="3" role="button" tabindex="0" aria-disabled="true">
                 <div class="connector"><div class="fill"></div></div>
                 <div class="circle">3</div>
                 <div class="label">Educational Background</div>
             </div>
 
-            <div class="step" data-step="4">
+            <div class="step" data-step="4" role="button" tabindex="0" aria-disabled="true">
                 <div class="connector"><div class="fill"></div></div>
                 <div class="circle">4</div>
                 <div class="label">Availability</div>
@@ -103,26 +113,26 @@ session_start();
                     <div class="field-grid">
                         <div class="field">
                             <label for="addressRegion">Region</label>
-                            <select id="addressRegion" name="address_region" required>
+                            <select id="addressRegion" name="address_region" required data-required>
                                 <option value="">Select Region</option>
                             </select>
                         </div>
                         <div class="field">
                             <label for="addressProvince">Province</label>
-                            <select id="addressProvince" name="address_province" required disabled>
+                            <select id="addressProvince" name="address_province" required data-required disabled>
                                 <option value="">Select Province</option>
                             </select>
                         </div>
                         <div class="field">
                             <label for="addressCity">City / Municipality</label>
-                            <select id="addressCity" name="address_city" class="<?= (!empty($city_err)) ? 'is-invalid' : '' ?>" required disabled>
+                            <select id="addressCity" name="address_city" class="<?= (!empty($city_err)) ? 'is-invalid' : '' ?>" required data-required disabled>
                                 <option value="">Select City/Municipality</option>
                             </select>
                             <?php if (!empty($city_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($city_err) ?></div><?php endif; ?>
                         </div>
                         <div class="field">
                             <label for="addressBarangay">Barangay</label>
-                            <select id="addressBarangay" name="address_barangay" class="<?= (!empty($barangay_err)) ? 'is-invalid' : '' ?>" required disabled>
+                            <select id="addressBarangay" name="address_barangay" class="<?= (!empty($barangay_err)) ? 'is-invalid' : '' ?>" required data-required disabled>
                                 <option value="">Select Barangay</option>
                             </select>
                             <?php if (!empty($barangay_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($barangay_err) ?></div><?php endif; ?>
@@ -142,26 +152,31 @@ session_start();
                 </fieldset>
             </div>
 
-            <!-- STEP 2 : JOB HISTORY -->
-            <div class="card" data-section="2">
-                <p class="section-title">Recent Work</p>
-
+            <!-- STEP 2 : POSITION APPLIED -->
+            <div class="card" data-section="2" id="positionAppliedSection">
+                <p class="section-title">Position Applied</p>
                 <fieldset class="position-information">
                     <legend>Position Information</legend>
                     <div class="field single-field">
-                        <label for="positionApplying">Position Applied</label>
-                        <select id="positionApplying" name="position_applying" class="form-select">
+                        <label for="positionApplying">Which position are you applying for?</label>
+                        <select id="positionApplying" name="position_applying" class="form-select" required data-required>
                             <?php $selectedPos = $_POST['position_applying'] ?? $_POST['position_applied'] ?? ''; ?>
+                            <option value="" disabled <?= $selectedPos === '' ? 'selected' : '' ?>>Select a position</option>
                             <option value="HR" <?= ($selectedPos === 'HR') ? 'selected' : '' ?>>HR</option>
                             <option value="Payroll" <?= ($selectedPos === 'Payroll') ? 'selected' : '' ?>>Payroll</option>
                             <option value="Supervisor" <?= ($selectedPos === 'Supervisor') ? 'selected' : '' ?>>Supervisor</option>
                             <option value="Logistics" <?= ($selectedPos === 'Logistics') ? 'selected' : '' ?>>Logistics</option>
                             <option value="Driver" <?= ($selectedPos === 'Driver') ? 'selected' : '' ?>>Driver</option>
                             <option value="Production" <?= ($selectedPos === 'Production') ? 'selected' : '' ?>>Production</option>
+                            <option value="employee" <?= ($selectedPos === 'employee') ? 'selected' : '' ?>>Employee</option>
                         </select>
                     </div>
                 </fieldset>
+            </div>
 
+            <!-- RECENT WORK EXPERIENCE -->
+            <div class="card" data-section="2" id="recentWorkSection">
+                <p class="section-title">Recent Work</p>
                 <fieldset class="work-experience">
                     <legend>Work Experience</legend>
                     <div class="field-grid">
@@ -177,11 +192,11 @@ session_start();
                         </div>
                         <div class="field">
                             <label for="workStartDate">Date Of Start (Previous Work)</label>
-                            <input type="date" id="workStartDate" name="work_start_date" value="<?= htmlspecialchars($_POST['work_start_date'] ?? $_POST['date_of_start'] ?? '') ?>" required />
+                            <input type="date" class="calendar-control" id="workStartDate" name="work_start_date" value="<?= htmlspecialchars($_POST['work_start_date'] ?? $_POST['date_of_start'] ?? '') ?>" required data-required />
                         </div>
                         <div class="field">
                             <label for="workEndDate">Date Of End</label>
-                            <input type="date" id="workEndDate" name="work_end_date" value="<?= htmlspecialchars($_POST['work_end_date'] ?? $_POST['date_of_end'] ?? '') ?>" />
+                            <input type="date" class="calendar-control" id="workEndDate" name="work_end_date" value="<?= htmlspecialchars($_POST['work_end_date'] ?? $_POST['date_of_end'] ?? '') ?>" />
                         </div>
                     </div>
                 </fieldset>
@@ -199,7 +214,7 @@ session_start();
                     </div>
                     <div class="field single-field">
                         <label for="educationLevel">Highest Education Attained</label>
-                        <select id="educationLevel" name="education_level" required>
+                        <select id="educationLevel" name="education_level" required data-required>
                             <?php $selectedEdu = $_POST['education_level'] ?? $_POST['education'] ?? ''; ?>
                             <option value="" disabled <?= empty($selectedEdu) ? 'selected' : '' ?>>Select education level</option>
                             <option value="highschool_grad" <?= ($selectedEdu === 'highschool_grad') ? 'selected' : '' ?>>High School Graduate</option>
@@ -220,16 +235,19 @@ session_start();
 
                 <div class="field single-field mb-3">
                     <label for="availabilityDate">When are you available to start</label>
-                    <input type="date" id="availabilityDate" name="availability_start_date" class="<?= (!empty($start_date_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['availability_start_date'] ?? $_POST['start_date'] ?? '') ?>" required />
+                    <input type="date" class="calendar-control" id="availabilityDate" name="availability_start_date" class="<?= (!empty($start_date_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['availability_start_date'] ?? $_POST['start_date'] ?? '') ?>" required data-required />
                     <?php if (!empty($start_date_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($start_date_err) ?></div><?php endif; ?>
                 </div>
 
                 <div class="field resume-field mb-3">
                     <label for="resumeFile">Resume / CV</label>
                     <div class="resume-upload">
-                        <input type="file" id="resumeFile" name="resume_file" class="<?= (!empty($resume_err)) ? 'is-invalid' : '' ?>" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" required />
-                        <p class="hint small text-muted">Attach your resume (PDF, Word, or Image, max ~10MB).</p>
-                        <p class="file-name" id="resumeFileName"></p>
+                        <div class="resume-picker<?= (!empty($resume_err)) ? ' is-invalid' : '' ?>">
+                            <input type="file" id="resumeFile" name="resume" class="<?= (!empty($resume_err)) ? 'is-invalid' : '' ?>" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" aria-describedby="resumeHelp resumeFileName" required />
+                            <span class="resume-picker-button" aria-hidden="true">Choose resume</span>
+                            <span class="resume-picker-name" id="resumeFileName" aria-live="polite">No resume selected</span>
+                        </div>
+                        <p class="hint small text-muted" id="resumeHelp">PDF, Word, JPG, or PNG. Maximum file size: 10MB.</p>
                         <?php if (!empty($resume_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($resume_err) ?></div><?php endif; ?>
                     </div>
                 </div>
@@ -243,7 +261,8 @@ session_start();
         </form>
     </div>
 
-    <script src="./js/applicants.js"></script>
+    <script src="js/applicants.js?v=<?= filemtime(__DIR__ . '/js/applicants.js'); ?>"></script>
     <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
+    <script src="js/calendar-picker.js?v=<?= filemtime(__DIR__ . '/js/calendar-picker.js'); ?>"></script>
 </body>
 </html>

@@ -1,6 +1,7 @@
 <?php
 include('config/connection.php');
 require_once __DIR__ . '/account_access.php';
+require_once __DIR__ . '/leave_helpers.php';
 require_once __DIR__ . '/task_notifications.php';
 
 // -----------------------------------------------------
@@ -15,6 +16,7 @@ if (!isset($_SESSION['email'])) {
     exit();
 }
 requireActiveAccount($conn);
+ensureLeaveSchema($conn);
 ensureTaskNotificationSchema($conn);
 if (empty($_SESSION['task_review_csrf'])) {
     $_SESSION['task_review_csrf'] = bin2hex(random_bytes(32));
@@ -41,21 +43,7 @@ $records          = [];
 $production_items = []; 
 
 // Trusted list ng products mula sa ENUM schema
-$allowed_products = [
-    "Ginga Turmeric Brew",
-    "Ginga Turmeric w/ Guyabano",
-    "Ginga Turmeric w/ Lemon",
-    "Ginga Ginger - Regural Pouch",
-    "Ginga Ginger Brew with Turmeric And Lemon",
-    "Ginga Ginger - Strong",
-    "Ginga Ginger - Regural",
-    "Ginga Ginger Pure Tea",
-    "Ginga Turmeric Pure Tea",
-    "Ginga Mangosteen Pure Tea",
-    "Ginga Guyabano Pure Tea",
-    "Ginga Butterfly Pea Tea",
-    "Herbal Green Tea"
-];
+$allowed_products = require __DIR__ . '/ginga_products.php';
 
 // -----------------------------------------------------
 // 2. Module: DELIVERY
@@ -89,7 +77,7 @@ if ($module === 'delivery') {
                 throw new RuntimeException('Unable to start the delivery review: ' . $conn->error);
             }
             $review_stmt = $conn->prepare(
-                "SELECT route, driver_id
+                "SELECT route, driver_id, delivery_proof_image
                  FROM delivery
                  WHERE delivery_id = ? AND (assigned_by = ? OR assigned_by IS NULL)
                    AND status = 'Awaiting Approval'
@@ -394,6 +382,8 @@ if ($module === 'delivery') {
                     || $parsed_delivery_date->format('Y-m-d') !== $delivery_date
                 ) {
                     $errors['assignments'] = 'Select a valid delivery date for every selected product.';
+                } elseif (userHasLeaveOnDate($conn, (int) $driver_id, $delivery_date)) {
+                    $errors['assignments'] = 'A selected driver has recorded leave on the delivery date.';
                 }
                 $deliveries_to_create[] = [
                     'production_id' => $production_id,
@@ -533,58 +523,108 @@ if ($module === 'delivery') {
 
     // --- UPDATE DELIVERY ---
     if (isset($_POST['submit']) && $action === 'update' && $current_role === 'super') {
-        $delivery_id   = $_POST['delivery_id'] ?? '';
-        $driver_id     = $_POST['driver_id'] ?? '';
+        $delivery_id   = filter_var($_POST['delivery_id'] ?? '', FILTER_VALIDATE_INT);
+        $driver_id     = filter_var($_POST['driver_id'] ?? '', FILTER_VALIDATE_INT);
         $route         = trim($_POST['route'] ?? '');
         $pieces        = trim($_POST['pieces'] ?? '');
         $stock         = trim($_POST['stock'] ?? '');
         $delivery_date = trim($_POST['delivery_date'] ?? '');
+        $pieces_is_integer = ctype_digit($pieces);
+        $stock_is_integer = ctype_digit($stock);
+        $pieces_value = $pieces_is_integer ? (int) $pieces : 0;
+        $stock_value = $stock_is_integer ? (int) $stock : 0;
 
-        if (empty($driver_id)) {
+        if (!$delivery_id || $delivery_id < 1) {
+            $errors['delivery_id'] = 'Choose a valid delivery record to update.';
+        }
+        if (!$driver_id || $driver_id < 1) {
             $errors['driver_id'] = "Please select a driver.";
-        } else if (!isDriverPresentToday($conn, $driver_id)) {
-            $errors['driver_id'] = "Selected driver is not timed in / present today or has already timed out.";
+        }
+        if ($route === '' || strlen($route) > 255) {
+            $errors['route'] = 'Enter a destination with no more than 255 characters.';
+        }
+        if (!$pieces_is_integer || $pieces_value < 1 || $pieces_value > 2147483647) {
+            $errors['pieces'] = 'Enter a quantity of at least one piece.';
+        }
+        if (!$stock_is_integer || $stock_value < 1 || $stock_value > 2147483647) {
+            $errors['stock'] = 'Enter a valid stock number.';
+        }
+        $parsed_delivery_date = DateTimeImmutable::createFromFormat('!Y-m-d', $delivery_date);
+        if (!$parsed_delivery_date || $parsed_delivery_date->format('Y-m-d') !== $delivery_date) {
+            $errors['delivery_date'] = 'Select a valid delivery date.';
         }
 
-        if (!empty($delivery_id) && empty($errors)) {
-            $old_delivery_stmt = $conn->prepare("SELECT driver_id FROM delivery WHERE delivery_id = ? AND status != 'Delivered' AND completion_review_status <> 'pending_review' LIMIT 1");
+        $old_delivery = null;
+        if ($delivery_id && $delivery_id > 0) {
+            $old_delivery_stmt = $conn->prepare(
+                "SELECT driver_id, delivery_date
+                 FROM delivery
+                 WHERE delivery_id = ? AND status != 'Delivered'
+                   AND completion_review_status <> 'pending_review'
+                 LIMIT 1"
+            );
+            if (!$old_delivery_stmt) {
+                throw new RuntimeException('Unable to prepare delivery update lookup: ' . $conn->error);
+            }
             $old_delivery_stmt->bind_param('i', $delivery_id);
-            $old_delivery_stmt->execute();
+            if (!$old_delivery_stmt->execute()) {
+                throw new RuntimeException('Unable to load delivery before update: ' . $old_delivery_stmt->error);
+            }
             $old_delivery = $old_delivery_stmt->get_result()->fetch_assoc();
             $old_delivery_stmt->close();
             if (!$old_delivery) {
-                $errors['delivery_id'] = 'The delivery could not be found or is already completed.';
+                $errors['delivery_id'] = 'The delivery could not be found, is already completed, or is awaiting review.';
             }
         }
 
-        if (!empty($delivery_id) && empty($errors)) {
+        $driver_changed = $old_delivery && (int) ($old_delivery['driver_id'] ?? 0) !== (int) $driver_id;
+        $date_changed = $old_delivery && (string) ($old_delivery['delivery_date'] ?? '') !== $delivery_date;
+        if ($driver_id && $driver_id > 0 && $driver_changed && !isDriverPresentToday($conn, $driver_id)) {
+            $errors['driver_id'] = "A new driver must be timed in and present today.";
+        }
+        if (
+            $driver_id && $driver_id > 0
+            && empty($errors['delivery_date'])
+            && ($driver_changed || $date_changed)
+            && userHasLeaveOnDate($conn, $driver_id, $delivery_date)
+        ) {
+            $errors['driver_id'] = 'The selected driver has recorded leave on the delivery date.';
+        }
+
+        if ($delivery_id && $delivery_id > 0 && empty($errors)) {
             $stmt = $conn->prepare(
                 "UPDATE delivery
                  SET route = ?, pieces = ?, stock = ?, driver_id = ?, delivery_date = ?,
-                     assigned_by = ?, completion_review_status = 'none',
-                     completion_review_note = NULL, completion_reviewed_by = NULL,
-                     completion_reviewed_at = NULL
+                    assigned_by = ?, completion_review_status = 'none',
+                    completion_review_note = NULL, completion_reviewed_by = NULL,
+                    completion_reviewed_at = NULL
                  WHERE delivery_id = ? AND status != 'Delivered'
                    AND completion_review_status <> 'pending_review'"
             );
+            if (!$stmt) {
+                throw new RuntimeException('Unable to prepare delivery update: ' . $conn->error);
+            }
             $stmt->bind_param(
                 'siiisii',
                 $route,
-                $pieces,
-                $stock,
+                $pieces_value,
+                $stock_value,
                 $driver_id,
                 $delivery_date,
                 $current_user_id,
                 $delivery_id
             );
 
-            $conn->begin_transaction();
+            if (!$conn->begin_transaction()) {
+                $stmt->close();
+                throw new RuntimeException('Unable to start delivery update transaction: ' . $conn->error);
+            }
             if ($stmt->execute()) {
                 $actor_name = trim((string) ($_SESSION['name'] ?? ''));
                 if ($actor_name === '') {
                     $actor_name = 'User #' . $current_user_id;
                 }
-                $previous_driver_id = (int) $old_delivery['driver_id'];
+                $previous_driver_id = (int) ($old_delivery['driver_id'] ?? 0);
                 try {
                     if ($previous_driver_id !== (int) $driver_id) {
                         recordDeliveryActivity(
@@ -593,22 +633,24 @@ if ($module === 'delivery') {
                             $current_user_id,
                             $actor_name,
                             'driver_reassigned',
-                            $previous_driver_id,
-                            getDeliveryDriverName($conn, $previous_driver_id),
+                            $previous_driver_id > 0 ? $previous_driver_id : null,
+                            $previous_driver_id > 0 ? getDeliveryDriverName($conn, $previous_driver_id) : null,
                             (int) $driver_id,
                             getDeliveryDriverName($conn, (int) $driver_id)
                         );
-                        createTaskNotification(
-                            $conn,
-                            $previous_driver_id,
-                            (int) $current_user_id,
-                            'delivery_reassigned',
-                            'Delivery reassigned',
-                            'A delivery previously assigned to you has been reassigned to another driver.',
-                            'logistic.php',
-                            'delivery',
-                            (string) $delivery_id
-                        );
+                        if ($previous_driver_id > 0) {
+                            createTaskNotification(
+                                $conn,
+                                $previous_driver_id,
+                                (int) $current_user_id,
+                                'delivery_reassigned',
+                                'Delivery reassigned',
+                                'A delivery previously assigned to you has been reassigned to another driver.',
+                                'logistic.php',
+                                'delivery',
+                                (string) $delivery_id
+                            );
+                        }
                         createTaskNotification(
                             $conn,
                             (int) $driver_id,
@@ -635,97 +677,216 @@ if ($module === 'delivery') {
                 $errors['delivery_id'] = "Unable to update the delivery record.";
             }
             $stmt->close();
+        } elseif (empty($errors)) {
+            $errors['delivery_id'] = 'The delivery could not be updated.';
         }
     }
 
     // --- CONFIRM DELIVERY ---
     if (($_POST['mark_delivered'] ?? '') === '1' && $current_role === 'log') {
         $delivery_id = filter_var($_POST['idno'] ?? '', FILTER_VALIDATE_INT);
-        $current_user_id = $_SESSION['id'] ?? $_SESSION['user_id'] ?? null;
+        $current_user_id = (int) ($_SESSION['id'] ?? $_SESSION['user_id'] ?? 0);
 
-        if ($delivery_id && $current_user_id !== null) {
-            $stmt = $conn->prepare(
-                "UPDATE delivery
-                 SET status = 'Awaiting Approval', delivered_at = NOW(),
-                     completion_review_status = 'pending_review',
-                     completion_review_note = NULL, completion_reviewed_by = NULL,
-                     completion_reviewed_at = NULL
+        if ($delivery_id && $current_user_id > 0) {
+            $delivery_check = $conn->prepare(
+                "SELECT delivery_proof_image
+                 FROM delivery
                  WHERE delivery_id = ? AND driver_id = ?
                    AND status <> 'Delivered'
-                   AND completion_review_status <> 'pending_review'"
+                   AND completion_review_status <> 'pending_review'
+                 LIMIT 1"
             );
-            $stmt->bind_param("ii", $delivery_id, $current_user_id);
-            $conn->begin_transaction();
-            if ($stmt->execute() && $stmt->affected_rows === 1) {
-                $actor_name = trim((string) ($_SESSION['name'] ?? ''));
-                if ($actor_name === '') {
-                    $actor_name = 'User #' . $current_user_id;
-                }
-                try {
-                    recordDeliveryActivity($conn, $delivery_id, (int) $current_user_id, $actor_name, 'delivery_submitted_for_review');
-                    $assignerStmt = $conn->prepare('SELECT assigned_by FROM delivery WHERE delivery_id = ?');
-                    if (!$assignerStmt) {
-                        throw new RuntimeException('Unable to prepare delivery assigner lookup: ' . $conn->error);
-                    }
-                    $assignerStmt->bind_param('i', $delivery_id);
-                    if (!$assignerStmt->execute()) {
-                        $error = $assignerStmt->error;
-                        $assignerStmt->close();
-                        throw new RuntimeException('Unable to load delivery assigner: ' . $error);
-                    }
-                    $assignerId = (int) ($assignerStmt->get_result()->fetch_assoc()['assigned_by'] ?? 0);
-                    $assignerStmt->close();
-                    if ($assignerId > 0) {
-                        createTaskNotification(
-                            $conn,
-                            $assignerId,
-                            (int) $current_user_id,
-                            'delivery_review_requested',
-                            'Delivery submitted for review',
-                            $actor_name . ' submitted the delivery to ' . $delivery_id . ' for your approval.',
-                            'supervisor.php#page-dashboard',
-                            'delivery',
-                            (string) $delivery_id
-                        );
-                    } else {
-                        $supervisor_stmt = $conn->prepare("SELECT id FROM users WHERE role = 'super' AND is_active = 1");
-                        if (!$supervisor_stmt) {
-                            throw new RuntimeException('Unable to prepare supervisor review notifications: ' . $conn->error);
-                        }
-                        if (!$supervisor_stmt->execute()) {
-                            $error = $supervisor_stmt->error;
-                            $supervisor_stmt->close();
-                            throw new RuntimeException('Unable to load supervisors for delivery review: ' . $error);
-                        }
-                        $supervisor_result = $supervisor_stmt->get_result();
-                        while ($supervisor_row = $supervisor_result->fetch_assoc()) {
-                            createTaskNotification(
-                                $conn,
-                                (int) $supervisor_row['id'],
-                                (int) $current_user_id,
-                                'delivery_review_requested',
-                                'Delivery submitted for review',
-                                $actor_name . ' submitted delivery #' . $delivery_id . ' for supervisor approval.',
-                                'supervisor.php#page-dashboard',
-                                'delivery',
-                                (string) $delivery_id
-                            );
-                        }
-                        $supervisor_stmt->close();
-                    }
-                    if (!$conn->commit()) {
-                        throw new RuntimeException('Unable to commit delivery completion.');
-                    }
-                    $_SESSION['delivery_success'] = 'Delivery submitted for supervisor approval.';
-                } catch (RuntimeException $exception) {
-                    $conn->rollback();
-                    $_SESSION['delivery_error'] = 'Delivery completion could not be saved with its activity history: ' . $exception->getMessage();
-                }
-            } else {
-                $conn->rollback();
-                $_SESSION['delivery_error'] = 'This delivery is unavailable, already completed, or assigned to another driver.';
+            if (!$delivery_check) {
+                throw new RuntimeException('Unable to prepare delivery ownership check: ' . $conn->error);
             }
-            $stmt->close();
+            $delivery_check->bind_param('ii', $delivery_id, $current_user_id);
+            if (!$delivery_check->execute()) {
+                $error = $delivery_check->error;
+                $delivery_check->close();
+                throw new RuntimeException('Unable to verify delivery assignment: ' . $error);
+            }
+            $eligible_delivery = $delivery_check->get_result()->fetch_assoc();
+            $delivery_check->close();
+
+            if (!$eligible_delivery) {
+                $_SESSION['delivery_error'] = 'This delivery is unavailable, already completed, or assigned to another driver.';
+            } else {
+                $upload = $_FILES['delivery_proof'] ?? null;
+                $proof_error = '';
+                $proof_filename = null;
+                $proof_path = null;
+                if (
+                    !is_array($upload)
+                    || !isset($upload['error'], $upload['tmp_name'], $upload['size'])
+                    || !is_string($upload['tmp_name'])
+                    || !is_numeric($upload['error'])
+                    || !is_numeric($upload['size'])
+                ) {
+                    $proof_error = 'Choose a delivery proof photo before submitting.';
+                } elseif ((int) $upload['error'] !== UPLOAD_ERR_OK) {
+                    $proof_error = match ((int) $upload['error']) {
+                        UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'The delivery proof photo must be no larger than 5 MB.',
+                        UPLOAD_ERR_NO_FILE => 'Choose a delivery proof photo before submitting.',
+                        default => 'The delivery proof photo could not be uploaded. Please try again.',
+                    };
+                } elseif ((int) $upload['size'] < 1 || (int) $upload['size'] > 5 * 1024 * 1024) {
+                    $proof_error = 'The delivery proof photo must be no larger than 5 MB.';
+                } else {
+                    $file_info = new finfo(FILEINFO_MIME_TYPE);
+                    $mime_type = $file_info->file($upload['tmp_name']);
+                    $image_info = @getimagesize($upload['tmp_name']);
+                    $allowed_image_types = [
+                        'image/jpeg' => 'jpg',
+                        'image/png' => 'png',
+                        'image/webp' => 'webp',
+                    ];
+                    if (
+                        !is_string($mime_type)
+                        || !isset($allowed_image_types[$mime_type])
+                        || !is_array($image_info)
+                        || ($image_info['mime'] ?? null) !== $mime_type
+                        || (int) ($image_info[0] ?? 0) < 1
+                        || (int) ($image_info[1] ?? 0) < 1
+                        || (int) $image_info[0] > 6000
+                        || (int) $image_info[1] > 6000
+                    ) {
+                        $proof_error = 'Upload a valid JPG, PNG, or WebP photo no larger than 6000 × 6000 pixels.';
+                    } elseif (!is_uploaded_file($upload['tmp_name'])) {
+                        $proof_error = 'The delivery proof upload could not be verified. Please try again.';
+                    } else {
+                        $proof_directory = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'delivery-proofs';
+                        if (!is_dir($proof_directory) && !mkdir($proof_directory, 0755, true) && !is_dir($proof_directory)) {
+                            throw new RuntimeException('Unable to create the delivery proof upload directory.');
+                        }
+                        $proof_filename = bin2hex(random_bytes(16)) . '.' . $allowed_image_types[$mime_type];
+                        $proof_path = $proof_directory . DIRECTORY_SEPARATOR . $proof_filename;
+                        if (!move_uploaded_file($upload['tmp_name'], $proof_path)) {
+                            throw new RuntimeException('Unable to save the delivery proof photo.');
+                        }
+                    }
+                }
+
+                if ($proof_error !== '') {
+                    $_SESSION['delivery_error'] = $proof_error;
+                } else {
+                    $stmt = $conn->prepare(
+                        "UPDATE delivery
+                         SET status = 'Awaiting Approval', delivered_at = NOW(),
+                             completion_review_status = 'pending_review',
+                             completion_review_note = NULL, completion_reviewed_by = NULL,
+                             completion_reviewed_at = NULL, delivery_proof_image = ?
+                         WHERE delivery_id = ? AND driver_id = ?
+                           AND status <> 'Delivered'
+                           AND completion_review_status <> 'pending_review'"
+                    );
+                    if (!$stmt) {
+                        if ($proof_path !== null && is_file($proof_path)) {
+                            unlink($proof_path);
+                        }
+                        throw new RuntimeException('Unable to prepare delivery completion: ' . $conn->error);
+                    }
+                    $stmt->bind_param('sii', $proof_filename, $delivery_id, $current_user_id);
+                    if (!$conn->begin_transaction()) {
+                        $stmt->close();
+                        if ($proof_path !== null && is_file($proof_path)) {
+                            unlink($proof_path);
+                        }
+                        throw new RuntimeException('Unable to start delivery completion: ' . $conn->error);
+                    }
+                    if (!$stmt->execute()) {
+                        $error = $stmt->error;
+                        $conn->rollback();
+                        $stmt->close();
+                        if ($proof_path !== null && is_file($proof_path)) {
+                            unlink($proof_path);
+                        }
+                        throw new RuntimeException('Unable to save delivery completion: ' . $error);
+                    }
+                    if ($stmt->affected_rows === 1) {
+                        $actor_name = trim((string) ($_SESSION['name'] ?? ''));
+                        if ($actor_name === '') {
+                            $actor_name = 'User #' . $current_user_id;
+                        }
+                        try {
+                            recordDeliveryActivity($conn, $delivery_id, $current_user_id, $actor_name, 'delivery_submitted_for_review');
+                            $assignerStmt = $conn->prepare('SELECT assigned_by FROM delivery WHERE delivery_id = ?');
+                            if (!$assignerStmt) {
+                                throw new RuntimeException('Unable to prepare delivery assigner lookup: ' . $conn->error);
+                            }
+                            $assignerStmt->bind_param('i', $delivery_id);
+                            if (!$assignerStmt->execute()) {
+                                $error = $assignerStmt->error;
+                                $assignerStmt->close();
+                                throw new RuntimeException('Unable to load delivery assigner: ' . $error);
+                            }
+                            $assignerId = (int) ($assignerStmt->get_result()->fetch_assoc()['assigned_by'] ?? 0);
+                            $assignerStmt->close();
+                            if ($assignerId > 0) {
+                                createTaskNotification(
+                                    $conn,
+                                    $assignerId,
+                                    $current_user_id,
+                                    'delivery_review_requested',
+                                    'Delivery submitted for review',
+                                    $actor_name . ' submitted the delivery to ' . $delivery_id . ' for your approval.',
+                                    'supervisor.php#page-dashboard',
+                                    'delivery',
+                                    (string) $delivery_id
+                                );
+                            } else {
+                                $supervisor_stmt = $conn->prepare("SELECT id FROM users WHERE role = 'super' AND is_active = 1");
+                                if (!$supervisor_stmt) {
+                                    throw new RuntimeException('Unable to prepare supervisor review notifications: ' . $conn->error);
+                                }
+                                if (!$supervisor_stmt->execute()) {
+                                    $error = $supervisor_stmt->error;
+                                    $supervisor_stmt->close();
+                                    throw new RuntimeException('Unable to load supervisors for delivery review: ' . $error);
+                                }
+                                $supervisor_result = $supervisor_stmt->get_result();
+                                while ($supervisor_row = $supervisor_result->fetch_assoc()) {
+                                    createTaskNotification(
+                                        $conn,
+                                        (int) $supervisor_row['id'],
+                                        $current_user_id,
+                                        'delivery_review_requested',
+                                        'Delivery submitted for review',
+                                        $actor_name . ' submitted delivery #' . $delivery_id . ' for supervisor approval.',
+                                        'supervisor.php#page-dashboard',
+                                        'delivery',
+                                        (string) $delivery_id
+                                    );
+                                }
+                                $supervisor_stmt->close();
+                            }
+                            if (!$conn->commit()) {
+                                throw new RuntimeException('Unable to commit delivery completion.');
+                            }
+                            $previous_proof = (string) ($eligible_delivery['delivery_proof_image'] ?? '');
+                            if ($previous_proof !== '' && preg_match('/^[a-f0-9]{32}\.(jpg|png|webp)$/', $previous_proof)) {
+                                $previous_path = $proof_directory . DIRECTORY_SEPARATOR . $previous_proof;
+                                if (is_file($previous_path) && !unlink($previous_path)) {
+                                    error_log('TaskTrack could not remove a replaced delivery proof photo.');
+                                }
+                            }
+                            $_SESSION['delivery_success'] = 'Delivery submitted for supervisor approval.';
+                        } catch (RuntimeException $exception) {
+                            $conn->rollback();
+                            if ($proof_path !== null && is_file($proof_path)) {
+                                unlink($proof_path);
+                            }
+                            $_SESSION['delivery_error'] = 'Delivery completion could not be saved with its activity history: ' . $exception->getMessage();
+                        }
+                    } else {
+                        $conn->rollback();
+                        if ($proof_path !== null && is_file($proof_path)) {
+                            unlink($proof_path);
+                        }
+                        $_SESSION['delivery_error'] = 'This delivery is unavailable, already completed, or assigned to another driver.';
+                    }
+                    $stmt->close();
+                }
+            }
         }
     }
 
@@ -740,7 +901,7 @@ if ($module === 'delivery') {
     // --- FETCH PENDING DELIVERIES ---
     if ($current_role === 'super') {
         // PAG SUPERVISOR: Nakikita lahat ng delivery ng kahit sinong driver
-        $sql_pending = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.assigned_by, d.delivery_date, d.status, d.delivered_at,
+        $sql_pending = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.assigned_by, d.delivery_date, d.status, d.delivered_at, d.delivery_proof_image,
                                d.completion_review_status, d.completion_review_note, d.completion_reviewed_by, d.completion_reviewed_at,
                                assigner.name AS assigned_by_name, reviewer.name AS completion_reviewed_by_name,
                                p.product_name, p.product_status,
@@ -757,7 +918,7 @@ if ($module === 'delivery') {
     } else {
         // PAG DRIVER / LOGISTICS ('log'): ACCOUNT-LEVEL FILTERING
         // I-filter gamit ang d.driver_id = ? para KANYANG ACCOUNT LANG ANG LUMABAS
-        $sql_pending = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.assigned_by, d.delivery_date, d.status, d.delivered_at,
+        $sql_pending = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.assigned_by, d.delivery_date, d.status, d.delivered_at, d.delivery_proof_image,
                                d.completion_review_status, d.completion_review_note, d.completion_reviewed_by, d.completion_reviewed_at,
                                assigner.name AS assigned_by_name, reviewer.name AS completion_reviewed_by_name,
                                p.product_name, p.product_status,
@@ -787,7 +948,7 @@ if ($module === 'delivery') {
     // --- FETCH DELIVERY HISTORY ---
     if ($current_role === 'super') {
         // PAG SUPERVISOR: Nakikita ang buong kasaysayan ng delivery ng lahat
-        $sql_history = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.assigned_by, d.delivery_date, d.status, d.delivered_at,
+        $sql_history = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.assigned_by, d.delivery_date, d.status, d.delivered_at, d.delivery_proof_image,
                                d.completion_review_status, d.completion_review_note, d.completion_reviewed_by, d.completion_reviewed_at,
                                assigner.name AS assigned_by_name, reviewer.name AS completion_reviewed_by_name,
                                p.product_name, p.product_status,
@@ -803,7 +964,7 @@ if ($module === 'delivery') {
         $stmt_history = $conn->prepare($sql_history);
     } else {
         // PAG DRIVER / LOGISTICS ('log'): ACCOUNT-LEVEL FILTERING
-        $sql_history = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.assigned_by, d.delivery_date, d.status, d.delivered_at,
+        $sql_history = "SELECT d.delivery_id, d.production_id, d.route, d.pieces, d.stock, d.driver_id, d.assigned_by, d.delivery_date, d.status, d.delivered_at, d.delivery_proof_image,
                                d.completion_review_status, d.completion_review_note, d.completion_reviewed_by, d.completion_reviewed_at,
                                assigner.name AS assigned_by_name, reviewer.name AS completion_reviewed_by_name,
                                p.product_name, p.product_status,
@@ -1206,7 +1367,7 @@ elseif ($module === 'factory') {
 
         if (empty($errors)) {
             $check_task = $conn->prepare(
-                "SELECT p.production_id
+                "SELECT p.production_id, p.due_date
                  FROM production p
                  WHERE p.production_id = ?
                    AND (p.product_status != 'product done' OR p.product_status IS NULL)
@@ -1214,11 +1375,14 @@ elseif ($module === 'factory') {
             );
             $check_task->bind_param("s", $production_id);
             $check_task->execute();
-            $task_is_pending = ($check_task->get_result()->num_rows > 0);
+            $task_row = $check_task->get_result()->fetch_assoc();
+            $task_is_pending = $task_row !== null;
             $check_task->close();
 
             if (!$task_is_pending) {
                 $errors['assignment'] = "The selected task is unavailable or already completed.";
+            } elseif (!empty($task_row['due_date']) && employeeHasLeaveOnDate($conn, (int) $employee_id, (string) $task_row['due_date'])) {
+                $errors['assignment_target'] = "The selected employee has recorded leave on the production due date.";
             }
         }
 
@@ -1417,6 +1581,12 @@ elseif ($module === 'factory') {
                 $errors['assignments'] = "Assign a present Cooking employee to production item {$row_number}.";
             } elseif (!$is_present_production_employee((int) $cooking_employee_id, 'Cooking')) {
                 $errors['assignments'] = "Select a present Cooking employee for production item {$row_number}.";
+            } elseif (
+                $due_date !== ''
+                && preg_match('/^\d{4}-\d{2}-\d{2}$/', $due_date)
+                && employeeHasLeaveOnDate($conn, (int) $cooking_employee_id, $due_date)
+            ) {
+                $errors['assignments'] = "Cooking employee for production item {$row_number} has recorded leave on the due date.";
             }
 
             $validated_assignments[] = [
@@ -1541,30 +1711,56 @@ elseif ($module === 'factory') {
 
     // --- UPDATE PRODUCTION ---
     if ($is_production_supervisor && isset($_POST['submit']) && $action === 'update') {
-        $production_id = trim($_POST['production_id'] ?? '');
-        $product_name  = trim($_POST['product_name'] ?? '');
-        $target_pcs    = trim($_POST['target_pcs'] ?? '');
-        $due_date      = trim($_POST['due_date'] ?? '');
-        $Stock_number  = trim($_POST['Stock_number'] ?? '');
-        $quantity      = trim($_POST['quantity'] ?? '');
+        $production_id = filter_var($_POST['production_id'] ?? '', FILTER_VALIDATE_INT);
+        $product_name  = trim((string) ($_POST['product_name'] ?? ''));
+        $target_pcs    = trim((string) ($_POST['target_pcs'] ?? ''));
+        $due_date      = trim((string) ($_POST['due_date'] ?? ''));
+        $stock_number  = trim((string) ($_POST['Stock_number'] ?? ''));
+        $quantity      = trim((string) ($_POST['quantity'] ?? ''));
 
-        if (!in_array($product_name, $allowed_products)) {
-            $errors['product_name'] = "Please select a valid product from the list.";
+        if (!$production_id || $production_id < 1) {
+            $errors['update'] = 'Choose a valid production task to update.';
         }
-        if (!preg_match("/^[0-9 ]*$/", $target_pcs)) {
-            $errors['target_pcs'] = "Please use only numbers for your Target PCS.";
+        if (!in_array($product_name, $allowed_products, true)) {
+            $errors['update'] = 'Please select a valid product from the list.';
         }
-        if (!preg_match("/^[0-9 ]*$/", $quantity)) {
-            $errors['quantity'] = "Please use only numbers for your Quantity.";
+        $target_pcs_is_integer = ctype_digit($target_pcs);
+        $quantity_is_integer = ctype_digit($quantity);
+        $target_pcs_value = $target_pcs_is_integer ? (int) $target_pcs : 0;
+        $quantity_value = $quantity_is_integer ? (int) $quantity : 0;
+        if (!$target_pcs_is_integer || $target_pcs_value < 0 || $target_pcs_value > 2147483647) {
+            $errors['update'] = 'Enter a valid Target PCS.';
         }
-        if (!preg_match("/^[0-9 ]*$/", $Stock_number)) {
-            $errors['Stock_number'] = "Please use only numbers for your Stock Number.";
+        if (!$quantity_is_integer || $quantity_value < 0 || $quantity_value > 2147483647) {
+            $errors['update'] = 'Enter a valid Quantity.';
+        }
+        if (!preg_match('/^[0-9]{4}$/', $stock_number)) {
+            $errors['update'] = 'Stock Number must be exactly 4 digits.';
+        }
+        $date_parts = explode('-', $due_date);
+        if (
+            !preg_match('/^\d{4}-\d{2}-\d{2}$/', $due_date)
+            || count($date_parts) !== 3
+            || !checkdate((int) ($date_parts[1] ?? 0), (int) ($date_parts[2] ?? 0), (int) ($date_parts[0] ?? 0))
+        ) {
+            $errors['update'] = 'Select a valid due date.';
         }
 
-        if (empty($errors) && !empty($production_id)) {
-            $stmt = $conn->prepare("UPDATE production SET product_name=?, target_pcs=?, due_date=?, Stock_number=?, quantity=? WHERE production_id=?");
-            $stmt->bind_param("ssssss", $product_name, $target_pcs, $due_date, $Stock_number, $quantity, $production_id);
-            $conn->begin_transaction();
+        if (empty($errors)) {
+            $stmt = $conn->prepare(
+                "UPDATE production
+                 SET product_name = ?, target_pcs = ?, due_date = ?, Stock_number = ?, quantity = ?
+                 WHERE production_id = ?"
+            );
+            if (!$stmt) {
+                throw new RuntimeException('Unable to prepare production update: ' . $conn->error);
+            }
+            $stock_number_value = (int) $stock_number;
+            $stmt->bind_param("sisiii", $product_name, $target_pcs_value, $due_date, $stock_number_value, $quantity_value, $production_id);
+            if (!$conn->begin_transaction()) {
+                $stmt->close();
+                throw new RuntimeException('Unable to start production update transaction: ' . $conn->error);
+            }
             if ($stmt->execute()) {
                 $actor_user_id = (int) ($_SESSION['id'] ?? $_SESSION['user_id'] ?? 0);
                 $actor_name = trim((string) ($_SESSION['name'] ?? ''));
@@ -1585,11 +1781,11 @@ elseif ($module === 'factory') {
                     $message = "Production Task updated successfully.";
                 } catch (RuntimeException $exception) {
                     $conn->rollback();
-                    $message = "The product update and activity history could not be saved: " . $exception->getMessage();
+                    $errors['update'] = "The product update and activity history could not be saved: " . $exception->getMessage();
                 }
             } else {
                 $conn->rollback();
-                $message = "Failed to update Production Task.";
+                $errors['update'] = "Failed to update Production Task: " . $stmt->error;
             }
             $stmt->close();
         }

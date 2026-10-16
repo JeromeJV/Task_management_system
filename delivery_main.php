@@ -13,6 +13,18 @@ $message = (string) ($message ?? '');
 $status_message = (string) ($status_message ?? '');
 $delivery_error = $_SESSION['delivery_error'] ?? '';
 unset($_SESSION['delivery_error']);
+$delivery_update_error = '';
+if ($action === 'update' && isset($_POST['submit'])) {
+    $delivery_update_error = (string) (
+        $errors['delivery_id']
+        ?? $errors['driver_id']
+        ?? $errors['route']
+        ?? $errors['pieces']
+        ?? $errors['stock']
+        ?? $errors['delivery_date']
+        ?? ''
+    );
+}
 $delivery_review_success = $_SESSION['delivery_success'] ?? '';
 unset($_SESSION['delivery_success']);
 $active_delivery_section = isset($_GET['report_month']) || isset($_GET['report_year']) ? 'reports' : 'pending';
@@ -34,6 +46,7 @@ $delivery_drivers = [];
 $delivery_team_result = mysqli_query($conn, "
     SELECT u.id,
            u.name,
+           u.profile_picture,
            CASE
                WHEN EXISTS (
                    SELECT 1
@@ -164,6 +177,19 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
             border-radius: 6px;
             background: #d4edda;
             color: #155724;
+        }
+        .delivery-proof-preview {
+            display: block;
+            width: min(100%, 560px);
+            max-height: 360px;
+            margin: 12px 0 16px;
+            border: 1px solid #dce8e0;
+            border-radius: 10px;
+            object-fit: contain;
+            background: #f8fbf9;
+        }
+        .delivery-proof-preview[hidden] {
+            display: none;
         }
         .delivery-product-status-note {
             display: block;
@@ -868,6 +894,9 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
         <?php if ($delivery_error !== ''): ?>
             <div role="alert" class="delivery-error-alert"><?= htmlspecialchars($delivery_error); ?></div>
         <?php endif; ?>
+        <?php if ($delivery_update_error !== ''): ?>
+            <div role="alert" class="delivery-error-alert"><?= htmlspecialchars($delivery_update_error); ?></div>
+        <?php endif; ?>
         <?php if ($delivery_review_success !== ''): ?>
             <div role="status" class="delivery-review-success"><?= htmlspecialchars($delivery_review_success); ?></div>
         <?php endif; ?>
@@ -922,7 +951,11 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
                                     <?php $is_present = $delivery_driver['attendance_status'] === 'Present'; ?>
                                     <article class="delivery-driver-item">
                                         <span class="delivery-driver-avatar" aria-hidden="true">
-                                            <?= htmlspecialchars(strtoupper(substr($delivery_driver['name'] ?? 'D', 0, 1))); ?>
+                                            <?php if (!empty($delivery_driver['profile_picture']) && preg_match('/^[a-f0-9]{32}\.(jpg|png|webp)$/', (string) $delivery_driver['profile_picture'])): ?>
+                                                <img src="uploads/profile-pictures/<?= htmlspecialchars($delivery_driver['profile_picture'], ENT_QUOTES, 'UTF-8'); ?>" alt="">
+                                            <?php else: ?>
+                                                <?= htmlspecialchars(strtoupper(substr($delivery_driver['name'] ?? 'D', 0, 1))); ?>
+                                            <?php endif; ?>
                                         </span>
                                         <span class="delivery-driver-details">
                                             <span class="delivery-driver-name">
@@ -1159,6 +1192,7 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
                                                         class="delivery-review-open-button edit-btn"
                                                         data-delivery-id="<?= (int) $row['delivery_id']; ?>"
                                                         data-route="<?= htmlspecialchars((string) ($row['product_name'] ?? 'this delivery') . ' to ' . (string) ($row['route'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-proof-url="<?= !empty($row['delivery_proof_image']) ? 'delivery_proof.php?id=' . (int) $row['delivery_id'] : ''; ?>"
                                                     >Review submission</button>
                                                 <?php endif; ?>
 
@@ -1175,15 +1209,14 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
 
                                                     <button
                                                         type="button"
-                                                        class="edit-btn"
-                                                        onclick="openEditDeliveryModal(
-                                                            '<?= htmlspecialchars($row['delivery_id']); ?>',
-                                                            '<?= htmlspecialchars($row['route']); ?>',
-                                                            '<?= htmlspecialchars($row['pieces']); ?>',
-                                                            '<?= htmlspecialchars($row['stock']); ?>',
-                                                            '<?= htmlspecialchars($row['delivery_date']); ?>',
-                                                            '<?= htmlspecialchars($row['driver_id'] ?? ''); ?>'
-                                                        )"
+                                                        class="edit-btn delivery-update-button"
+                                                        data-delivery-id="<?= (int) $row['delivery_id']; ?>"
+                                                        data-route="<?= htmlspecialchars((string) ($row['route'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-pieces="<?= (int) ($row['pieces'] ?? 0); ?>"
+                                                        data-stock="<?= (int) ($row['stock'] ?? 0); ?>"
+                                                        data-delivery-date="<?= htmlspecialchars((string) ($row['delivery_date'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+                                                        data-driver-id="<?= (int) ($row['driver_id'] ?? 0); ?>"
+                                                        data-driver-name="<?= htmlspecialchars((string) ($row['driver_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
                                                     >
                                                         Update
                                                     </button>
@@ -1785,6 +1818,8 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
         <span class="task-review-dialog-kicker">LOGISTICS TASK</span>
         <h2 id="deliveryReviewTitle">Review delivery submission</h2>
         <p class="task-review-dialog-description" id="deliveryReviewDescription"></p>
+        <img id="deliveryReviewProof" class="delivery-proof-preview" alt="Photo proof of delivery" hidden>
+        <p id="deliveryReviewNoProof" class="task-review-dialog-hint" hidden>No delivery proof photo was attached.</p>
         <label class="task-review-note-label" for="deliveryReviewNote">Reason for requesting changes</label>
         <textarea id="deliveryReviewNote" name="review_note" maxlength="1000" rows="4" placeholder="Explain what needs to be changed"></textarea>
         <p class="task-review-dialog-hint">A reason is required only when you request changes.</p>
@@ -1859,11 +1894,20 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
 <script>
     const deliveryReviewDialog = document.getElementById('deliveryReviewDialog');
     const deliveryReviewNote = document.getElementById('deliveryReviewNote');
+    const deliveryReviewProof = document.getElementById('deliveryReviewProof');
+    const deliveryReviewNoProof = document.getElementById('deliveryReviewNoProof');
     document.querySelectorAll('.delivery-review-open-button').forEach((button) => {
         button.addEventListener('click', () => {
             document.getElementById('deliveryReviewId').value = button.dataset.deliveryId;
             document.getElementById('deliveryReviewDescription').textContent =
                 `Choose whether to approve "${button.dataset.route}" or request changes from the driver.`;
+            const proofUrl = button.dataset.proofUrl || '';
+            deliveryReviewProof.hidden = !proofUrl;
+            deliveryReviewNoProof.hidden = Boolean(proofUrl);
+            deliveryReviewProof.removeAttribute('src');
+            if (proofUrl) {
+                deliveryReviewProof.src = proofUrl;
+            }
             deliveryReviewNote.value = '';
             deliveryReviewNote.required = false;
             deliveryReviewDialog.showModal();
@@ -2532,7 +2576,8 @@ function openEditDeliveryModal(
     pieces,
     stock,
     date,
-    driverId
+    driverId,
+    driverName
 ) {
 
     document.getElementById("edit_delivery_id").value = id;
@@ -2550,6 +2595,14 @@ function openEditDeliveryModal(
 
 
     const driverSelect = document.getElementById("edit_driver_id");
+    driverSelect.querySelectorAll("option[data-current-assignment]").forEach(option => option.remove());
+    if (driverId && !Array.from(driverSelect.options).some(option => option.value === String(driverId))) {
+        const currentDriverOption = document.createElement("option");
+        currentDriverOption.value = driverId;
+        currentDriverOption.textContent = `${driverName || `Driver #${driverId}`} (currently assigned)`;
+        currentDriverOption.dataset.currentAssignment = "true";
+        driverSelect.appendChild(currentDriverOption);
+    }
     driverSelect.value = driverId || "";
     driverSelect.dispatchEvent(new Event("change", { bubbles: true }));
 
@@ -2558,6 +2611,20 @@ function openEditDeliveryModal(
         "block";
 
 }
+
+document.querySelectorAll(".delivery-update-button").forEach(button => {
+    button.addEventListener("click", () => {
+        openEditDeliveryModal(
+            button.dataset.deliveryId,
+            button.dataset.route,
+            button.dataset.pieces,
+            button.dataset.stock,
+            button.dataset.deliveryDate,
+            button.dataset.driverId,
+            button.dataset.driverName
+        );
+    });
+});
 
 
 function closeEditDeliveryModal() {
@@ -2598,7 +2665,7 @@ window.onclick = function(event) {
 };
 
 
-document.querySelectorAll(".assignment-form").forEach((form) => {
+document.querySelectorAll("#deliveryModal .assignment-form").forEach((form) => {
     form.addEventListener("submit", (event) => {
         if (event.defaultPrevented) {
             return;

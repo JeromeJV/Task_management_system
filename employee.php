@@ -8,12 +8,14 @@ require_once __DIR__ . '/config/connection.php';
 require_once __DIR__ . '/config/autoLog.php';
 require_once __DIR__ . '/config/system_audit.php';
 require_once __DIR__ . '/config/task_notifications.php';
+require_once __DIR__ . '/config/leave_helpers.php';
 date_default_timezone_set('Asia/Manila');
 
 if (!isset($_SESSION['email'], $_SESSION['role']) || !in_array($_SESSION['role'], ['super', 'HR'], true)) {
     header('Location: index.php');
     exit();
 }
+ensureLeaveSchema($conn);
 $currentUserId = (int) ($_SESSION['id'] ?? 0);
 if ($currentUserId < 1) {
     http_response_code(403);
@@ -234,6 +236,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
         $validDueDate = $dateObject && $dateObject->format('Y-m-d') === $dueDate;
         if (!$validDueDate || (!$isUpdate && $dueDate < date('Y-m-d'))) {
             $errorMessage = 'Choose a valid due date' . ($isUpdate ? '.' : ' that is today or later.');
+        } elseif (employeeHasLeaveOnDate($conn, (int) $employeeId, $dueDate)) {
+            $errorMessage = 'This employee has recorded leave on the task due date and cannot be assigned this task.';
         } else {
             if (!$conn->begin_transaction()) {
                 throw new RuntimeException('Unable to start the task assignment transaction: ' . $conn->error);
@@ -530,6 +534,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
 $employees = [];
 $employeeResult = $conn->query(
     "SELECT u.id AS account_id, u.name AS username, u.email AS account_email, u.role AS account_role,
+            u.profile_picture AS account_profile_picture,
             e.employee_id, e.position, e.contact_number, e.email, e.address,
             (
                 SELECT a.status
@@ -738,7 +743,13 @@ $accountRoleLabels = [
                             data-search="<?= $escape(strtolower($employeeName . ' ' . ($account['position'] ?? '') . ' ' . $accountRoleLabel)); ?>"
                             <?= $isSelected ? 'aria-current="page"' : ''; ?>
                         >
-                            <span class="list-avatar"><?= $escape(strtoupper(mb_substr($employeeName, 0, 1))); ?></span>
+                            <span class="list-avatar">
+                                <?php if (!empty($account['account_profile_picture']) && preg_match('/^[a-f0-9]{32}\.(jpg|png|webp)$/', (string) $account['account_profile_picture'])): ?>
+                                    <img src="uploads/profile-pictures/<?= $escape($account['account_profile_picture']); ?>" alt="">
+                                <?php else: ?>
+                                    <?= $escape(strtoupper(mb_substr($employeeName, 0, 1))); ?>
+                                <?php endif; ?>
+                            </span>
                             <span class="list-name">
                                 <?= $escape($employeeName); ?>
                                 <small><?= $hasEmployeeProfile ? $escape($account['position'] ?? 'Employee') : 'Profile link needs review'; ?></small>
@@ -764,7 +775,13 @@ $accountRoleLabels = [
                         $selectedName = trim((string) ($selectedEmployee['username'] ?? 'Unnamed employee'));
                     ?>
                     <section class="profile-card" aria-label="Employee profile">
-                        <div class="profile-avatar"><?= $escape(strtoupper(mb_substr($selectedName, 0, 1))); ?></div>
+                        <div class="profile-avatar">
+                            <?php if (!empty($selectedEmployee['account_profile_picture']) && preg_match('/^[a-f0-9]{32}\.(jpg|png|webp)$/', (string) $selectedEmployee['account_profile_picture'])): ?>
+                                <img src="uploads/profile-pictures/<?= $escape($selectedEmployee['account_profile_picture']); ?>" alt="">
+                            <?php else: ?>
+                                <?= $escape(strtoupper(mb_substr($selectedName, 0, 1))); ?>
+                            <?php endif; ?>
+                        </div>
                         <div class="profile-info">
                             <h2><?= $escape($selectedName); ?></h2>
                             <p><?= $escape($selectedEmployee['position'] ?? 'Employee'); ?> <span class="profile-divider">·</span> ID #<?= (int) $selectedEmployee['employee_id']; ?></p>

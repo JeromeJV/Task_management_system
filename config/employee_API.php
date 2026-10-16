@@ -8,7 +8,9 @@ if (session_status() === PHP_SESSION_NONE) {
 
 include('config/connection.php');
 require_once __DIR__ . '/account_access.php';
+require_once __DIR__ . '/leave_helpers.php';
 requireActiveAccount($conn);
+ensureLeaveSchema($conn);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isset($_SESSION['id'], $_SESSION['role']) || !in_array($_SESSION['role'], ['HR', 'super'], true)) {
@@ -82,13 +84,14 @@ if (isset($_POST['hire_applicant_id']) || isset($_POST['applicant_id'])) {
             $safe_addr    = mysqli_real_escape_string($conn, $address);
             $safe_email   = mysqli_real_escape_string($conn, $email);
 
-            $hire_sql = "INSERT INTO employee (username, position, contact_number, address, email)
-                         VALUES ('$safe_name', '$safe_pos', '$safe_contact', '$safe_addr', '$safe_email')
+            $hire_sql = "INSERT INTO employee (username, position, contact_number, address, email, hire_date)
+                         VALUES ('$safe_name', '$safe_pos', '$safe_contact', '$safe_addr', '$safe_email', CURDATE())
                          ON DUPLICATE KEY UPDATE 
                             position = VALUES(position),
                             contact_number = VALUES(contact_number),
                             address = VALUES(address),
-                            email = VALUES(email)";
+                            email = VALUES(email),
+                            hire_date = COALESCE(hire_date, VALUES(hire_date))";
 
             if (mysqli_query($conn, $hire_sql)) {
                 $new_emp_id = mysqli_insert_id($conn);
@@ -157,8 +160,8 @@ if (isset($_POST['submit']) && !isset($_POST['is_update'])) {
         $safe_address        = mysqli_real_escape_string($conn, $address);
         $safe_email          = mysqli_real_escape_string($conn, $email);
         
-        $sql = "INSERT INTO employee (username, position, contact_number, address, email)
-                VALUES ('$safe_user_name', '$safe_position', '$safe_contact_number', '$safe_address', '$safe_email')";
+        $sql = "INSERT INTO employee (username, position, contact_number, address, email, hire_date)
+                VALUES ('$safe_user_name', '$safe_position', '$safe_contact_number', '$safe_address', '$safe_email', CURDATE())";
         
         $query = mysqli_query($conn, $sql);
 
@@ -237,6 +240,7 @@ if (isset($_POST['submit']) && isset($_POST['is_update'])) {
     $contact_number = trim((string) ($_POST['contact_number'] ?? ''));
     $address = trim((string) ($_POST['address'] ?? ''));
     $email = trim((string) ($_POST['email'] ?? ''));
+    $hire_date = trim((string) ($_POST['hire_date'] ?? ''));
     $validation_error = '';
 
     if (!$employee_id || $employee_id < 1) {
@@ -251,6 +255,14 @@ if (isset($_POST['submit']) && isset($_POST['is_update'])) {
         $validation_error = 'Address must be 255 characters or fewer.';
     } elseif (mb_strlen($email) > 255 || ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL))) {
         $validation_error = 'Enter a valid email address up to 255 characters.';
+    } elseif (
+        $hire_date !== ''
+        && (
+            !preg_match('/^\d{4}-\d{2}-\d{2}$/', $hire_date)
+            || !checkdate((int) substr($hire_date, 5, 2), (int) substr($hire_date, 8, 2), (int) substr($hire_date, 0, 4))
+        )
+    ) {
+        $validation_error = 'Enter a valid hire date.';
     }
 
     if ($validation_error !== '') {
@@ -278,7 +290,7 @@ if (isset($_POST['submit']) && isset($_POST['is_update'])) {
         } else {
             $update_employee = $conn->prepare(
                 'UPDATE employee
-                 SET username = ?, position = ?, contact_number = ?, address = ?, email = ?
+                 SET username = ?, position = ?, contact_number = ?, address = ?, email = ?, hire_date = NULLIF(?, \'\')
                  WHERE employee_id = ?'
             );
             if (!$update_employee) {
@@ -286,12 +298,13 @@ if (isset($_POST['submit']) && isset($_POST['is_update'])) {
                 throw new RuntimeException('Unable to prepare employee update: ' . $conn->error);
             }
             $update_employee->bind_param(
-                'sssssi',
+                'ssssssi',
                 $username,
                 $position,
                 $contact_number,
                 $address,
                 $email,
+                $hire_date,
                 $employee_id
             );
 

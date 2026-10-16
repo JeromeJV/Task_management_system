@@ -79,6 +79,10 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
                 <span class="hr-nav-icon" aria-hidden="true">◷</span>
                 <span class="hr-nav-label">Attendance</span>
             </a>
+            <a class="hr-nav-link" href="leave_management.php">
+                <span class="hr-nav-icon" aria-hidden="true">✚</span>
+                <span class="hr-nav-label">Leave Management</span>
+            </a>
             <a class="hr-nav-link" href="application_form.php">
                 <span class="hr-nav-icon" aria-hidden="true">▤</span>
                 <span class="hr-nav-label">Applicants</span>

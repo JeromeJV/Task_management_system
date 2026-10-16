@@ -516,6 +516,122 @@ foreach ($history_records as $hrec) {
             color: var(--text-muted);
         }
 
+        .delivery-proof-label {
+            display: block;
+            margin: 16px 0 8px;
+            color: var(--text-dark);
+            font-size: 0.9rem;
+            font-weight: 700;
+        }
+
+        .delivery-proof-hint {
+            display: block;
+            margin-top: 4px;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            font-weight: 400;
+        }
+
+        .delivery-proof-picker {
+            position: relative;
+            display: flex;
+            min-height: 92px;
+            align-items: center;
+            justify-content: center;
+            gap: 13px;
+            padding: 16px;
+            overflow: hidden;
+            border: 2px dashed #b7cbbd;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #f8fbf9, #eff7f1);
+            color: #245b38;
+            cursor: pointer;
+            transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .delivery-proof-picker:hover,
+        .delivery-proof-picker:focus-within {
+            border-color: var(--primary-green);
+            background: #edf7ef;
+            box-shadow: 0 0 0 3px rgba(45, 138, 84, 0.12);
+        }
+
+        .delivery-proof-picker-icon {
+            display: grid;
+            width: 42px;
+            height: 42px;
+            flex: 0 0 42px;
+            place-items: center;
+            border-radius: 12px;
+            background: #dcefe1;
+            color: #247144;
+        }
+
+        .delivery-proof-picker-icon svg {
+            width: 23px;
+            height: 23px;
+        }
+
+        .delivery-proof-picker-copy {
+            display: grid;
+            gap: 3px;
+            text-align: left;
+        }
+
+        .delivery-proof-picker-copy strong {
+            font-size: 0.88rem;
+        }
+
+        .delivery-proof-picker-copy span {
+            color: var(--text-muted);
+            font-size: 0.74rem;
+        }
+
+        .delivery-proof-input {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .delivery-proof-selection {
+            display: flex;
+            align-items: center;
+            gap: 11px;
+            margin-top: 10px;
+            padding: 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            background: #fff;
+        }
+
+        .delivery-proof-preview {
+            display: block;
+            width: 58px;
+            height: 58px;
+            flex: 0 0 58px;
+            border-radius: 7px;
+            background: #f1f5f2;
+            object-fit: cover;
+        }
+
+        .delivery-proof-filename {
+            min-width: 0;
+            overflow: hidden;
+            color: var(--text-dark);
+            font-size: 0.78rem;
+            font-weight: 600;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .delivery-proof-selection[hidden],
+        .delivery-proof-preview[hidden] {
+            display: none;
+        }
+
         .step-item {
             display: flex;
             align-items: center;
@@ -1222,8 +1338,29 @@ foreach ($history_records as $hrec) {
             </div>
         </div>
 
-        <form id="deliveryForm" action="logistic.php" method="post">
+        <form id="deliveryForm" action="logistic.php" method="post" enctype="multipart/form-data">
             <input type="hidden" name="idno" id="modalFormId">
+            <label class="delivery-proof-label" for="deliveryProofInput">
+                Delivery proof photo
+                <span class="delivery-proof-hint">JPG, PNG, or WebP · up to 5 MB</span>
+            </label>
+            <label class="delivery-proof-picker">
+                <span class="delivery-proof-picker-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H9l1.4-1.5h3.2L15 5h2.5A2.5 2.5 0 0 1 20 7.5v10a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-10Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                        <circle cx="12" cy="12.5" r="3.5" stroke="currentColor" stroke-width="1.7"/>
+                    </svg>
+                </span>
+                <span class="delivery-proof-picker-copy">
+                    <strong>Choose a photo or take one</strong>
+                    <span>Tap here to add delivery proof</span>
+                </span>
+                <input type="file" class="delivery-proof-input" id="deliveryProofInput" name="delivery_proof" accept="image/jpeg,image/png,image/webp" capture="environment" required>
+            </label>
+            <div class="delivery-proof-selection" id="deliveryProofSelection" hidden>
+                <img class="delivery-proof-preview" id="deliveryProofPreview" alt="Selected delivery proof preview" hidden>
+                <span class="delivery-proof-filename" id="deliveryProofFilename"></span>
+            </div>
             <button type="button" class="btn-confirm-delivery" id="modalSubmitBtn" onclick="openConfirmModal()">Confirm Delivery</button>
         </form>
     </div>
@@ -1343,6 +1480,25 @@ foreach ($history_records as $hrec) {
         document.getElementById('modalDate').innerText = date;
         document.getElementById('modalFormId').value = id;
 
+        const deliveryForm = document.getElementById('deliveryForm');
+        const proofInput = document.getElementById('deliveryProofInput');
+        const proofSelection = document.getElementById('deliveryProofSelection');
+        const proofPreview = document.getElementById('deliveryProofPreview');
+        const proofFilename = document.getElementById('deliveryProofFilename');
+        if (proofPreview.dataset.objectUrl) {
+            URL.revokeObjectURL(proofPreview.dataset.objectUrl);
+            delete proofPreview.dataset.objectUrl;
+        }
+        proofInput.value = '';
+        proofSelection.hidden = true;
+        proofPreview.hidden = true;
+        proofPreview.removeAttribute('src');
+        proofFilename.textContent = '';
+        deliveryForm.dataset.deliverySubmitting = 'false';
+        const confirmButton = document.querySelector('#confirmModal .btn-confirm-delivery');
+        confirmButton.disabled = false;
+        confirmButton.textContent = 'Confirm Delivery';
+
         const submitBtn = document.getElementById('modalSubmitBtn');
         const stepDelivered = document.getElementById('stepDelivered');
         const statusText = document.getElementById('modalStatusText');
@@ -1353,16 +1509,19 @@ foreach ($history_records as $hrec) {
             + (reviewedAt ? ' · ' + new Date(reviewedAt.replace(' ', 'T')).toLocaleString() : '');
 
         if (isHistory || status === 'delivered' || status === 'completed') {
+            deliveryForm.style.display = 'none';
             submitBtn.style.display = 'none';
             stepDelivered.classList.add('active');
             stepDelivered.innerHTML = '&#10003; Delivered';
             statusText.innerText = 'COMPLETED';
         } else if (status === 'awaiting approval') {
+            deliveryForm.style.display = 'none';
             submitBtn.style.display = 'none';
             stepDelivered.classList.remove('active');
             stepDelivered.innerHTML = '&#9675; Awaiting Approval';
             statusText.innerText = 'AWAITING SUPERVISOR APPROVAL';
         } else {
+            deliveryForm.style.display = 'block';
             submitBtn.style.display = 'block';
             stepDelivered.classList.remove('active');
             stepDelivered.innerHTML = '&#9675; Delivered';
@@ -1371,6 +1530,38 @@ foreach ($history_records as $hrec) {
 
         document.getElementById('detailModal').style.display = 'flex';
     }
+
+    document.getElementById('deliveryProofInput').addEventListener('change', (event) => {
+        const input = event.currentTarget;
+        const selection = document.getElementById('deliveryProofSelection');
+        const preview = document.getElementById('deliveryProofPreview');
+        const filename = document.getElementById('deliveryProofFilename');
+        const file = input.files && input.files[0];
+
+        if (preview.dataset.objectUrl) {
+            URL.revokeObjectURL(preview.dataset.objectUrl);
+            delete preview.dataset.objectUrl;
+        }
+        if (!file) {
+            selection.hidden = true;
+            preview.hidden = true;
+            preview.removeAttribute('src');
+            filename.textContent = '';
+            return;
+        }
+
+        filename.textContent = file.name;
+        selection.hidden = false;
+        if (file.type.startsWith('image/')) {
+            const objectUrl = URL.createObjectURL(file);
+            preview.src = objectUrl;
+            preview.dataset.objectUrl = objectUrl;
+            preview.hidden = false;
+        } else {
+            preview.hidden = true;
+            preview.removeAttribute('src');
+        }
+    });
 
     function openReviewFeedback(button) {
         const feedback = button.dataset.feedback || '';
@@ -1387,13 +1578,42 @@ foreach ($history_records as $hrec) {
     }
 
     function openConfirmModal() {
+        const proofInput = document.getElementById('deliveryProofInput');
+        if (!validateDeliveryProof(proofInput)) {
+            return;
+        }
         document.getElementById('confirmModal').style.display = 'flex';
+    }
+
+    function validateDeliveryProof(input) {
+        const file = input.files && input.files[0];
+        let message = '';
+        if (!file) {
+            message = 'Choose a delivery proof photo before submitting.';
+        } else if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+            message = 'Choose a JPG, PNG, or WebP photo.';
+        } else if (file.size < 1) {
+            message = 'The selected photo is empty. Choose another photo.';
+        } else if (file.size > 5 * 1024 * 1024) {
+            message = 'The delivery proof photo must be no larger than 5 MB.';
+        }
+
+        input.setCustomValidity(message);
+        if (message) {
+            input.reportValidity();
+            return false;
+        }
+        return true;
     }
 
     // INAYOS NA CONFIRM / SUBMIT FUNCTION
     function submitDelivery() {
         const form = document.getElementById('deliveryForm');
         if (form.dataset.deliverySubmitting === 'true') {
+            return;
+        }
+        if (!validateDeliveryProof(document.getElementById('deliveryProofInput'))) {
+            closeModal('confirmModal');
             return;
         }
 

@@ -2,11 +2,13 @@
 session_start();
 include('config/connection.php');
 include('config/autoLog.php');
+require_once __DIR__ . '/config/leave_helpers.php';
 
 if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'HR') {
     header("Location: index.php");
     exit();
 }
+ensureLeaveSchema($conn);
 include('config/employee_API.php');
 
 if (empty($_SESSION['employee_edit_csrf'])) {
@@ -74,7 +76,7 @@ while ($attendance_row = mysqli_fetch_assoc($attendance_result)) {
         $attendance_status,
         ['present', 'early', 'late', 'overtime', 'undertime', 'half day'],
         true
-    ) ? 'present' : 'absent';
+    ) ? 'present' : (in_array($attendance_status, ['paid leave', 'unpaid leave'], true) ? 'leave' : 'absent');
 }
 
 ?>
@@ -104,6 +106,10 @@ while ($attendance_row = mysqli_fetch_assoc($attendance_result)) {
                 <a class="hr-nav-link" href="atten.php">
                     <span class="hr-nav-icon" aria-hidden="true">◷</span>
                     <span class="hr-nav-label">Attendance</span>
+                </a>
+                <a class="hr-nav-link" href="leave_management.php">
+                    <span class="hr-nav-icon" aria-hidden="true">✚</span>
+                    <span class="hr-nav-label">Leave Management</span>
                 </a>
                 <a class="hr-nav-link" href="application_form.php">
                     <span class="hr-nav-icon" aria-hidden="true">▤</span>
@@ -181,6 +187,7 @@ while ($attendance_row = mysqli_fetch_assoc($attendance_result)) {
                         <option value="">All attendance</option>
                         <option value="present">Present</option>
                         <option value="absent">Absent</option>
+                        <option value="leave">On leave</option>
                     </select>
                 </div>
             </section>
@@ -221,7 +228,7 @@ while ($attendance_row = mysqli_fetch_assoc($attendance_result)) {
                                             <?= htmlspecialchars(strtoupper(substr($row['username'] ?? 'E', 0, 1))); ?>
                                         <?php endif; ?>
                                     </span>
-                                    <span class="hr-employee-status <?= $attendance_status === 'present' ? 'is-present' : 'is-absent'; ?>">
+                                    <span class="hr-employee-status <?= $attendance_status === 'present' ? 'is-present' : ($attendance_status === 'leave' ? 'is-leave' : 'is-absent'); ?>">
                                         <span class="hr-status-dot" aria-hidden="true"></span>
                                         <?= htmlspecialchars(ucfirst($attendance_status)); ?>
                                     </span>
@@ -255,6 +262,7 @@ while ($attendance_row = mysqli_fetch_assoc($attendance_result)) {
                                         data-contact="<?= htmlspecialchars($row['contact_number'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                                         data-email="<?= htmlspecialchars($row['email'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                                         data-address="<?= htmlspecialchars($row['address'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
+                                        data-hire-date="<?= htmlspecialchars($row['hire_date'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                                         data-attendance="<?= htmlspecialchars(ucfirst($attendance_status), ENT_QUOTES, 'UTF-8'); ?>"
                                         onclick="openEmployeeModal(this)"
                                     >View</button>
@@ -352,6 +360,10 @@ while ($attendance_row = mysqli_fetch_assoc($attendance_result)) {
                             <span>Email address</span>
                             <input type="email" name="email" id="editEmployeeEmail" maxlength="255">
                         </label>
+                        <label>
+                            <span>Hire date (for SIL eligibility)</span>
+                            <input type="date" name="hire_date" id="editEmployeeHireDate">
+                        </label>
                         <label class="hr-edit-address">
                             <span>Address</span>
                             <input type="text" name="address" id="editEmployeeAddress" maxlength="255">
@@ -387,7 +399,11 @@ while ($attendance_row = mysqli_fetch_assoc($attendance_result)) {
             );
             document.getElementById('modalAttendanceStatus').classList.toggle(
                 'is-absent',
-                button.dataset.attendance.toLowerCase() !== 'present'
+                !['present', 'leave'].includes(button.dataset.attendance.toLowerCase())
+            );
+            document.getElementById('modalAttendanceStatus').classList.toggle(
+                'is-leave',
+                button.dataset.attendance.toLowerCase() === 'leave'
             );
             employeeModal.hidden = false;
             document.body.classList.add('hr-modal-open');
@@ -403,6 +419,7 @@ while ($attendance_row = mysqli_fetch_assoc($attendance_result)) {
             document.getElementById('editEmployeeContact').value = employee.contact;
             document.getElementById('editEmployeeEmail').value = employee.email;
             document.getElementById('editEmployeeAddress').value = employee.address;
+            document.getElementById('editEmployeeHireDate').value = employee.hireDate;
             employeeModal.hidden = true;
             editEmployeeModal.hidden = false;
             document.querySelector('#editEmployeeModal .hr-modal-close').focus();

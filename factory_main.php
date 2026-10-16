@@ -53,6 +53,7 @@ if (isset($_GET['activity_log'])) {
 $pending_records = $pending_records ?? [];
 $history_records = $history_records ?? [];
 $message = $message ?? '';
+$production_update_error = (string) ($errors['update'] ?? '');
 $production_assignment_result = null;
 $production_assignment_feedback = '';
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && ($_POST['action'] ?? '') === 'insert') {
@@ -75,6 +76,7 @@ $production_team_result = mysqli_query($conn, "
            u.id,
            u.name,
            u.role,
+           u.profile_picture,
            CASE
                WHEN EXISTS (
                    SELECT 1
@@ -767,6 +769,12 @@ $stage_progress = static function (array $row): array {
 
         <?php endif; ?>
 
+        <?php if ($production_update_error !== ''): ?>
+            <div role="alert" style="padding: 10px; background-color: #f8d7da; color: #842029; margin: 15px 0; border-radius: 4px;">
+                <?= htmlspecialchars($production_update_error); ?>
+            </div>
+        <?php endif; ?>
+
         <?php if ($production_error !== ''): ?>
             <div role="alert" style="padding: 10px; background-color: #f8d7da; color: #842029; margin: 15px 0; border-radius: 4px;">
                 <?= htmlspecialchars($production_error); ?>
@@ -835,7 +843,11 @@ $stage_progress = static function (array $row): array {
                                 <?php $is_present = $production_user['attendance_status'] === 'Present'; ?>
                                 <article class="production-user-item">
                                     <span class="production-user-avatar" aria-hidden="true">
-                                        <?= htmlspecialchars(strtoupper(substr($production_user['name'] ?? 'U', 0, 1))); ?>
+                                        <?php if (!empty($production_user['profile_picture']) && preg_match('/^[a-f0-9]{32}\.(jpg|png|webp)$/', (string) $production_user['profile_picture'])): ?>
+                                            <img src="uploads/profile-pictures/<?= htmlspecialchars($production_user['profile_picture'], ENT_QUOTES, 'UTF-8'); ?>" alt="">
+                                        <?php else: ?>
+                                            <?= htmlspecialchars(strtoupper(substr($production_user['name'] ?? 'U', 0, 1))); ?>
+                                        <?php endif; ?>
                                     </span>
                                     <span class="production-user-details">
                                         <span class="production-user-name">
@@ -1607,64 +1619,12 @@ $stage_progress = static function (array $row): array {
                     required
                 >
 
-                    <option
-                        value=""
-                        disabled
-                    >
-                        -- Select Product --
-                    </option>
-
-                    <option value="Ginga Turmeric Brew">
-                        Ginga Turmeric Brew
-                    </option>
-
-                    <option value="Ginga Turmeric w/ Guyabano">
-                        Ginga Turmeric w/ Guyabano
-                    </option>
-
-                    <option value="Ginga Turmeric w/ Lemon">
-                        Ginga Turmeric w/ Lemon
-                    </option>
-
-                    <option value="Ginga Ginger - Regural Pouch">
-                        Ginga Ginger - Regural Pouch
-                    </option>
-
-                    <option value="Ginga Ginger Brew with Turmeric And Lemon">
-                        Ginga Ginger Brew with Turmeric And Lemon
-                    </option>
-
-                    <option value="Ginga Ginger - Strong">
-                        Ginga Ginger - Strong
-                    </option>
-
-                    <option value="Ginga Ginger - Regural">
-                        Ginga Ginger - Regural
-                    </option>
-
-                    <option value="Ginga Ginger Pure Tea">
-                        Ginga Ginger Pure Tea
-                    </option>
-
-                    <option value="Ginga Turmeric Pure Tea">
-                        Ginga Turmeric Pure Tea
-                    </option>
-
-                    <option value="Ginga Mangosteen Pure Tea">
-                        Ginga Mangosteen Pure Tea
-                    </option>
-
-                    <option value="Ginga Guyabano Pure Tea">
-                        Ginga Guyabano Pure Tea
-                    </option>
-
-                    <option value="Ginga Butterfly Pea Tea">
-                        Ginga Butterfly Pea Tea
-                    </option>
-
-                    <option value="Herbal Green Tea">
-                        Herbal Green Tea
-                    </option>
+                    <option value="" disabled>-- Select Product --</option>
+                    <?php foreach ($allowed_products as $product_name): ?>
+                        <option value="<?= htmlspecialchars($product_name, ENT_QUOTES, 'UTF-8'); ?>">
+                            <?= htmlspecialchars($product_name, ENT_QUOTES, 'UTF-8'); ?>
+                        </option>
+                    <?php endforeach; ?>
 
                 </select>
 
@@ -1699,8 +1659,11 @@ $stage_progress = static function (array $row): array {
 
                 <input
                     type="text"
-                    name="stock_number"
+                    name="Stock_number"
                     id="update_stock_number"
+                    inputmode="numeric"
+                    pattern="[0-9]{4}"
+                    maxlength="4"
                     required
                 >
 
@@ -1729,14 +1692,14 @@ $stage_progress = static function (array $row): array {
 
             <div class="form-group">
 
-                <label for="insert_due_date">
+                <label for="update_due_date">
                     Due Date:
                 </label>
 
                 <input
                     type="date"
                     name="due_date"
-                    id="insert_due_date"
+                    id="update_due_date"
                     class="calendar-control"
                     required
                 >

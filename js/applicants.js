@@ -169,42 +169,33 @@ citySelect.addEventListener('change', function () {
 // -------------------------------------------------------------------------------- STEP LOCKING SYSTEM
 
 function lockStep(stepNumber) {
-    const card = document.querySelector(`.card[data-section="${stepNumber}"]`);
-    if (!card) return;
-    
-    if (!card.classList.contains('locked')) {
-        card.classList.add('locked');
-        card.style.opacity = '0.5';
-        card.style.pointerEvents = 'none';
-        card.style.userSelect = 'none';
-        
-        // Add lock message
-        let lockMessage = card.querySelector('.lock-message');
-        if (!lockMessage) {
-            lockMessage = document.createElement('div');
-            lockMessage.className = 'lock-message';
-            lockMessage.innerHTML = `
-                <p>Complete previous section to unlock</p>
-            `;
-            card.appendChild(lockMessage);
+    const cards = document.querySelectorAll(`.card[data-section="${stepNumber}"]`);
+    cards.forEach(card => {
+        if (!card.classList.contains('locked')) {
+            card.classList.add('locked');
+            card.style.opacity = '0.5';
+            card.style.pointerEvents = 'none';
+            card.style.userSelect = 'none';
+
+            let lockMessage = card.querySelector('.lock-message');
+            if (!lockMessage) {
+                lockMessage = document.createElement('div');
+                lockMessage.className = 'lock-message';
+                lockMessage.innerHTML = '<p>Complete the previous section to unlock</p>';
+                card.appendChild(lockMessage);
+            }
         }
-    }
+    });
 }
 
 function unlockStep(stepNumber) {
-    const card = document.querySelector(`.card[data-section="${stepNumber}"]`);
-    if (!card) return;
-    
-    if (card.classList.contains('locked')) {
+    document.querySelectorAll(`.card[data-section="${stepNumber}"]`).forEach(card => {
         card.classList.remove('locked');
         card.style.opacity = '1';
         card.style.pointerEvents = 'auto';
         card.style.userSelect = 'auto';
-        
-        // Remove lock message
-        const lockMessage = card.querySelector('.lock-message');
-        if (lockMessage) lockMessage.remove();
-    }
+        card.querySelector('.lock-message')?.remove();
+    });
 }
 
 function updateStepLocks() {
@@ -235,6 +226,14 @@ function updateStepLocks() {
     } else {
         lockStep(4);
     }
+
+    document.querySelectorAll('.step[data-step]').forEach(step => {
+        const stepNumber = Number(step.dataset.step);
+        const stepCard = document.querySelector(`.card[data-section="${stepNumber}"]`);
+        const isLocked = Boolean(stepCard?.classList.contains('locked'));
+        step.setAttribute('aria-disabled', String(isLocked));
+        step.tabIndex = isLocked ? -1 : 0;
+    });
 }
 
 // -------------------------------------------------------------------------------- VALIDATION FUNCTIONS
@@ -251,6 +250,11 @@ function showError(field, message) {
     errorSpan.textContent = message;
     container.appendChild(errorSpan);
     field.classList.add('error');
+    const control = field.closest('.calendar-picker, .select-control');
+    if (control) {
+        control.classList.add('is-invalid');
+        control.querySelector('button')?.setAttribute('aria-invalid', 'true');
+    }
 }
 
 function clearError(field) {
@@ -260,6 +264,11 @@ function clearError(field) {
     const error = container.querySelector('.field-error');
     if (error) error.remove();
     field.classList.remove('error');
+    const control = field.closest('.calendar-picker, .select-control');
+    if (control) {
+        control.classList.remove('is-invalid');
+        control.querySelector('button')?.removeAttribute('aria-invalid');
+    }
 }
 
 function isEmpty(field) {
@@ -276,7 +285,7 @@ function isEmpty(field) {
 // -------------------------------------------------------------------------------- VALIDATION RULES 
 
 function validateRequired(field) {
-    if (field.hasAttribute('data-required') && isEmpty(field)) {
+    if ((field.required || field.hasAttribute('data-required')) && isEmpty(field)) {
         const labelElement = field.closest('.field')?.querySelector('label');
         const label = labelElement ? labelElement.textContent : 'This field';
         return `${label} is required`;
@@ -362,7 +371,8 @@ function validateDate(field) {
     const labelElement = field.closest('.field')?.querySelector('label');
     const label = labelElement ? labelElement.textContent : '';
     
-    if (label.includes('available')) {
+    const normalizedLabel = label.toLowerCase();
+    if (normalizedLabel.includes('available')) {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const selectedDate = new Date(value);
@@ -373,7 +383,7 @@ function validateDate(field) {
         }
     }
     
-    if (label.includes('Start date') || label.includes('End date')) {
+    if (field.id === 'workStartDate' || field.id === 'workEndDate') {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const selectedDate = new Date(value);
@@ -433,7 +443,8 @@ function validateFile(field) {
 }
 
 function validateField(field) {
-    if (!field || field.offsetParent === null) return null;
+    const hasEnhancedControl = Boolean(field?.dataset.calendarEnhanced || field?.dataset.selectEnhanced);
+    if (!field || field.disabled || (field.offsetParent === null && !hasEnhancedControl)) return null;
     
     let error = validateRequired(field);
     if (error) return error;
@@ -469,42 +480,70 @@ function isFieldFilled(field) {
 }
 
 function isSectionComplete(sectionNumber) {
-    const section = document.querySelector(`.card[data-section="${sectionNumber}"]`);
-    if (!section) return false;
-    
-    const requiredFields = section.querySelectorAll('[data-required]');
-    for (let field of requiredFields) {
-        if (field.disabled) continue; // Skip disabled fields
-        if (!isFieldFilled(field)) return false;
+    const sections = document.querySelectorAll(`.card[data-section="${sectionNumber}"]`);
+    if (sections.length === 0) return false;
+
+    for (const section of sections) {
+        const requiredFields = section.querySelectorAll('input[required], select[required], textarea[required], [data-required]');
+        for (const field of requiredFields) {
+            if (field.disabled) continue;
+            if (!isFieldFilled(field)) return false;
+        }
     }
     return true;
 }
 
-function updateProgress() {
-    const cards = document.querySelectorAll('.card');
-    const steps = document.querySelectorAll('.step');
+let currentStep = 1;
 
-    cards.forEach((card, index) => {
-        const step = steps[index];
-        if (!step) return;
-        
+function updateProgress() {
+    const steps = document.querySelectorAll('.step[data-step]');
+    const firstIncomplete = Array.from(steps).find(step => !isSectionComplete(Number(step.dataset.step)));
+    if (!document.querySelector(`.card[data-section="${currentStep}"]`) || document.querySelector(`.card[data-section="${currentStep}"]`)?.classList.contains('locked')) {
+        currentStep = firstIncomplete ? Number(firstIncomplete.dataset.step) : 4;
+    }
+
+    steps.forEach(step => {
+        const stepNumber = Number(step.dataset.step);
+        const complete = isSectionComplete(stepNumber);
         step.classList.remove('active', 'done');
-        if (isSectionComplete(index + 1)) {
+        if (complete) {
             step.classList.add('done');
-        } else {
-            // Find the first incomplete step
-            const previousComplete = index === 0 || isSectionComplete(index);
-            if (previousComplete) {
-                step.classList.add('active');
-            }
         }
+        if (stepNumber === currentStep) step.classList.add('active');
+        if (stepNumber === currentStep) {
+            step.setAttribute('aria-current', 'step');
+        } else {
+            step.removeAttribute('aria-current');
+        }
+        const label = step.querySelector('.label')?.textContent?.trim() || `Step ${stepNumber}`;
+        step.setAttribute('aria-label', `Step ${stepNumber} of 4: ${label}${complete ? ', completed' : ''}`);
     });
+}
+
+function setCurrentStep(stepNumber, shouldScroll = false) {
+    const step = document.querySelector(`.step[data-step="${stepNumber}"]`);
+    const sections = Array.from(document.querySelectorAll(`.card[data-section="${stepNumber}"]`));
+    if (!step || sections.length === 0 || step.getAttribute('aria-disabled') === 'true') return;
+
+    currentStep = stepNumber;
+    updateProgress();
+    if (shouldScroll) {
+        const section = sections.find(candidate => !isSectionCardComplete(candidate)) || sections[0];
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        section.setAttribute('tabindex', '-1');
+        section.focus({ preventScroll: true });
+    }
+}
+
+function isSectionCardComplete(section) {
+    const requiredFields = section.querySelectorAll('input[required], select[required], textarea[required], [data-required]');
+    return Array.from(requiredFields).every(field => field.disabled || isFieldFilled(field));
 }
 
 // Single function to update everything without recursion
 function updateFormState() {
-    updateProgress();
     updateStepLocks();
+    updateProgress();
 }
 
 // -------------------------------------------------------------------------------- DATABASE-READY DATA COLLECTION
@@ -750,7 +789,10 @@ function resetForm() {
     document.querySelectorAll('.error').forEach(field => field.classList.remove('error'));
     
     const fileName = document.getElementById('resumeFileName');
-    if (fileName) fileName.textContent = '';
+    if (fileName) {
+        fileName.textContent = 'No resume selected';
+        fileName.classList.remove('has-file');
+    }
     
     document.querySelectorAll('select').forEach(select => {
         select.selectedIndex = 0;
@@ -762,6 +804,7 @@ function resetForm() {
     });
     
     // Reset step locks
+    currentStep = 1;
     updateFormState();
     
     const submitBtn = document.getElementById('submitBtn');
@@ -789,6 +832,8 @@ async function handleFormSubmit(e) {
         
         const firstError = document.querySelector('.error');
         if (firstError) {
+            const errorSection = firstError.closest('.card[data-section]');
+            if (errorSection) setCurrentStep(Number(errorSection.dataset.section));
             firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
         return;
@@ -843,15 +888,34 @@ document.querySelectorAll('input, select, textarea').forEach(field => {
     });
 });
 
-document.getElementById('applicationForm').addEventListener('submit', handleFormSubmit);
+const applicationForm = document.getElementById('applicationForm');
+applicationForm.addEventListener('focusin', event => {
+    const section = event.target.closest('.card[data-section]');
+    if (section) setCurrentStep(Number(section.dataset.section));
+});
+applicationForm.addEventListener('submit', handleFormSubmit);
+
+document.querySelectorAll('.step[data-step]').forEach(step => {
+    const activate = () => setCurrentStep(Number(step.dataset.step), true);
+    step.addEventListener('click', activate);
+    step.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            activate();
+        }
+    });
+});
 
 document.getElementById('resumeFile')?.addEventListener('change', function() {
     const fileName = document.getElementById('resumeFileName');
     if (this.files && this.files[0]) {
-        const size = (this.files[0].size / (1024 * 1024)).toFixed(2);
-        fileName.textContent = `Selected: ${this.files[0].name} (${size} MB)`;
+        const resume = this.files[0];
+        const size = (resume.size / (1024 * 1024)).toFixed(2);
+        fileName.textContent = `${resume.name} (${size} MB)`;
+        fileName.classList.add('has-file');
     } else {
-        fileName.textContent = '';
+        fileName.textContent = 'No resume selected';
+        fileName.classList.remove('has-file');
     }
     updateFormState();
 });

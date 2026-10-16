@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/attendance_calculations.php';
+
 function getPayrollPeriodDates(string $payPeriod, string $payDate): array
 {
     $date = DateTimeImmutable::createFromFormat('!Y-m-d', $payDate);
@@ -51,6 +53,8 @@ function getPayrollAttendanceSummary(mysqli $conn, int $employeeId, string $star
                a.status,
                a.time_in,
                a.time_out,
+               a.time_in_2,
+               a.time_out_2,
                CASE
                    WHEN LOWER(TRIM(COALESCE(e.position, ''))) IN ('log', 'logistic', 'logistics', 'driver', 'delivery driver')
                      OR EXISTS (
@@ -85,34 +89,20 @@ function getPayrollAttendanceSummary(mysqli $conn, int $employeeId, string $star
     $dailyAttendance = [];
     while ($row = $result->fetch_assoc()) {
         $date = $row['attendance_date'];
-        $status = strtolower(trim($row['status'] ?? ''));
         $isLogistics = (bool) ($row['is_logistics'] ?? false);
         $timeIn = $row['time_in'] ?? '';
-        $timeOut = $row['time_out'] ?? '';
-        $hasTimeIn = $timeIn !== '' && $timeIn !== '00:00:00';
-        $hasTimeOut = $timeOut !== '' && $timeOut !== '00:00:00';
-        $dayFraction = $isLogistics
-            ? ($hasTimeIn ? ($hasTimeOut ? 1.0 : 0.5) : 0.0)
-            : match ($status) {
-                'present', 'late' => 1.0,
-                'half day' => 0.5,
-                default => 0.0
-            };
+        $hasTimeIn = attendancePunchExists($row, 'time_in');
+        $dayFraction = calculateAttendanceWorkFraction($row, $isLogistics);
 
         if (!isset($dailyAttendance[$date])) {
             $dailyAttendance[$date] = [
                 'date' => $date,
                 'days_worked' => $dayFraction,
-                'time_in_after_noon' => false,
                 'late_minutes' => 0,
                 'raw_late_minutes' => 0
             ];
         } else {
             $dailyAttendance[$date]['days_worked'] = max($dailyAttendance[$date]['days_worked'], $dayFraction);
-        }
-
-        if (!$isLogistics && $hasTimeIn && $timeIn > '12:00:00') {
-            $dailyAttendance[$date]['time_in_after_noon'] = true;
         }
 
         if ($hasTimeIn && $timeIn > '08:00:00') {
@@ -130,11 +120,65 @@ function getPayrollAttendanceSummary(mysqli $conn, int $employeeId, string $star
     }
     $statement->close();
 
+    $leaveStatement = $conn->prepare(
+        "SELECT start_date, end_date, leave_type
+         FROM employee_leave_requests
+         WHERE employee_id = ? AND status = 'active'
+           AND start_date <= ? AND end_date >= ?"
+    );
+    if (!$leaveStatement) {
+        throw new RuntimeException('Failed to prepare payroll leave query: ' . $conn->error);
+    }
+    $leaveStatement->bind_param('iss', $employeeId, $endDate, $startDate);
+    if (!$leaveStatement->execute()) {
+        $error = $leaveStatement->error;
+        $leaveStatement->close();
+        throw new RuntimeException('Failed to read payroll leave records: ' . $error);
+    }
+    $leaveResult = $leaveStatement->get_result();
+    while ($leave = $leaveResult->fetch_assoc()) {
+        $leaveStart = max($startDate, (string) $leave['start_date']);
+        $leaveEnd = min($endDate, (string) $leave['end_date']);
+        for (
+            $date = DateTimeImmutable::createFromFormat('!Y-m-d', $leaveStart);
+            $date && $date->format('Y-m-d') <= $leaveEnd;
+            $date = $date->modify('+1 day')
+        ) {
+            if ((int) $date->format('N') > 5) {
+                continue;
+            }
+            $key = $date->format('Y-m-d');
+            if (!isset($dailyAttendance[$key])) {
+                $dailyAttendance[$key] = [
+                    'date' => $key,
+                    'days_worked' => 0.0,
+                    'late_minutes' => 0,
+                    'raw_late_minutes' => 0,
+                    'paid_leave_days' => 0.0,
+                    'unpaid_leave_days' => 0.0
+                ];
+            }
+            $leaveKey = $leave['leave_type'] === 'SIL' ? 'paid_leave_days' : 'unpaid_leave_days';
+            $dailyAttendance[$key][$leaveKey] = min(
+                1.0,
+                (float) ($dailyAttendance[$key][$leaveKey] ?? 0.0) + 1.0
+            );
+        }
+    }
+    $leaveStatement->close();
+
     $daysWorked = 0.0;
+    $paidLeaveDays = 0.0;
+    $unpaidLeaveDays = 0.0;
     $lateMinutes = 0;
     $excessiveLateDays = [];
     foreach ($dailyAttendance as $day) {
-        $daysWorked += $day['time_in_after_noon'] ? 0.5 : $day['days_worked'];
+        $workFraction = $day['days_worked'];
+        $unpaidLeave = min(1.0, (float) ($day['unpaid_leave_days'] ?? 0.0));
+        $paidLeave = min(1.0 - $unpaidLeave, (float) ($day['paid_leave_days'] ?? 0.0));
+        $daysWorked += min($workFraction, max(0.0, 1.0 - $unpaidLeave - $paidLeave));
+        $paidLeaveDays += $paidLeave;
+        $unpaidLeaveDays += $unpaidLeave;
         $lateMinutes += $day['late_minutes'];
         if ($day['raw_late_minutes'] > 240) {
             $excessiveLateDays[] = [
@@ -146,6 +190,9 @@ function getPayrollAttendanceSummary(mysqli $conn, int $employeeId, string $star
 
     return [
         'days_worked' => $daysWorked,
+        'paid_leave_days' => $paidLeaveDays,
+        'unpaid_leave_days' => $unpaidLeaveDays,
+        'paid_leaves' => round($paidLeaveDays * $dailyRate, 2),
         'late_minutes' => $lateMinutes,
         'late_deduction' => calculateLateDeduction($lateMinutes, $dailyRate),
         'excessive_late_days' => $excessiveLateDays

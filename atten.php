@@ -1,12 +1,14 @@
 <?php
 require_once 'config/connection.php';
 require_once 'config/attendance_helpers.php';
+require_once __DIR__ . '/config/leave_helpers.php';
 
 // Set Timezone sa Philippine Time
 date_default_timezone_set('Asia/Manila');
 
 $currentDate = date('Y-m-d');
 $currentTime = date('H:i:s');
+ensureLeaveSchema($conn);
 finalizeDailyAttendance($conn, $currentDate, $currentTime);
 
 // Get GET parameters
@@ -21,6 +23,8 @@ $totalPresent = 0;
 $totalLate    = 0;
 $totalAbsent  = 0;
 $totalHalfDay = 0;
+$totalUndertime = 0;
+$totalLeave = 0;
 
 // =========================================================
 // FETCH ATTENDANCE WITH USER & EMPLOYEE DETAILS + SEARCH
@@ -99,6 +103,10 @@ if ($stmt) {
                 $totalAbsent++;
             } elseif ($st === 'half day') {
                 $totalHalfDay++;
+            } elseif ($st === 'undertime') {
+                $totalUndertime++;
+            } elseif (in_array($st, ['paid leave', 'unpaid leave'], true)) {
+                $totalLeave++;
             }
             if ($isLate) {
                 $totalLate++;
@@ -230,6 +238,7 @@ function formatTime($timeStr) {
         .summary-card.late { border-left-color: #ffc107; }
         .summary-card.absent { border-left-color: #dc3545; }
         .summary-card.half-day { border-left-color: #0dcaf0; }
+        .summary-card.undertime { border-left-color: #6c757d; }
         .summary-card h4 { margin: 0 0 5px 0; font-size: 12px; text-transform: uppercase; color: #6c757d; }
         .summary-card .number { font-size: 22px; font-weight: bold; margin: 0; }
 
@@ -260,6 +269,8 @@ function formatTime($timeStr) {
         .status-absent { background-color: #f8d7da; color: #842029; }
         .status-late { background-color: #fff3cd; color: #664d03; }
         .status-half-day { background-color: #cff4fc; color: #055160; }
+        .status-undertime { background-color: #e2e3e5; color: #41464b; }
+        .status-leave { background-color: #fff3cd; color: #664d03; }
         .status-default { background-color: #e2e3e5; color: #41464b; }
         
         .sub-text {
@@ -286,6 +297,10 @@ function formatTime($timeStr) {
                     <span class="hr-nav-icon" aria-hidden="true">◷</span>
                     <span class="hr-nav-label">Attendance</span>
                 </a>
+                <a class="hr-nav-link" href="leave_management.php">
+                    <span class="hr-nav-icon" aria-hidden="true">✚</span>
+                    <span class="hr-nav-label">Leave Management</span>
+                </a>
                 <a class="hr-nav-link" href="application_form.php">
                     <span class="hr-nav-icon" aria-hidden="true">▤</span>
                     <span class="hr-nav-label">Applicants</span>
@@ -308,6 +323,7 @@ function formatTime($timeStr) {
 
         <main class="hr-main attendance-main">
     <div class="header-actions">
+        <a href="attendance_corrections.php" class="btn btn-outline">Correct Attendance</a>
         <!-- Filter & Search Form -->
         <form method="GET" action="" class="filter-card">
             <label class="attendance-filter-field attendance-search-field" for="search">
@@ -383,6 +399,14 @@ function formatTime($timeStr) {
             <h4>Half Day</h4>
             <p class="number" style="color: #055160;"><?= $totalHalfDay; ?></p>
         </div>
+        <div class="summary-card undertime">
+            <h4>Incomplete Session</h4>
+            <p class="number" style="color: #41464b;"><?= $totalUndertime; ?></p>
+        </div>
+        <div class="summary-card">
+            <h4>On Leave</h4>
+            <p class="number" style="color: #8a5a00;"><?= $totalLeave; ?></p>
+        </div>
     </div>
 
     <?php if ($count > 0): ?>
@@ -395,10 +419,10 @@ function formatTime($timeStr) {
                     <th>Role</th>
                     <th>Employee ID</th>
                     <th>Attendance Date</th>
-                    <th>1st Time In</th>
-                    <th>1st Time Out</th>
-                    <th>2nd Time In</th>
-                    <th>2nd Time Out</th>
+                    <th>AM Time In</th>
+                    <th>AM Time Out</th>
+                    <th>PM Time In</th>
+                    <th>PM Time Out</th>
                     <th>Status</th>
                 </tr>
             </thead>
@@ -428,6 +452,8 @@ function formatTime($timeStr) {
                                     'absent'  => 'status-absent',
                                     'late'    => 'status-late',
                                     'half day', 'half day (late)' => 'status-half-day',
+                                    'undertime' => 'status-undertime',
+                                    'paid leave', 'unpaid leave' => 'status-leave',
                                     default   => 'status-default',
                                 };
                             ?>

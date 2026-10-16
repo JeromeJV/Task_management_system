@@ -67,6 +67,10 @@ $styleVersion = file_exists('css/applicant_admin.css') ? filemtime('css/applican
                 <span class="hr-nav-icon" aria-hidden="true">◷</span>
                 <span class="hr-nav-label">Attendance</span>
             </a>
+            <a class="hr-nav-link" href="leave_management.php">
+                <span class="hr-nav-icon" aria-hidden="true">✚</span>
+                <span class="hr-nav-label">Leave Management</span>
+            </a>
             <a class="hr-nav-link is-active" href="application_form.php" aria-current="page">
                 <span class="hr-nav-icon" aria-hidden="true">▤</span>
                 <span class="hr-nav-label">Applicants</span>
@@ -185,7 +189,7 @@ $styleVersion = file_exists('css/applicant_admin.css') ? filemtime('css/applican
                         $status = trim((string)($applicant['status'] ?? 'Pending'));
                         $interviewDate = trim((string)($applicant['interview_date'] ?? ''));
                         $resumeName = basename((string)($applicant['resume_path'] ?? ''));
-                        $resumeUrl = $resumeName !== '' ? 'uploads/' . rawurlencode($resumeName) : '';
+                        $resumeUrl = $resumeName !== '' ? 'resume.php?id=' . $id : '';
                         $position = trim((string)($applicant['position_applied'] ?? ''));
                         $contact = trim((string)($applicant['contact_number'] ?? ''));
                         $email = trim((string)($applicant['email'] ?? ''));
@@ -214,7 +218,8 @@ $styleVersion = file_exists('css/applicant_admin.css') ? filemtime('css/applican
                             'interviewType' => $applicant['interview_type'] ?? '',
                             'interviewMode' => $applicant['interview_mode'] ?? '',
                             'interviewDate' => $interviewDate,
-                            'resume' => $resumeUrl
+                            'resume' => $resumeUrl,
+                            'resumeName' => $resumeName
                         ];
                         $initials = strtoupper(substr($firstName, 0, 1) . substr($lastName, 0, 1));
                     ?>
@@ -421,8 +426,9 @@ $styleVersion = file_exists('css/applicant_admin.css') ? filemtime('css/applican
         const empty = document.getElementById('resumeEmpty');
         const hasResume = Boolean(url);
         document.getElementById('resumeFileName').textContent = fileName || 'No resume attached';
-        preview.data = hasResume ? url : '';
-        preview.classList.toggle('hidden', !hasResume);
+        const isPdf = /\.pdf$/i.test(fileName || '');
+        preview.data = hasResume && isPdf ? `${url}&preview=1` : '';
+        preview.classList.toggle('hidden', !hasResume || !isPdf);
         download.href = hasResume ? url : '#';
         download.download = fileName || '';
         download.classList.toggle('hidden', !hasResume);
@@ -465,8 +471,7 @@ $styleVersion = file_exists('css/applicant_admin.css') ? filemtime('css/applican
             rejectButton.disabled = isFailed;
             rejectButton.textContent = isFailed ? 'Already rejected' : 'Reject application';
             document.getElementById('openSchedule').disabled = isFailed;
-            const resumeName = applicant.resume ? decodeURIComponent(applicant.resume.split('/').pop()) : '';
-            setResume(applicant.resume, resumeName);
+            setResume(applicant.resume, applicant.resumeName || '');
             showModal('detailsModal');
         });
     });

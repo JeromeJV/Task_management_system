@@ -13,6 +13,17 @@ function ensureDeliveryActivitySchema(mysqli $conn): void
     }
     mysqli_free_result($delivered_at_column);
 
+    $delivery_proof_column = mysqli_query($conn, "SHOW COLUMNS FROM delivery LIKE 'delivery_proof_image'");
+    if (!$delivery_proof_column) {
+        throw new RuntimeException('Unable to inspect delivery proof image storage: ' . mysqli_error($conn));
+    }
+    if (mysqli_num_rows($delivery_proof_column) === 0) {
+        if (!mysqli_query($conn, "ALTER TABLE delivery ADD COLUMN delivery_proof_image VARCHAR(255) DEFAULT NULL AFTER completion_reviewed_at")) {
+            throw new RuntimeException('Unable to add delivery proof image storage: ' . mysqli_error($conn));
+        }
+    }
+    mysqli_free_result($delivery_proof_column);
+
     $create_table_sql = "CREATE TABLE IF NOT EXISTS delivery_activity (
                             activity_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
                             delivery_id INT NOT NULL,

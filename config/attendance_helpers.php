@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/attendance_calculations.php';
+
 function isLogisticsEmployee(mysqli $conn, int $employeeId, ?int $userId = null): bool
 {
     $statement = $conn->prepare("
@@ -73,13 +75,21 @@ function finalizeDailyAttendance(mysqli $conn, string $currentDate, string $curr
             WHERE a.employee_id = e.employee_id
               AND a.attendance_date = ?
         )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM employee_leave_requests l
+            WHERE l.employee_id = e.employee_id
+              AND l.status = 'active'
+              AND l.start_date <= ?
+              AND l.end_date >= ?
+        )
     ");
 
     if (!$absentStatement) {
         throw new RuntimeException('Failed to prepare automatic absent update: ' . $conn->error);
     }
 
-    $absentStatement->bind_param('ss', $currentDate, $currentDate);
+    $absentStatement->bind_param('ssss', $currentDate, $currentDate, $currentDate, $currentDate);
     if (!$absentStatement->execute()) {
         $error = $absentStatement->error;
         $absentStatement->close();
@@ -89,49 +99,62 @@ function finalizeDailyAttendance(mysqli $conn, string $currentDate, string $curr
     $absentRows = $absentStatement->affected_rows;
     $absentStatement->close();
 
-    $statusStatement = $conn->prepare("
-        UPDATE attendance a
+    $statusQuery = $conn->prepare("
+        SELECT a.attendance_id, a.user_id, a.time_in, a.time_out, a.time_in_2, a.time_out_2,
+               l.leave_type,
+               CASE
+                   WHEN LOWER(TRIM(COALESCE(e.position, ''))) IN ('log', 'logistic', 'logistics', 'driver', 'delivery driver')
+                     OR EXISTS (
+                         SELECT 1 FROM users u
+                         WHERE u.role = 'log'
+                           AND (u.id = a.user_id OR LOWER(TRIM(u.name)) = LOWER(TRIM(e.username)))
+                     )
+                   THEN 1 ELSE 0
+               END AS is_logistics
+        FROM attendance a
         LEFT JOIN employee e ON e.employee_id = a.employee_id
-        SET a.is_late = CASE WHEN a.time_in > '08:00:00' THEN 1 ELSE 0 END,
-            a.status = CASE
-                WHEN a.time_in IS NULL OR a.time_in = '00:00:00' THEN 'Absent'
-                WHEN (
-                    LOWER(TRIM(COALESCE(e.position, ''))) IN ('log', 'logistic', 'logistics', 'driver', 'delivery driver')
-                    OR EXISTS (
-                        SELECT 1
-                        FROM users u
-                        WHERE u.role = 'log'
-                          AND (
-                              u.id = a.user_id
-                              OR LOWER(TRIM(u.name)) = LOWER(TRIM(e.username))
-                          )
-                    )
-                ) THEN
-                    CASE
-                        WHEN a.time_out IS NULL OR a.time_out = '00:00:00' THEN 'Half Day'
-                        WHEN a.time_in > '08:00:00' THEN 'Late'
-                        ELSE 'Present'
-                    END
-                WHEN a.time_in_2 IS NULL OR a.time_in_2 = '00:00:00' THEN 'Half Day'
-                WHEN a.time_in > '08:00:00' THEN 'Late'
-                ELSE 'Present'
-            END
+        LEFT JOIN employee_leave_requests l
+          ON l.employee_id = a.employee_id
+         AND l.status = 'active'
+         AND l.start_date <= a.attendance_date
+         AND l.end_date >= a.attendance_date
         WHERE a.attendance_date = ?
+          AND a.status NOT IN ('Paid Leave', 'Unpaid Leave')
     ");
-
-    if (!$statusStatement) {
-        throw new RuntimeException('Failed to prepare daily attendance status update: ' . $conn->error);
+    if (!$statusQuery) {
+        throw new RuntimeException('Failed to prepare daily attendance status lookup: ' . $conn->error);
     }
-
-    $statusStatement->bind_param('s', $currentDate);
-    if (!$statusStatement->execute()) {
-        $error = $statusStatement->error;
-        $statusStatement->close();
-        throw new RuntimeException('Failed to finalize daily attendance statuses: ' . $error);
+    $statusQuery->bind_param('s', $currentDate);
+    if (!$statusQuery->execute()) {
+        $error = $statusQuery->error;
+        $statusQuery->close();
+        throw new RuntimeException('Failed to load daily attendance statuses: ' . $error);
     }
-
-    $statusRows = $statusStatement->affected_rows;
-    $statusStatement->close();
+    $statusRows = 0;
+    $statusResult = $statusQuery->get_result();
+    while ($row = $statusResult->fetch_assoc()) {
+        $isLate = attendancePunchExists($row, 'time_in') && $row['time_in'] > '08:00:00';
+        $status = $row['leave_type'] !== null
+            ? ($row['leave_type'] === 'SIL' ? 'Paid Leave' : 'Unpaid Leave')
+            : calculateAttendanceStatusFromPunches($row, (bool) $row['is_logistics'], $isLate);
+        $updateStatus = $conn->prepare('UPDATE attendance SET status = ?, is_late = ? WHERE attendance_id = ?');
+        if (!$updateStatus) {
+            $statusQuery->close();
+            throw new RuntimeException('Failed to prepare attendance status update: ' . $conn->error);
+        }
+        $attendanceId = (int) $row['attendance_id'];
+        $isLateFlag = (int) $isLate;
+        $updateStatus->bind_param('sii', $status, $isLateFlag, $attendanceId);
+        if (!$updateStatus->execute()) {
+            $error = $updateStatus->error;
+            $updateStatus->close();
+            $statusQuery->close();
+            throw new RuntimeException('Failed to finalize attendance status: ' . $error);
+        }
+        $statusRows += $updateStatus->affected_rows;
+        $updateStatus->close();
+    }
+    $statusQuery->close();
 
     return $absentRows + $statusRows;
 }

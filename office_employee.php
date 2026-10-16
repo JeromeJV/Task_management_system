@@ -404,6 +404,12 @@ if ($initials === '') {
                 <span class="hr-nav-icon" aria-hidden="true">◷</span>
                 <span class="hr-nav-label">Attendance</span>
             </a>
+            <?php if ($accountRole === 'HR'): ?>
+                <a class="hr-nav-link" href="leave_management.php">
+                    <span class="hr-nav-icon" aria-hidden="true">✚</span>
+                    <span class="hr-nav-label">Leave Management</span>
+                </a>
+            <?php endif; ?>
             <a class="hr-nav-link" href="application_form.php">
                 <span class="hr-nav-icon" aria-hidden="true">▤</span>
                 <span class="hr-nav-label">Applicants</span>

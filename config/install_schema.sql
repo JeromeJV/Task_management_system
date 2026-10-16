@@ -20,7 +20,7 @@ CREATE TABLE `applicant` (
   `barangay` varchar(255) NOT NULL,
   `city` varchar(255) NOT NULL,
   `province` varchar(255) NOT NULL,
-  `position_applied` enum('HR','payroll','driver','logistics','production','supervisor') NOT NULL,
+  `position_applied` enum('HR','payroll','driver','logistics','production','supervisor','employee') NOT NULL,
   `company_name` varchar(255) NOT NULL,
   `position` varchar(255) NOT NULL,
   `date_of_start` date NOT NULL,
@@ -47,7 +47,7 @@ CREATE TABLE `attendance` (
   `time_out` time DEFAULT NULL,
   `time_in_2` time DEFAULT NULL,
   `time_out_2` time DEFAULT NULL,
-  `status` enum('Present','Early','Late','Overtime','Undertime','Absent','Half Day') DEFAULT 'Absent',
+  `status` enum('Present','Early','Late','Overtime','Undertime','Absent','Half Day','Paid Leave','Unpaid Leave') DEFAULT 'Absent',
   `is_late` tinyint(1) NOT NULL DEFAULT 0,
   PRIMARY KEY (`attendance_id`),
   KEY `user_id` (`user_id`)
@@ -70,6 +70,7 @@ CREATE TABLE `delivery` (
   `completion_review_note` text DEFAULT NULL,
   `completion_reviewed_by` int(11) DEFAULT NULL,
   `completion_reviewed_at` datetime DEFAULT NULL,
+  `delivery_proof_image` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`delivery_id`),
   KEY `idx_delivery_review` (`completion_review_status`,`assigned_by`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -104,7 +105,28 @@ CREATE TABLE `employee` (
   `hdmf_no` varchar(50) DEFAULT 'N/A',
   `basic_pay` decimal(10,2) DEFAULT 0.00,
   `email` varchar(255) DEFAULT NULL,
+  `hire_date` date DEFAULT NULL,
   PRIMARY KEY (`employee_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `employee_leave_requests` (
+  `leave_id` int(11) NOT NULL AUTO_INCREMENT,
+  `employee_id` int(11) NOT NULL,
+  `start_date` date NOT NULL,
+  `end_date` date NOT NULL,
+  `leave_type` enum('SIL','LWOP') NOT NULL,
+  `day_fraction` decimal(2,1) NOT NULL DEFAULT 1.0,
+  `reason` varchar(500) NOT NULL,
+  `status` enum('active','cancelled') NOT NULL DEFAULT 'active',
+  `recorded_by` int(11) NOT NULL,
+  `recorded_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `cancelled_by` int(11) DEFAULT NULL,
+  `cancelled_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`leave_id`),
+  KEY `idx_employee_leave_dates` (`employee_id`,`status`,`start_date`,`end_date`),
+  KEY `idx_employee_leave_recorder` (`recorded_by`,`recorded_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;

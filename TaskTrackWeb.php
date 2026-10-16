@@ -1,391 +1,162 @@
 <?php
-    include('config/connection.php');
-
-    session_start();
+$gingaProducts = require __DIR__ . '/config/ginga_products.php';
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TaskTrack — Streamline Tasks, Empower Your Team</title>
+  <meta name="description" content="Meet Ginga: explore our ginger, turmeric, fruit, and tea beverage range and learn how our production team brings each product from cooking to packaging.">
+  <title>Ginga | A closer look at our products and production</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap"
-    rel="stylesheet">
-    <link rel="stylesheet" href="css/TaskTrackWeb.css">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/GingaWebsite.css?v=<?= filemtime(__DIR__ . '/css/GingaWebsite.css'); ?>">
 </head>
-
 <body>
-  <!-- NAVIGATION -->
-  <nav class="navbar" id="navbar" aria-label="Primary navigation">
-    <div class="nav-logo">
-      <span class="mark" aria-hidden="true"></span>
-      Kairos
-    </div>
-    <div class="nav-links">
-      <button class="nav-link active" type="button" data-target="page-home">Home</button>
-      <button class="nav-link" type="button" data-target="page-about">About</button>
-      <button class="nav-link" type="button" data-target="page-contact">Contact</button>
-      <button class="nav-link" type="button"><a href="index.php">Go to Login</a></button>
-      <a class="nav-apply" href="#page-apply" data-target="page-apply">Apply</a>
-    </div>
+  <header class="site-header">
+    <nav class="navbar" id="navbar" aria-label="Main navigation">
+      <a class="brand" href="#home" aria-label="Ginga home">
+        <span class="brand-mark" aria-hidden="true">G</span>
+        <span>ginga<span class="brand-period">.</span></span>
+      </a>
+      <button class="nav-toggle" id="navToggle" type="button" aria-label="Open navigation menu" aria-expanded="false" aria-controls="navLinks">
+        <span></span><span></span><span></span>
+      </button>
+      <div class="nav-links" id="navLinks">
+        <a class="nav-link active" href="#home">Home</a>
+        <a class="nav-link" href="#products">Our products</a>
+        <a class="nav-link" href="#production">Production</a>
+        <a class="nav-link" href="#about">About Ginga</a>
+        <a class="nav-login" href="index.php">Employee login</a>
+      </div>
+    </nav>
+  </header>
 
-    <button class="nav-toggle" id="navToggle" type="button" aria-label="Open menu" aria-expanded="false">
-      <span aria-hidden="true"></span>
-    </button>
-  </nav>
-
-  <div class="mobile-menu" id="mobileMenu">
-    <button class="nav-mobile-link" type="button" data-target="page-home">Home</button>
-    <button class="nav-mobile-link" type="button" data-target="page-about">About</button>
-    <button class="nav-mobile-link" type="button" data-target="page-contact">Contact</button>
-    <button class="nav-mobile-link" type="button" data-target="page-apply">Apply</button>
-  </div>
-
-<!-- MEMBER DETAIL -->
-<div class="member-detail-overlay" id="memberOverlay"></div>
-
-<aside
-  class="member-detail-panel"
-  id="memberPanel"
-  aria-label="Member details"
->
-
-  <button
-    class="member-detail-close"b 
-    id="memberClose"
-    type="button"
-    aria-label="Close member details"
-  >
-    ✕
-  </button>
-
-  <div
-    class="member-detail-avatar"
-    id="memberDetailAvatar"
-  >
-    B
-  </div>
-
-  <h2
-    class="member-detail-name"
-    id="memberDetailName">
-    Bernard Joseph Sagon
-  </h2>
-
-  <div
-    class="member-detail-role"
-    id="memberDetailRole">
-    FRONT-END
-  </div>
-
-  <div
-    class="member-detail-image"
-    id="memberDetailImage">
-    </div>
-
-  <div class="member-profile">
-
-    <div class="member-profile-section">
-      <h4>Skills</h4>
-      <div
-        class="member-tags"
-        id="memberDetailSkills"
-      ></div>
-    </div>
-
-    <div class="member-profile-section">
-      <h4>Knowledge</h4>
-      <div
-        class="member-tags"
-        id="memberDetailKnowledge"
-      ></div>
-    </div>
-
-    <div class="member-profile-section">
-      <h4>Technologies</h4>
-      <div
-        class="member-tags"
-        id="memberDetailTechnologies"
-      ></div>
-    </div>
-
-    <div class="member-profile-section">
-      <h4>Contribution to TaskTrack</h4>
-      <p id="memberDetailContribution"></p>
-    </div>
-  </div>
-
-  <div class="member-detail-quote">
-    <span class="quote-label">
-      Favorite Quote
-    </span>
-    <p id="memberDetailQuote"></p>
-  </div>
-  
-</aside>
-
-  <!-- MAIN CONTENT -->
   <main>
-    <!-- HOME -->
-    <section id="page-home" class="page">
-      <div class="home-inner">
-        <div class="home-copy">
-          <h1>
-            Work smarter.<br>
-            Stay <span>on track.</span>
-          </h1>
-
-          <p class="home-lede">
-            TaskTrack brings tasks, priorities, progress, and team responsibilities
-            into one organized workspace, giving teams a clearer way to manage work
-            from assignment to completion.
-          </p>
-
-          <div class="home-actions">
-            <a href="#page-about" class="home-primary" data-target="page-about">
-              Explore TaskTrack
-            </a>
-            <a href="#page-contact" class="home-secondary" data-target="page-contact">
-              Contact the team
-            </a>
-          </div>
+    <section class="hero" id="home">
+      <div class="hero-content">
+        <span class="eyebrow"><span class="eyebrow-dot"></span> A taste of Ginga</span>
+        <h1>Good things<br>start with <em>ginger.</em></h1>
+        <p class="hero-copy">Discover Ginga's range of ginger, turmeric, fruit, and tea beverages—and the people and production stages behind every pack.</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="#products">Discover our products <span aria-hidden="true">→</span></a>
+          <a class="text-link" href="#production">See how we make them <span aria-hidden="true">↓</span></a>
         </div>
+        <div class="hero-note"><span aria-hidden="true">✳</span> Made with care, prepared for everyday moments</div>
+      </div>
+      <div class="hero-art" aria-label="Illustration of ginger and a warm drink" role="img">
+        <div class="sun-disc"></div>
+        <div class="leaf leaf-one"></div>
+        <div class="leaf leaf-two"></div>
+        <div class="ginger-root ginger-main"></div>
+        <div class="ginger-root ginger-small"></div>
+        <div class="cup">
+          <div class="cup-drink"></div>
+          <div class="cup-handle"></div>
+        </div>
+        <span class="art-caption">Ginger, made inviting</span>
       </div>
     </section>
 
-    <!-- ABOUT -->
-    <section id="page-about" class="page">
-      <div class="about-content">
-        <div class="about-layout">
-          <div class="about-left">
-            <div class="mission-card">
-              <span class="eyebrow">Simplify work. Maximize productivity.</span>
-
-              <h3>What is TaskTrack</h3>
-
-              <p>
-                Kairos is a 3rd party company develop TaskTrack that solves
-                a common problem: scattered tasks, unclear priorities, and limited
-                progress visibility. The system connects people
-                and processes so work stays on track from assignment
-                to completion.
-              </p>
-            </div>
-
-            <div class="mission-points">
-              <div class="mission-point">
-                <div class="mission-icon" aria-hidden="true">✓</div>
-                <div>
-                  <strong>Better Task Management</strong>
-                  <p>
-                    TaskTrack makes it easier to assign, organize, and monitor tasks,
-                    ensuring that every employee knows what needs to be done and when.
-                  </p>
-                </div>
-              </div>
-
-              <div class="mission-point">
-                <div class="mission-icon" aria-hidden="true">✓</div>
-                <div>
-                  <strong>Faster Workflow</strong>
-                  <p>
-                    By streamlining task assignments and progress tracking, TaskTrack reduces delays
-                    and unnecessary back-and-forth.
-                  </p>
-                </div>
-              </div>
-
-              <div class="mission-point">
-                <div class="mission-icon" aria-hidden="true">✓</div>
-                <div>
-                  <strong>Real-Time Progress Monitoring</strong>
-                  <p>
-                    Managers can easily see the status of tasks, track employee progress,
-                  </p>
-                </div>
-              </div>
-
-              <div class="mission-point">
-                <div class="mission-icon" aria-hidden="true">✓</div>
-                <div>
-                  <strong>Improved Team Collaboration</strong>
-                  <p>
-                    TaskTrack keeps tasks, updates, and responsibilities organized
-                    in one system.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="about-right">
-            <div class="members-header">
-              <h3>Meet the Founders</h3>
-            </div>
-
-            <div class="about-features">
-              <article class="feature-card" data-member="harvey">
-                <div class="member-top">
-                  <div class="member-avatar">H</div>
-                  <span class="mem-tag">LEADER · BACK-END</span>
-                </div>
-                <h3>Harvey Jerome Valdepena</h3>
-                <p>Back-end development and database architecture.</p>
-              </article>
-
-              <article class="feature-card" data-member="bernard">
-                <div class="member-top">
-                  <div class="member-avatar">B</div>
-                  <span class="mem-tag">FRONT-END</span>
-                </div>
-                <h3>Bernard Joseph Sagon</h3>
-                <p>Main UI developer, prototype development, and front-end development.</p>
-              </article>
-
-              <article class="feature-card" data-member="joshua">
-                <div class="member-top">
-                  <div class="member-avatar">J</div>
-                  <span class="mem-tag">FRONT-END</span>
-                </div>
-                <h3>Joshua Miguel Garcia</h3>
-                <p>Front-end development and interface implementation.</p>
-              </article>
-
-              <article class="feature-card" data-member="irish">
-                <div class="member-top">
-                  <div class="member-avatar">I</div>
-                  <span class="mem-tag">DEVELOPMENT</span>
-                </div>
-                <h3>Irish Marie Rala</h3>
-                <p>UI design and interface development.</p>
-              </article>
-
-              <article class="feature-card" data-member="dominic">
-                <div class="member-top">
-                  <div class="member-avatar">D</div>
-                  <span class="mem-tag">DATABASE</span>
-                </div>
-                <h3>Dominic Dulatre</h3>
-                <p>Database development and data management.</p>
-              </article>
-
-              <article class="feature-card" data-member="jasmin">
-                <div class="member-top">
-                  <div class="member-avatar">J</div>
-                  <span class="mem-tag">UI / DESIGN</span>
-                </div>
-                <h3>Jasmin Santos</h3>
-                <p>UI design and interface development.</p>
-              </article>
-            </div>
-          </div>
+    <section class="products-section page-section" id="products">
+      <div class="section-heading">
+        <div>
+          <span class="eyebrow"><span class="eyebrow-dot"></span> The Ginga range</span>
+          <h2>Find your Ginga favorite.</h2>
         </div>
+        <p>Explore the products featured in our production range, from ginger and turmeric blends to fruit and herbal teas.</p>
+      </div>
+      <div class="product-grid">
+        <?php foreach ($gingaProducts as $index => $product): ?>
+          <article class="product-card product-card-<?= ($index % 4) + 1; ?>">
+            <div class="product-art" aria-hidden="true">
+              <span class="product-art-orbit"></span>
+              <span class="product-art-leaf"></span>
+              <span class="product-pack">
+                <span class="pack-brand">ginga</span>
+                <span class="pack-line"></span>
+                <span class="pack-name"><?= htmlspecialchars($product, ENT_QUOTES, 'UTF-8'); ?></span>
+                <span class="pack-seal">BOTANICAL<br>BLEND</span>
+              </span>
+            </div>
+            <div class="product-card-copy">
+              <span class="product-number"><?= str_pad((string) ($index + 1), 2, '0', STR_PAD_LEFT); ?></span>
+              <h3><?= htmlspecialchars($product, ENT_QUOTES, 'UTF-8'); ?></h3>
+              <p>A Ginga beverage from our production range.</p>
+            </div>
+          </article>
+        <?php endforeach; ?>
+      </div>
+      <p class="catalog-note">Product names shown here are the same choices available to our production team.</p>
+    </section>
+
+    <section class="production-section page-section" id="production">
+      <div class="production-intro">
+        <span class="eyebrow eyebrow-light"><span class="eyebrow-dot"></span> From plan to pack</span>
+        <h2>Every batch is a team effort.</h2>
+        <p>Ginga production is coordinated in clear stages, with team members working together to prepare products, complete packaging, and get finished goods ready for delivery.</p>
+      </div>
+      <div class="production-steps">
+        <article class="production-step">
+          <span class="step-index">01</span>
+          <span class="step-icon" aria-hidden="true">✳</span>
+          <h3>Plan the batch</h3>
+          <p>Product tasks are organized with quantities, targets, and due dates.</p>
+        </article>
+        <article class="production-step">
+          <span class="step-index">02</span>
+          <span class="step-icon" aria-hidden="true">◒</span>
+          <h3>Prepare the product</h3>
+          <p>The cooking team carries out its assigned production work.</p>
+        </article>
+        <article class="production-step">
+          <span class="step-index">03</span>
+          <span class="step-icon" aria-hidden="true">▤</span>
+          <h3>Pack with care</h3>
+          <p>Packaging follows after cooking is marked complete.</p>
+        </article>
+        <article class="production-step">
+          <span class="step-index">04</span>
+          <span class="step-icon" aria-hidden="true">↗</span>
+          <h3>Prepare for delivery</h3>
+          <p>Finished products move into the delivery workflow.</p>
+        </article>
+      </div>
+      <a class="button button-light" href="#about">More about Ginga <span aria-hidden="true">→</span></a>
+    </section>
+
+    <section class="about-section page-section" id="about">
+      <div class="about-copy">
+        <span class="eyebrow"><span class="eyebrow-dot"></span> About Ginga</span>
+        <h2>A beverage range with ginger at its heart.</h2>
+        <p>Ginga is a beverage brand featuring ginger, turmeric, fruit, and herbal tea products. Our range brings together familiar botanical ingredients in convenient drink options.</p>
+        <p>This website introduces Ginga's products and the production work behind them. The names in the catalog are connected to the product choices used by the production team.</p>
+        <a class="text-link text-link-dark" href="#products">Browse the Ginga range <span aria-hidden="true">↑</span></a>
+      </div>
+      <div class="about-highlight">
+        <span class="highlight-spark" aria-hidden="true">✳</span>
+        <span class="highlight-label">The Ginga range</span>
+        <strong>Ginger.<br>Turmeric.<br>Tea &amp; more.</strong>
+        <span class="highlight-foot">A product lineup made for everyday enjoyment.</span>
       </div>
     </section>
 
-    <!-- CONTACT -->
-    <section id="page-contact" class="page">
-      <div class="contact-content">
-        <h2 class="contact-title">Contact us</h2>
-        <p class="contact-invitation">
-          Have a question?, reach out one of our developer here
-        </p>
-
-        <div class="contact-grid">
-          <div class="contact-panel">
-            <div class="contact-links">
-              <div class="contact-item">
-                <a href="https://mail.google.com/mail/u/0/#inbox?compose=new">
-                  <span class="contact-icon" aria-hidden="true">✉</span>
-                  Email
-                </a>
-              </div>
-
-              <div class="contact-item">
-                <a
-                  href="https://www.facebook.com/Bernard.sagon.0918"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <span class="contact-icon" aria-hidden="true">f</span>
-                  Facebook
-                </a>
-              </div>
-
-              <div class="contact-item">
-                <a
-                  href="https://www.instagram.com/aazil.95/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <span class="contact-icon" aria-hidden="true">◎</span>
-                  Instagram
-                </a>
-              </div>
-            </div>
-          </div>
-
-          <div class="contact-map">
-            <h2>Find us</h2>
-            <p>215 Valdez Street, Catmon, Malabon City, Philippines</p>
-
-            <iframe
-              src="https://www.google.com/maps?q=215+Valdez+St,+Catmon,+Manila,+Metro+Manila&output=embed"
-              allowfullscreen
-              loading="lazy"
-              referrerpolicy="no-referrer-when-downgrade"
-              title="Google Maps location of 215 Valdez St, Catmon, Manila, Metro Manila"
-            ></iframe>
-          </div>
-        </div>
+    <section class="careers-band" aria-labelledby="careersTitle">
+      <div>
+        <span class="eyebrow eyebrow-light"><span class="eyebrow-dot"></span> Join the team</span>
+        <h2 id="careersTitle">Help bring Ginga products to life.</h2>
+        <p>Interested in being part of the team? Submit an application to get started.</p>
       </div>
-    </section>
-
-    <!-- APPLY -->
-    <section id="page-apply" class="page">
-      <div class="apply-inner">
-        <h2>As of now our company model is Ginga</h2>
-
-        <p class="apply-lede">
-          Ginga is a health-focused beverage company specializing in refreshing powdered drinks made from natural ginger.
-        </p>
-
-        <div class="apply-reasons">
-          <article class="apply-reason">
-            <h3>Healthy &amp; Refreshing</h3>
-            <p>
-              Ginga provides a refreshing powdered drink made from ginger, offering a flavorful choice for health-conscious consumers.
-            </p>
-          </article>
-
-          <article class="apply-reason">
-            <h3>Made from Ginger</h3>
-            <p>
-              Our products highlight the natural flavor and benefits of ginger in a convenient and easy-to-prepare drink.
-            </p>
-          </article>
-
-          <article class="apply-reason">
-            <h3>Convenient &amp; Accessible</h3>
-            <p>
-              Ginga makes enjoying a ginger-based drink simple and convenient, whether at home, at work, or on the go.
-            </p>
-          </article>
-        </div>
-
-        <a href="appli_form.php" class="btn-apply-lg">Apply Now</a>
-      </div>
+      <a class="button button-light" href="appli_form.php">Apply to Ginga <span aria-hidden="true">→</span></a>
     </section>
   </main>
 
-  <footer>
-    <span>© 2026 Kairos. All rights reserved.</span>
-    <span>Partnered with Ginga</span>
+  <footer class="site-footer">
+    <a class="brand brand-footer" href="#home"><span class="brand-mark" aria-hidden="true">G</span><span>ginga<span class="brand-period">.</span></span></a>
+    <span>Ginga products &amp; production</span>
+    <a href="index.php">Employee login</a>
   </footer>
-  <script src="js/TaskTrackWeb.js"></script>
+  <script src="js/TaskTrackWeb.js?v=<?= filemtime(__DIR__ . '/js/TaskTrackWeb.js'); ?>"></script>
 </body>
 </html>

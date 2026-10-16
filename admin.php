@@ -687,91 +687,272 @@ while ($row = $roleResult->fetch_assoc()) {
 }
 $roleResult->free();
 
-$taskCounts = [];
-$taskResult = $conn->query(
-    "SELECT CASE WHEN completion_review_status = 'pending_review'
-                     THEN 'Awaiting review'
-                     ELSE COALESCE(status, 'pending')
-                END AS item_status,
-            COUNT(*) AS item_count
-     FROM office
-     GROUP BY item_status"
-);
-if (!$taskResult) {
-    throw new RuntimeException('Unable to load office task summary: ' . $conn->error);
+$reportToday = new DateTimeImmutable('today');
+$reportRange = (string) ($_GET['range'] ?? 'month');
+if (!in_array($reportRange, ['today', 'week', '7days', 'month', 'year', 'custom'], true)) {
+    $reportRange = 'month';
 }
-while ($row = $taskResult->fetch_assoc()) {
-    $taskCounts[(string) $row['item_status']] = (int) $row['item_count'];
+$reportStart = $reportToday->modify('first day of this month');
+$reportEnd = $reportToday->modify('last day of this month');
+if ($reportRange === 'today') {
+    $reportStart = $reportToday;
+    $reportEnd = $reportToday;
+} elseif ($reportRange === 'week') {
+    $reportStart = $reportToday->modify('monday this week');
+    $reportEnd = $reportToday;
+} elseif ($reportRange === '7days') {
+    $reportStart = $reportToday->modify('-6 days');
+    $reportEnd = $reportToday;
+} elseif ($reportRange === 'year') {
+    $reportStart = $reportToday->setDate((int) $reportToday->format('Y'), 1, 1);
+    $reportEnd = $reportToday->setDate((int) $reportToday->format('Y'), 12, 31);
+} elseif ($reportRange === 'custom') {
+    $parseReportDate = static function ($value): ?DateTimeImmutable {
+        if (!is_string($value) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+            return null;
+        }
+        $parsed = DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+        $dateErrors = DateTimeImmutable::getLastErrors();
+        if (
+            !$parsed
+            || ($dateErrors !== false && ($dateErrors['warning_count'] > 0 || $dateErrors['error_count'] > 0))
+            || $parsed->format('Y-m-d') !== $value
+        ) {
+            return null;
+        }
+        return $parsed;
+    };
+    $customStart = $parseReportDate($_GET['start_date'] ?? null);
+    $customEnd = $parseReportDate($_GET['end_date'] ?? null);
+    if (!$customStart || !$customEnd || $customStart > $customEnd) {
+        $errorMessage = 'Choose a valid start and end date for the report.';
+        $reportRange = 'month';
+        $reportStart = $reportToday->modify('first day of this month');
+        $reportEnd = $reportToday->modify('last day of this month');
+    } else {
+        $reportStart = $customStart;
+        $reportEnd = $customEnd;
+    }
 }
-$taskResult->free();
+$reportStartDate = $reportStart->format('Y-m-d');
+$reportEndDate = $reportEnd->format('Y-m-d');
+$reportStartDateTime = $reportStart->format('Y-m-d') . ' 00:00:00';
+$reportEndExclusive = $reportEnd->modify('+1 day')->format('Y-m-d') . ' 00:00:00';
+$reportDays = (int) $reportStart->diff($reportEnd)->days + 1;
+$reportBucketFormat = $reportDays <= 31 ? '%Y-%m-%d' : '%Y-%m';
 
-$attendanceCounts = [];
-$attendanceResult = $conn->query('SELECT status, COUNT(*) AS item_count FROM attendance WHERE attendance_date = CURDATE() GROUP BY status');
-if (!$attendanceResult) {
-    throw new RuntimeException('Unable to load today attendance summary: ' . $conn->error);
+$reportAttendanceCounts = [];
+$reportPayrollCounts = [];
+$reportProductionCounts = [];
+$reportDeliveryCounts = [];
+$reportTaskCounts = [];
+$attendanceTrend = [];
+$payrollTrend = [];
+$reportQueries = [
+    'attendance' => [
+        'SELECT COALESCE(status, \'Unknown\') AS item_status, COUNT(*) AS item_count
+         FROM attendance WHERE attendance_date BETWEEN ? AND ? GROUP BY item_status',
+        'ss',
+        [$reportStartDate, $reportEndDate],
+    ],
+    'payroll' => [
+        'SELECT COALESCE(status, \'Unknown\') AS item_status, COUNT(*) AS item_count,
+                COALESCE(SUM(total_credited), 0) AS total_amount
+         FROM payroll WHERE pay_date BETWEEN ? AND ? GROUP BY item_status',
+        'ss',
+        [$reportStartDate, $reportEndDate],
+    ],
+    'production' => [
+        'SELECT work_type, work_status, COUNT(*) AS item_count
+         FROM production_assignments WHERE assigned_at >= ? AND assigned_at < ?
+         GROUP BY work_type, work_status ORDER BY work_type, work_status',
+        'ss',
+        [$reportStartDateTime, $reportEndExclusive],
+    ],
+    'delivery' => [
+        'SELECT COALESCE(status, \'Pending\') AS item_status, COUNT(*) AS item_count
+         FROM delivery
+         WHERE (CASE WHEN delivered_at IS NOT NULL THEN DATE(delivered_at) ELSE delivery_date END) BETWEEN ? AND ?
+         GROUP BY item_status',
+        'ss',
+        [$reportStartDate, $reportEndDate],
+    ],
+    'tasks' => [
+        "SELECT CASE WHEN completion_review_status = 'pending_review'
+                         THEN 'Awaiting review'
+                         ELSE COALESCE(status, 'pending')
+                    END AS item_status,
+                COUNT(*) AS item_count
+         FROM office WHERE submission_date >= ? AND submission_date < ?
+         GROUP BY item_status",
+        'ss',
+        [$reportStartDateTime, $reportEndExclusive],
+    ],
+    'attendance_trend' => [
+        "SELECT DATE_FORMAT(attendance_date, '{$reportBucketFormat}') AS period_label, COUNT(*) AS item_count
+         FROM attendance WHERE attendance_date BETWEEN ? AND ?
+         GROUP BY period_label ORDER BY period_label",
+        'ss',
+        [$reportStartDate, $reportEndDate],
+    ],
+    'payroll_trend' => [
+        "SELECT DATE_FORMAT(pay_date, '{$reportBucketFormat}') AS period_label,
+                COALESCE(SUM(total_credited), 0) AS total_amount
+         FROM payroll WHERE pay_date BETWEEN ? AND ?
+         GROUP BY period_label ORDER BY period_label",
+        'ss',
+        [$reportStartDate, $reportEndDate],
+    ],
+];
+if (in_array($section, ['dashboard', 'reports'], true)) {
+    foreach ($reportQueries as $queryName => [$querySql, $queryTypes, $queryValues]) {
+        $statement = $conn->prepare($querySql);
+        if (!$statement) {
+            throw new RuntimeException('Unable to prepare the filtered administrator report: ' . $conn->error);
+        }
+        $statement->bind_param($queryTypes, ...$queryValues);
+        if (!$statement->execute()) {
+            $error = $statement->error;
+            $statement->close();
+            throw new RuntimeException('Unable to load the filtered administrator report: ' . $error);
+        }
+        $result = $statement->get_result();
+        while ($row = $result->fetch_assoc()) {
+            if ($queryName === 'attendance') {
+                $reportAttendanceCounts[(string) $row['item_status']] = (int) $row['item_count'];
+            } elseif ($queryName === 'payroll') {
+                $reportPayrollCounts[(string) $row['item_status']] = [
+                    'count' => (int) $row['item_count'],
+                    'amount' => (float) $row['total_amount'],
+                ];
+            } elseif ($queryName === 'production') {
+                $reportProductionCounts[] = $row;
+            } elseif ($queryName === 'delivery') {
+                $reportDeliveryCounts[(string) $row['item_status']] = (int) $row['item_count'];
+            } elseif ($queryName === 'tasks') {
+                $reportTaskCounts[(string) $row['item_status']] = (int) $row['item_count'];
+            } elseif ($queryName === 'attendance_trend') {
+                $attendanceTrend[] = [
+                    'label' => (string) $row['period_label'],
+                    'value' => (int) $row['item_count'],
+                ];
+            } elseif ($queryName === 'payroll_trend') {
+                $payrollTrend[] = [
+                    'label' => (string) $row['period_label'],
+                    'value' => (float) $row['total_amount'],
+                ];
+            }
+        }
+        $statement->close();
+    }
 }
-while ($row = $attendanceResult->fetch_assoc()) {
-    $attendanceCounts[(string) ($row['status'] ?? 'Unknown')] = (int) $row['item_count'];
+$reportAttendanceTotal = array_sum($reportAttendanceCounts);
+$reportPayrollTotal = array_sum(array_column($reportPayrollCounts, 'amount'));
+$reportDeliveryTotal = array_sum($reportDeliveryCounts);
+$maxAttendanceTrend = max([1, ...array_column($attendanceTrend, 'value')]);
+$maxPayrollTrend = max([1, ...array_column($payrollTrend, 'value')]);
+$maxDeliveryCount = max([1, ...array_values($reportDeliveryCounts)]);
+$dashboardAttendanceColors = ['#21764c', '#e3a72f', '#4389a8', '#b9554c', '#7b6ca8', '#8a9d62', '#6c7b75'];
+$dashboardAttendancePie = [];
+$attendancePieTotal = array_sum($reportAttendanceCounts);
+$attendancePieAngle = -90.0;
+if ($attendancePieTotal > 0) {
+    $colorIndex = 0;
+    foreach ($reportAttendanceCounts as $status => $count) {
+        $sliceAngle = ((float) $count / $attendancePieTotal) * 360;
+        $startRadians = deg2rad($attendancePieAngle);
+        $endRadians = deg2rad($attendancePieAngle + $sliceAngle);
+        $startX = 110 + (82 * cos($startRadians));
+        $startY = 110 + (82 * sin($startRadians));
+        $endX = 110 + (82 * cos($endRadians));
+        $endY = 110 + (82 * sin($endRadians));
+        $color = $dashboardAttendanceColors[$colorIndex % count($dashboardAttendanceColors)];
+        if ($count === $attendancePieTotal) {
+            $path = '';
+        } else {
+            $largeArc = $sliceAngle > 180 ? 1 : 0;
+            $path = sprintf(
+                'M 110 110 L %.2f %.2f A 82 82 0 %d 1 %.2f %.2f Z',
+                $startX,
+                $startY,
+                $largeArc,
+                $endX,
+                $endY
+            );
+        }
+        $dashboardAttendancePie[] = [
+            'status' => $status,
+            'count' => $count,
+            'percentage' => round(($count / $attendancePieTotal) * 100),
+            'color' => $color,
+            'path' => $path,
+        ];
+        $attendancePieAngle += $sliceAngle;
+        $colorIndex++;
+    }
 }
-$attendanceResult->free();
-
-$payrollCounts = [];
-$payrollResult = $conn->query('SELECT status, COUNT(*) AS item_count, COALESCE(SUM(total_credited), 0) AS total_amount FROM payroll GROUP BY status');
-if (!$payrollResult) {
-    throw new RuntimeException('Unable to load payroll summary: ' . $conn->error);
-}
-while ($row = $payrollResult->fetch_assoc()) {
-    $payrollCounts[(string) ($row['status'] ?? 'Unknown')] = [
-        'count' => (int) $row['item_count'],
-        'amount' => (float) $row['total_amount'],
+$dashboardPayrollPoints = [];
+$payrollPointCount = count($payrollTrend);
+foreach ($payrollTrend as $index => $point) {
+    $x = $payrollPointCount < 2
+        ? 310.0
+        : 44 + ($index * (532 / ($payrollPointCount - 1)));
+    $y = 174 - (((float) $point['value'] / $maxPayrollTrend) * 136);
+    $dashboardPayrollPoints[] = [
+        'x' => round($x, 2),
+        'y' => round($y, 2),
+        'label' => $point['label'],
+        'value' => (float) $point['value'],
     ];
 }
-$payrollResult->free();
-
-$productionCounts = [];
-$productionResult = $conn->query('SELECT work_type, work_status, COUNT(*) AS item_count FROM production_assignments GROUP BY work_type, work_status');
-if (!$productionResult) {
-    throw new RuntimeException('Unable to load production summary: ' . $conn->error);
+$dashboardPayrollPolyline = implode(' ', array_map(
+    static fn (array $point): string => $point['x'] . ',' . $point['y'],
+    $dashboardPayrollPoints
+));
+$dashboardPayrollLabelIndexes = [];
+if ($payrollPointCount > 0) {
+    $labelCount = min(5, $payrollPointCount);
+    for ($labelIndex = 0; $labelIndex < $labelCount; $labelIndex++) {
+        $dashboardPayrollLabelIndexes[] = $labelCount === 1
+            ? 0
+            : (int) round($labelIndex * ($payrollPointCount - 1) / ($labelCount - 1));
+    }
 }
-while ($row = $productionResult->fetch_assoc()) {
-    $productionCounts[] = $row;
-}
-$productionResult->free();
-
-$deliveryCounts = [];
-$deliveryResult = $conn->query('SELECT status, COUNT(*) AS item_count FROM delivery GROUP BY status');
-if (!$deliveryResult) {
-    throw new RuntimeException('Unable to load logistics summary: ' . $conn->error);
-}
-while ($row = $deliveryResult->fetch_assoc()) {
-    $deliveryCounts[(string) ($row['status'] ?? 'Pending')] = (int) $row['item_count'];
-}
-$deliveryResult->free();
+$dashboardOperations = [
+    ['label' => 'Office tasks', 'value' => array_sum($reportTaskCounts), 'color' => '#21764c'],
+    ['label' => 'Production', 'value' => array_sum(array_map(
+        static fn (array $row): int => (int) $row['item_count'],
+        $reportProductionCounts
+    )), 'color' => '#4389a8'],
+    ['label' => 'Deliveries', 'value' => $reportDeliveryTotal, 'color' => '#e3a72f'],
+];
+$maxDashboardOperations = max([1, ...array_column($dashboardOperations, 'value')]);
 
 if ($section === 'reports' && ($_GET['download'] ?? '') === 'csv') {
     header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename="tasktrack-system-report-' . date('Y-m-d') . '.csv"');
+    header('Content-Disposition: attachment; filename="tasktrack-system-report-' . $reportStartDate . '-to-' . $reportEndDate . '.csv"');
     $output = fopen('php://output', 'w');
     if ($output === false) {
         throw new RuntimeException('Unable to create the CSV report.');
     }
     fputcsv($output, ['Area', 'Status / Role', 'Count', 'Amount']);
+    fputcsv($output, ['Report period', $reportStartDate . ' to ' . $reportEndDate, '', '']);
     foreach ($roleCounts as $role => $count) {
-        fputcsv($output, ['Accounts', $role, $count, '']);
+        fputcsv($output, ['Accounts by role (current snapshot)', $role, $count, '']);
     }
-    foreach ($attendanceCounts as $status => $count) {
-        fputcsv($output, ['Attendance today', $status, $count, '']);
+    foreach ($reportAttendanceCounts as $status => $count) {
+        fputcsv($output, ['Attendance', $status, $count, '']);
     }
-    foreach ($taskCounts as $status => $count) {
-        fputcsv($output, ['Office tasks', $status, $count, '']);
+    foreach ($reportTaskCounts as $status => $count) {
+        fputcsv($output, ['Office tasks submitted in period', $status, $count, '']);
     }
-    foreach ($payrollCounts as $status => $totals) {
+    foreach ($reportPayrollCounts as $status => $totals) {
         fputcsv($output, ['Payroll', $status, $totals['count'], number_format($totals['amount'], 2, '.', '')]);
     }
-    foreach ($productionCounts as $row) {
+    foreach ($reportProductionCounts as $row) {
         fputcsv($output, ['Production - ' . $row['work_type'], $row['work_status'], $row['item_count'], '']);
     }
-    foreach ($deliveryCounts as $status => $count) {
+    foreach ($reportDeliveryCounts as $status => $count) {
         fputcsv($output, ['Logistics', $status, $count, '']);
     }
     fclose($output);
@@ -816,13 +997,13 @@ $employeeCount = (int) ($employeeCountResult->fetch_assoc()['total'] ?? 0);
 $employeeCountResult->free();
 $userCount = count($accounts);
 $activeTaskCount = 0;
-foreach ($taskCounts as $status => $count) {
+foreach ($reportTaskCounts as $status => $count) {
     if (!in_array(strtolower(trim($status)), ['completed', 'complete', 'done'], true)) {
         $activeTaskCount += $count;
     }
 }
-$todayAttendanceTotal = array_sum($attendanceCounts);
-$paidPayroll = $payrollCounts['Paid']['amount'] ?? 0.0;
+$selectedPeriodAttendanceTotal = $reportAttendanceTotal;
+$selectedPeriodPaidPayroll = $reportPayrollCounts['Paid']['amount'] ?? 0.0;
 $escape = static fn ($value): string => htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 $sectionTitles = [
     'dashboard' => 'System overview',
@@ -855,45 +1036,130 @@ $tasktrackActive = $section === 'dashboard' ? 'dashboard' : $section;
 
     <?php if ($section === 'dashboard'): ?>
         <section class="admin-stat-grid" aria-label="System summary">
-            <article class="admin-stat"><span>Employee profiles</span><strong><?= $employeeCount; ?></strong></article>
-            <article class="admin-stat"><span>System accounts</span><strong><?= $userCount; ?></strong></article>
-            <article class="admin-stat"><span>Active office tasks</span><strong><?= $activeTaskCount; ?></strong></article>
-            <article class="admin-stat"><span>Attendance records today</span><strong><?= $todayAttendanceTotal; ?></strong></article>
-            <article class="admin-stat"><span>Paid payroll total</span><strong>₱<?= number_format((float) $paidPayroll, 2); ?></strong></article>
+            <article class="admin-stat" title="Current total; employee profiles do not have a reliable creation date."><span>Employee profiles · current total</span><strong><?= $employeeCount; ?></strong></article>
+            <article class="admin-stat" title="Current total; system accounts do not have a reliable creation date."><span>System accounts · current total</span><strong><?= $userCount; ?></strong></article>
+            <article class="admin-stat"><span>Active office tasks · selected period</span><strong><?= $activeTaskCount; ?></strong></article>
+            <article class="admin-stat"><span>Attendance records · selected period</span><strong><?= $selectedPeriodAttendanceTotal; ?></strong></article>
+            <article class="admin-stat"><span>Paid payroll · selected period</span><strong>₱<?= number_format((float) $selectedPeriodPaidPayroll, 2); ?></strong></article>
+        </section>
+        <section class="admin-panel admin-dashboard-analytics">
+            <div class="admin-panel-heading">
+                <div><p class="admin-eyebrow">DATE-FILTERED OVERVIEW</p><h2>Operational trends</h2></div>
+                <a href="admin.php?section=reports&amp;range=<?= $escape(rawurlencode($reportRange)); ?>&amp;start_date=<?= $escape(rawurlencode($reportStartDate)); ?>&amp;end_date=<?= $escape(rawurlencode($reportEndDate)); ?>">Open detailed reports</a>
+            </div>
+            <p class="admin-report-period">Showing <?= $escape($reportStart->format('M j, Y')); ?> to <?= $escape($reportEnd->format('M j, Y')); ?>. Operational data follows this period; employee and account totals are current snapshots.</p>
+            <form method="get" class="admin-report-filter">
+                <input type="hidden" name="section" value="dashboard">
+                <input type="hidden" name="range" value="custom">
+                <label>From
+                    <input type="date" name="start_date" value="<?= $escape($reportStartDate); ?>" required>
+                </label>
+                <label>To
+                    <input type="date" name="end_date" value="<?= $escape($reportEndDate); ?>" required>
+                </label>
+                <button type="submit" class="admin-secondary-button">Apply dates</button>
+            </form>
+            <nav class="admin-report-presets" aria-label="Quick dashboard date ranges">
+                <a class="<?= $reportRange === 'today' ? 'is-active' : ''; ?>" href="admin.php?section=dashboard&amp;range=today">Today</a>
+                <a class="<?= $reportRange === 'week' ? 'is-active' : ''; ?>" href="admin.php?section=dashboard&amp;range=week">This week</a>
+                <a class="<?= $reportRange === '7days' ? 'is-active' : ''; ?>" href="admin.php?section=dashboard&amp;range=7days">Last 7 days</a>
+                <a class="<?= $reportRange === 'month' ? 'is-active' : ''; ?>" href="admin.php?section=dashboard&amp;range=month">This month</a>
+                <a class="<?= $reportRange === 'year' ? 'is-active' : ''; ?>" href="admin.php?section=dashboard&amp;range=year">This year</a>
+            </nav>
+            <h3 class="admin-report-subheading">Dashboard charts</h3>
+            <div class="admin-report-charts">
+                <article class="admin-report-chart admin-dashboard-chart">
+                    <h3>Attendance by status</h3>
+                    <p>Distribution during the selected period</p>
+                    <?php if ($attendancePieTotal > 0): ?>
+                        <div class="admin-pie-layout">
+                            <svg class="admin-pie-chart" viewBox="0 0 220 220" role="img" aria-label="Attendance status distribution pie chart">
+                                <?php foreach ($dashboardAttendancePie as $slice): ?>
+                                    <?php if ($slice['path'] === ''): ?>
+                                        <circle cx="110" cy="110" r="82" fill="<?= $escape($slice['color']); ?>"><title><?= $escape($slice['status']); ?>: <?= $slice['count']; ?> records (100%)</title></circle>
+                                    <?php else: ?>
+                                        <path d="<?= $escape($slice['path']); ?>" fill="<?= $escape($slice['color']); ?>"><title><?= $escape($slice['status']); ?>: <?= $slice['count']; ?> records (<?= $slice['percentage']; ?>%)</title></path>
+                                    <?php endif; ?>
+                                <?php endforeach; ?>
+                                <circle class="admin-pie-center" cx="110" cy="110" r="46" fill="#fff"></circle>
+                                <text x="110" y="106" text-anchor="middle" class="admin-pie-total"><?= $attendancePieTotal; ?></text>
+                                <text x="110" y="124" text-anchor="middle" class="admin-pie-caption">records</text>
+                            </svg>
+                            <ul class="admin-pie-legend">
+                                <?php foreach ($dashboardAttendancePie as $slice): ?>
+                                    <li><span><i style="--legend-color: <?= $escape($slice['color']); ?>"></i><?= $escape($slice['status']); ?></span><strong><?= $slice['count']; ?> · <?= $slice['percentage']; ?>%</strong></li>
+                                <?php endforeach; ?>
+                            </ul>
+                        </div>
+                    <?php else: ?>
+                        <p class="admin-chart-empty">No attendance records in this period.</p>
+                    <?php endif; ?>
+                </article>
+                <article class="admin-report-chart admin-dashboard-chart admin-dashboard-chart-wide">
+                    <h3>Operational activity</h3>
+                    <p>Tasks submitted, production assignments, and deliveries during the selected period</p>
+                    <svg class="admin-column-chart" viewBox="0 0 540 250" role="img" aria-label="Operational activity bar chart">
+                        <?php foreach ([0, 1, 2, 3] as $gridLine): ?>
+                            <?php $gridY = 28 + ($gridLine * 48); ?>
+                            <line x1="42" y1="<?= $gridY; ?>" x2="512" y2="<?= $gridY; ?>" class="admin-line-grid"></line>
+                        <?php endforeach; ?>
+                        <line x1="42" y1="172" x2="512" y2="172" class="admin-line-axis"></line>
+                        <?php foreach ($dashboardOperations as $index => $operation): ?>
+                            <?php
+                            $barX = 105 + ($index * 145);
+                            $barHeight = $operation['value'] > 0
+                                ? max(3, ((int) $operation['value'] / $maxDashboardOperations) * 138)
+                                : 0;
+                            $barY = 172 - $barHeight;
+                            ?>
+                            <rect x="<?= $barX; ?>" y="<?= number_format($barY, 2, '.', ''); ?>" width="66" height="<?= number_format($barHeight, 2, '.', ''); ?>" rx="7" fill="<?= $escape($operation['color']); ?>">
+                                <title><?= $escape($operation['label']); ?>: <?= $operation['value']; ?></title>
+                            </rect>
+                            <text x="<?= $barX + 33; ?>" y="<?= number_format(max(18, $barY - 8), 2, '.', ''); ?>" text-anchor="middle" class="admin-column-value"><?= $operation['value']; ?></text>
+                            <text x="<?= $barX + 33; ?>" y="198" text-anchor="middle" class="admin-column-label"><?= $escape($operation['label']); ?></text>
+                        <?php endforeach; ?>
+                    </svg>
+                    <ul class="admin-column-legend">
+                        <?php foreach ($dashboardOperations as $operation): ?>
+                            <li><i style="--legend-color: <?= $escape($operation['color']); ?>"></i><?= $escape($operation['label']); ?> <strong><?= $operation['value']; ?></strong></li>
+                        <?php endforeach; ?>
+                    </ul>
+                </article>
+            </div>
         </section>
         <section class="admin-panel-grid">
             <article class="admin-panel">
-                <div class="admin-panel-heading"><div><p class="admin-eyebrow">ACCESS</p><h2>Accounts by role</h2></div><a href="admin.php?section=accounts">Manage accounts</a></div>
+                <div class="admin-panel-heading"><div><p class="admin-eyebrow">CURRENT SNAPSHOT</p><h2>Current accounts by role</h2></div><a href="admin.php?section=accounts">Manage accounts</a></div>
                 <div class="admin-table-wrap"><table><thead><tr><th>Role</th><th>Accounts</th></tr></thead><tbody>
                 <?php foreach ($roleCounts as $role => $count): ?><tr><td><?= $escape($roles[$role] ?? ucfirst($role)); ?></td><td><?= $count; ?></td></tr><?php endforeach; ?>
                 </tbody></table></div>
             </article>
             <article class="admin-panel">
-                <div class="admin-panel-heading"><div><p class="admin-eyebrow">TODAY</p><h2>Attendance status</h2></div><a href="admin.php?section=reports">All reports</a></div>
+                <div class="admin-panel-heading"><div><p class="admin-eyebrow">SELECTED PERIOD</p><h2>Attendance status</h2></div><a href="admin.php?section=reports&amp;range=<?= $escape(rawurlencode($reportRange)); ?>&amp;start_date=<?= $escape(rawurlencode($reportStartDate)); ?>&amp;end_date=<?= $escape(rawurlencode($reportEndDate)); ?>">All reports</a></div>
                 <div class="admin-table-wrap"><table><thead><tr><th>Status</th><th>Records</th></tr></thead><tbody>
-                <?php foreach ($attendanceCounts as $status => $count): ?><tr><td><?= $escape(ucfirst($status)); ?></td><td><?= $count; ?></td></tr><?php endforeach; ?>
-                <?php if ($attendanceCounts === []): ?><tr><td colspan="2">No attendance records today.</td></tr><?php endif; ?>
+                <?php foreach ($reportAttendanceCounts as $status => $count): ?><tr><td><?= $escape(ucfirst($status)); ?></td><td><?= $count; ?></td></tr><?php endforeach; ?>
+                <?php if ($reportAttendanceCounts === []): ?><tr><td colspan="2">No attendance records in this period.</td></tr><?php endif; ?>
                 </tbody></table></div>
             </article>
             <article class="admin-panel">
-                <div class="admin-panel-heading"><div><p class="admin-eyebrow">OPERATIONS</p><h2>Production</h2></div></div>
+                <div class="admin-panel-heading"><div><p class="admin-eyebrow">SELECTED PERIOD</p><h2>Production</h2></div></div>
                 <div class="admin-table-wrap"><table><thead><tr><th>Stage</th><th>Status</th><th>Assignments</th></tr></thead><tbody>
-                <?php foreach ($productionCounts as $row): ?><tr><td><?= $escape($row['work_type']); ?></td><td><?= $escape($row['work_status']); ?></td><td><?= (int) $row['item_count']; ?></td></tr><?php endforeach; ?>
-                <?php if ($productionCounts === []): ?><tr><td colspan="3">No production assignments.</td></tr><?php endif; ?>
+                <?php foreach ($reportProductionCounts as $row): ?><tr><td><?= $escape($row['work_type']); ?></td><td><?= $escape($row['work_status']); ?></td><td><?= (int) $row['item_count']; ?></td></tr><?php endforeach; ?>
+                <?php if ($reportProductionCounts === []): ?><tr><td colspan="3">No production assignments in this period.</td></tr><?php endif; ?>
                 </tbody></table></div>
             </article>
             <article class="admin-panel">
-                <div class="admin-panel-heading"><div><p class="admin-eyebrow">OPERATIONS</p><h2>Logistics</h2></div></div>
+                <div class="admin-panel-heading"><div><p class="admin-eyebrow">SELECTED PERIOD</p><h2>Logistics</h2></div></div>
                 <div class="admin-table-wrap"><table><thead><tr><th>Status</th><th>Deliveries</th></tr></thead><tbody>
-                <?php foreach ($deliveryCounts as $status => $count): ?><tr><td><?= $escape($status); ?></td><td><?= $count; ?></td></tr><?php endforeach; ?>
-                <?php if ($deliveryCounts === []): ?><tr><td colspan="2">No delivery records.</td></tr><?php endif; ?>
+                <?php foreach ($reportDeliveryCounts as $status => $count): ?><tr><td><?= $escape($status); ?></td><td><?= $count; ?></td></tr><?php endforeach; ?>
+                <?php if ($reportDeliveryCounts === []): ?><tr><td colspan="2">No delivery records in this period.</td></tr><?php endif; ?>
                 </tbody></table></div>
             </article>
             <article class="admin-panel">
-                <div class="admin-panel-heading"><div><p class="admin-eyebrow">PAYROLL</p><h2>Payroll status</h2></div></div>
+                <div class="admin-panel-heading"><div><p class="admin-eyebrow">SELECTED PERIOD</p><h2>Payroll status</h2></div></div>
                 <div class="admin-table-wrap"><table><thead><tr><th>Status</th><th>Records</th><th>Total</th></tr></thead><tbody>
-                <?php foreach ($payrollCounts as $status => $totals): ?><tr><td><?= $escape($status); ?></td><td><?= $totals['count']; ?></td><td>₱<?= number_format($totals['amount'], 2); ?></td></tr><?php endforeach; ?>
-                <?php if ($payrollCounts === []): ?><tr><td colspan="3">No payroll records.</td></tr><?php endif; ?>
+                <?php foreach ($reportPayrollCounts as $status => $totals): ?><tr><td><?= $escape($status); ?></td><td><?= $totals['count']; ?></td><td>₱<?= number_format($totals['amount'], 2); ?></td></tr><?php endforeach; ?>
+                <?php if ($reportPayrollCounts === []): ?><tr><td colspan="3">No payroll records in this period.</td></tr><?php endif; ?>
                 </tbody></table></div>
             </article>
         </section>
@@ -1038,14 +1304,87 @@ $tasktrackActive = $section === 'dashboard' ? 'dashboard' : $section;
         </section>
     <?php else: ?>
         <section class="admin-panel">
-            <div class="admin-panel-heading"><div><p class="admin-eyebrow">CONSOLIDATED REPORT</p><h2>System-wide operational summary</h2></div><a class="admin-primary-link" href="admin.php?section=reports&download=csv" title="Download consolidated system report as a CSV file">Download CSV report</a></div>
+            <div class="admin-panel-heading">
+                <div><p class="admin-eyebrow">CONSOLIDATED REPORT</p><h2>System-wide operational summary</h2></div>
+                <a class="admin-primary-link" href="admin.php?<?= $escape(http_build_query([
+                    'section' => 'reports',
+                    'range' => $reportRange,
+                    'start_date' => $reportStartDate,
+                    'end_date' => $reportEndDate,
+                    'download' => 'csv',
+                ])); ?>" title="Download the selected reporting period as a CSV file">Download CSV report</a>
+            </div>
+            <p class="admin-report-period">Showing <?= $escape($reportStart->format('M j, Y')); ?> to <?= $escape($reportEnd->format('M j, Y')); ?>.</p>
+            <form method="get" class="admin-report-filter">
+                <input type="hidden" name="section" value="reports">
+                <input type="hidden" name="range" value="custom">
+                <label>From
+                    <input type="date" name="start_date" value="<?= $escape($reportStartDate); ?>" required>
+                </label>
+                <label>To
+                    <input type="date" name="end_date" value="<?= $escape($reportEndDate); ?>" required>
+                </label>
+                <button type="submit" class="admin-secondary-button">Apply dates</button>
+            </form>
+            <nav class="admin-report-presets" aria-label="Quick report date ranges">
+                <a class="<?= $reportRange === 'today' ? 'is-active' : ''; ?>" href="admin.php?section=reports&amp;range=today">Today</a>
+                <a class="<?= $reportRange === 'week' ? 'is-active' : ''; ?>" href="admin.php?section=reports&amp;range=week">This week</a>
+                <a class="<?= $reportRange === '7days' ? 'is-active' : ''; ?>" href="admin.php?section=reports&amp;range=7days">Last 7 days</a>
+                <a class="<?= $reportRange === 'month' ? 'is-active' : ''; ?>" href="admin.php?section=reports&amp;range=month">This month</a>
+                <a class="<?= $reportRange === 'year' ? 'is-active' : ''; ?>" href="admin.php?section=reports&amp;range=year">This year</a>
+            </nav>
+            <section class="admin-report-stat-grid" aria-label="Selected period totals">
+                <article><span>Attendance records</span><strong><?= $reportAttendanceTotal; ?></strong></article>
+                <article><span>Payroll credited</span><strong>₱<?= number_format($reportPayrollTotal, 2); ?></strong></article>
+                <article><span>Office tasks submitted</span><strong><?= array_sum($reportTaskCounts); ?></strong></article>
+                <article><span>Deliveries</span><strong><?= $reportDeliveryTotal; ?></strong></article>
+            </section>
+            <h3 class="admin-report-subheading">Trends and status graphs</h3>
+            <div class="admin-report-charts">
+                <article class="admin-report-chart">
+                    <h3>Attendance volume</h3>
+                    <p><?= $reportDays <= 31 ? 'Records per day' : 'Records per month'; ?></p>
+                    <div class="admin-chart-bars" role="list" aria-label="Attendance record totals by period">
+                        <?php foreach ($attendanceTrend as $point): ?>
+                            <div class="admin-chart-row" role="listitem" aria-label="<?= $escape($point['label']); ?>: <?= (int) $point['value']; ?> records">
+                                <span><?= $escape($point['label']); ?></span><div class="admin-chart-track" aria-hidden="true"><i style="width: <?= number_format(($point['value'] / $maxAttendanceTrend) * 100, 2, '.', ''); ?>%"></i></div><strong><?= (int) $point['value']; ?></strong>
+                            </div>
+                        <?php endforeach; ?>
+                        <?php if ($attendanceTrend === []): ?><p class="admin-chart-empty">No attendance records in this period.</p><?php endif; ?>
+                    </div>
+                </article>
+                <article class="admin-report-chart">
+                    <h3>Payroll credited</h3>
+                    <p><?= $reportDays <= 31 ? 'Amount per day' : 'Amount per month'; ?></p>
+                    <div class="admin-chart-bars" role="list" aria-label="Payroll credited totals by period">
+                        <?php foreach ($payrollTrend as $point): ?>
+                            <div class="admin-chart-row" role="listitem" aria-label="<?= $escape($point['label']); ?>: ₱<?= number_format($point['value'], 2); ?>">
+                                <span><?= $escape($point['label']); ?></span><div class="admin-chart-track is-gold" aria-hidden="true"><i style="width: <?= number_format(($point['value'] / $maxPayrollTrend) * 100, 2, '.', ''); ?>%"></i></div><strong>₱<?= number_format($point['value'], 0); ?></strong>
+                            </div>
+                        <?php endforeach; ?>
+                        <?php if ($payrollTrend === []): ?><p class="admin-chart-empty">No payroll records in this period.</p><?php endif; ?>
+                    </div>
+                </article>
+                <article class="admin-report-chart">
+                    <h3>Delivery status</h3>
+                    <p>Completion date, or scheduled date if not completed</p>
+                    <div class="admin-chart-bars" role="list" aria-label="Delivery totals by status">
+                        <?php foreach ($reportDeliveryCounts as $status => $count): ?>
+                            <div class="admin-chart-row" role="listitem" aria-label="<?= $escape($status); ?>: <?= $count; ?> deliveries">
+                                <span><?= $escape($status); ?></span><div class="admin-chart-track is-blue" aria-hidden="true"><i style="width: <?= number_format(($count / $maxDeliveryCount) * 100, 2, '.', ''); ?>%"></i></div><strong><?= $count; ?></strong>
+                            </div>
+                        <?php endforeach; ?>
+                        <?php if ($reportDeliveryCounts === []): ?><p class="admin-chart-empty">No deliveries in this period.</p><?php endif; ?>
+                    </div>
+                </article>
+            </div>
             <div class="admin-report-grid">
                 <article><h3>Accounts by role</h3><?php foreach ($roleCounts as $role => $count): ?><p><span><?= $escape($roles[$role] ?? ucfirst($role)); ?></span><strong><?= $count; ?></strong></p><?php endforeach; ?></article>
-                <article><h3>Attendance today</h3><?php foreach ($attendanceCounts as $status => $count): ?><p><span><?= $escape(ucfirst($status)); ?></span><strong><?= $count; ?></strong></p><?php endforeach; ?></article>
-                <article><h3>Office tasks</h3><?php foreach ($taskCounts as $status => $count): ?><p><span><?= $escape(ucfirst($status)); ?></span><strong><?= $count; ?></strong></p><?php endforeach; ?></article>
-                <article><h3>Payroll</h3><?php foreach ($payrollCounts as $status => $totals): ?><p><span><?= $escape($status); ?></span><strong><?= $totals['count']; ?> · ₱<?= number_format($totals['amount'], 2); ?></strong></p><?php endforeach; ?></article>
-                <article><h3>Production stages</h3><?php foreach ($productionCounts as $row): ?><p><span><?= $escape($row['work_type'] . ' · ' . $row['work_status']); ?></span><strong><?= (int) $row['item_count']; ?></strong></p><?php endforeach; ?></article>
-                <article><h3>Deliveries</h3><?php foreach ($deliveryCounts as $status => $count): ?><p><span><?= $escape($status); ?></span><strong><?= $count; ?></strong></p><?php endforeach; ?></article>
+                <article><h3>Attendance · selected period</h3><?php foreach ($reportAttendanceCounts as $status => $count): ?><p><span><?= $escape(ucfirst($status)); ?></span><strong><?= $count; ?></strong></p><?php endforeach; ?><?php if ($reportAttendanceCounts === []): ?><p><span>No records</span><strong>0</strong></p><?php endif; ?></article>
+                <article><h3>Office tasks · submitted in period</h3><?php foreach ($reportTaskCounts as $status => $count): ?><p><span><?= $escape(ucfirst($status)); ?></span><strong><?= $count; ?></strong></p><?php endforeach; ?><?php if ($reportTaskCounts === []): ?><p><span>No records</span><strong>0</strong></p><?php endif; ?></article>
+                <article><h3>Payroll · selected period</h3><?php foreach ($reportPayrollCounts as $status => $totals): ?><p><span><?= $escape($status); ?></span><strong><?= $totals['count']; ?> · ₱<?= number_format($totals['amount'], 2); ?></strong></p><?php endforeach; ?><?php if ($reportPayrollCounts === []): ?><p><span>No records</span><strong>0</strong></p><?php endif; ?></article>
+                <article><h3>Production stages · assigned in period</h3><?php foreach ($reportProductionCounts as $row): ?><p><span><?= $escape($row['work_type'] . ' · ' . $row['work_status']); ?></span><strong><?= (int) $row['item_count']; ?></strong></p><?php endforeach; ?><?php if ($reportProductionCounts === []): ?><p><span>No records</span><strong>0</strong></p><?php endif; ?></article>
+                <article><h3>Deliveries · selected period</h3><?php foreach ($reportDeliveryCounts as $status => $count): ?><p><span><?= $escape($status); ?></span><strong><?= $count; ?></strong></p><?php endforeach; ?><?php if ($reportDeliveryCounts === []): ?><p><span>No records</span><strong>0</strong></p><?php endif; ?></article>
             </div>
         </section>
     <?php endif; ?>

@@ -8,6 +8,9 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'payroll') {
     header("Location: index.php");
     exit();
 }   
+if (empty($_SESSION['payroll_csrf'])) {
+    $_SESSION['payroll_csrf'] = bin2hex(random_bytes(32));
+}
 $initialPayrollTab = $_GET['tab'] ?? 'dashboard';
 if (!in_array($initialPayrollTab, ['dashboard', 'employees', 'calculator'], true)) {
     $initialPayrollTab = 'dashboard';
@@ -341,6 +344,61 @@ while ($r = $payrolls->fetch_assoc()) {
     .payroll-loading-overlay.step-success .payroll-loading-status {
       color: #86efac;
     }
+    .payroll-review-dialog {
+      width: min(440px, calc(100% - 32px));
+      padding: 0;
+      border: 0;
+      border-radius: 20px;
+      color: #1e293b;
+      box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+    }
+    .payroll-review-dialog::backdrop {
+      background: rgba(15, 23, 42, 0.52);
+      backdrop-filter: blur(3px);
+    }
+    .payroll-review-content { padding: 28px; }
+    .payroll-review-icon {
+      display: grid;
+      width: 48px;
+      height: 48px;
+      place-items: center;
+      margin-bottom: 18px;
+      border-radius: 15px;
+      background: #dcfce7;
+      color: #15803d;
+      font-size: 22px;
+    }
+    .payroll-review-content h2 { margin: 0; font-size: 20px; font-weight: 750; }
+    .payroll-review-content p { margin: 10px 0 0; color: #64748b; line-height: 1.6; }
+    .payroll-review-note {
+      margin-top: 16px;
+      padding: 12px 14px;
+      border: 1px solid #fde68a;
+      border-radius: 12px;
+      background: #fffbeb;
+      color: #854d0e;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .payroll-review-error {
+      margin-top: 14px;
+      color: #b91c1c;
+      font-size: 13px;
+    }
+    .payroll-review-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+    .payroll-review-button {
+      min-height: 40px;
+      padding: 0 15px;
+      border: 0;
+      border-radius: 10px;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .payroll-review-button:disabled { cursor: wait; opacity: 0.65; }
+    .payroll-review-cancel { background: #f1f5f9; color: #334155; }
+    .payroll-review-confirm { background: #15803d; color: #fff; }
     @media (prefers-reduced-motion: reduce) {
       .payroll-loading-overlay,
       .receipt-paper,
@@ -482,7 +540,7 @@ while ($r = $payrolls->fetch_assoc()) {
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-zinc-200 shadow-2xs">
             <div>
               <h3 class="text-xl font-bold text-zinc-900">Employee Disbursement Masterlist</h3>
-              <p class="text-xs text-zinc-500">Review and update each employee's payment status.</p>
+              <p class="text-xs text-zinc-500">Review payroll records and confirm the system status; this is not a payout receipt.</p>
             </div>
             <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="Search employee..." class="px-3.5 py-2 border border-zinc-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500 outline-none w-full sm:w-64">
           </div>
@@ -520,18 +578,21 @@ while ($r = $payrolls->fetch_assoc()) {
                     <td class="p-4 text-right font-mono font-bold text-slate-800">₱<?php echo number_format($row['total_credited'], 2); ?></td>
                     <td class="p-4 text-center">
                       <?php if ($row['status'] === 'Paid'): ?>
-                        <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">✓ Paid</span>
+                        <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">✓ Paid · reviewed</span>
                         <p class="mt-1 text-[10px] text-zinc-500">
-                          <?php echo !empty($row['paid_at']) ? 'Paid on ' . htmlspecialchars(date('M j, Y', strtotime($row['paid_at']))) : 'Payment date not recorded'; ?>
+                          <?php echo !empty($row['paid_at']) ? 'Review confirmed ' . htmlspecialchars(date('M j, Y', strtotime($row['paid_at']))) : 'Review confirmation date not recorded'; ?>
                         </p>
                       <?php else: ?>
                         <span class="block mb-1 text-[10px] font-bold text-amber-700">⏳ Pending</span>
                         <button onclick="markPayrollPaid(<?php echo (int) $row['payroll_id']; ?>)" class="px-2.5 py-1 rounded-full text-[10px] font-bold transition bg-emerald-100 text-emerald-700 hover:bg-emerald-200">
-                          Mark as Paid
+                          Confirm Review
                         </button>
                       <?php endif; ?>
                     </td>
                     <td class="p-4 text-center">
+                      <?php if ($row['status'] === 'Paid'): ?>
+                        <a href="payroll_edit.php?payroll_id=<?php echo (int) $row['payroll_id']; ?>" class="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg font-bold transition text-[11px] inline-flex items-center gap-1.5">Correct Paid Record</a>
+                      <?php endif; ?>
                       <button onclick='printPayslip(<?php echo json_encode($row); ?>)' class="px-3 py-1.5 bg-zinc-100 hover:bg-emerald-700 hover:text-white text-zinc-700 rounded-lg font-bold transition text-[11px] inline-flex items-center gap-1.5">
                         <i class="fa-solid fa-print"></i> Payslip
                       </button>
@@ -551,6 +612,7 @@ while ($r = $payrolls->fetch_assoc()) {
             
             <form action="config/Payroll_API.php" method="POST" class="space-y-4" id="payrollForm">
               <input type="hidden" name="action" value="create_payroll">
+              <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['payroll_csrf'], ENT_QUOTES, 'UTF-8'); ?>">
 
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -592,8 +654,9 @@ while ($r = $payrolls->fetch_assoc()) {
                   <input type="number" step="0.01" id="regular_pay" name="regular_pay" value="000.00" class="w-full px-2.5 py-1.5 border rounded-lg text-xs font-mono bg-emerald-100 font-bold" readonly>
                 </div>
                 <div>
-                  <label class="block text-[11px] text-zinc-600">Paid Leaves (₱)</label>
-                  <input type="number" step="0.01" name="paid_leaves" placeholder="000.00" class="w-full px-2.5 py-1.5 border rounded-lg text-xs font-mono">
+                  <label class="block text-[11px] text-zinc-600">Paid SIL Leave (₱)</label>
+                  <input type="number" step="0.01" id="paid_leaves_display" placeholder="0.00" readonly class="w-full px-2.5 py-1.5 border rounded-lg text-xs font-mono bg-zinc-100">
+                  <p class="text-[10px] text-zinc-500 col-span-2">Calculated automatically from HR-recorded paid SIL. Unpaid LWOP is not included in pay.</p>
                 </div>
                 <div>
                   <label class="block text-[11px] text-zinc-600">Daily Allowance (₱)</label>
@@ -672,6 +735,22 @@ while ($r = $payrolls->fetch_assoc()) {
       <div id="payrollLoadingStatus" class="payroll-loading-status">Calculating payroll data...</div>
     </div>
   </div>
+
+  <dialog id="payrollReviewDialog" class="payroll-review-dialog" aria-labelledby="payrollReviewTitle" aria-describedby="payrollReviewDescription">
+    <div class="payroll-review-content">
+      <div class="payroll-review-icon" aria-hidden="true"><i class="fa-solid fa-clipboard-check"></i></div>
+      <h2 id="payrollReviewTitle">Confirm payroll review</h2>
+      <p id="payrollReviewDescription">Have you checked this payroll record and its amounts?</p>
+      <div class="payroll-review-note">
+        Confirming changes the system status to <strong>Paid</strong> as a review record only. It does not confirm or record an actual payout.
+      </div>
+      <p id="payrollReviewError" class="payroll-review-error" role="alert" hidden></p>
+      <div class="payroll-review-actions">
+        <button id="cancelPayrollReview" type="button" class="payroll-review-button payroll-review-cancel">Review first</button>
+        <button id="confirmPayrollReview" type="button" class="payroll-review-button payroll-review-confirm">Yes, confirm review</button>
+      </div>
+    </div>
+  </dialog>
 
   <!-- SCRIPT HANDLERS -->
   <script>
@@ -798,16 +877,40 @@ while ($r = $payrolls->fetch_assoc()) {
       });
     }
 
-    async function markPayrollPaid(id) {
-      if (!window.confirm('Confirm that this payroll has actually been paid to the employee?')) {
+    const payrollReviewDialog = document.getElementById('payrollReviewDialog');
+    const payrollReviewError = document.getElementById('payrollReviewError');
+    const confirmPayrollReviewButton = document.getElementById('confirmPayrollReview');
+    let payrollIdToReview = null;
+
+    function markPayrollPaid(id) {
+      payrollIdToReview = id;
+      payrollReviewError.hidden = true;
+      payrollReviewError.textContent = '';
+      confirmPayrollReviewButton.disabled = false;
+      confirmPayrollReviewButton.textContent = 'Yes, confirm review';
+      payrollReviewDialog.showModal();
+    }
+
+    document.getElementById('cancelPayrollReview').addEventListener('click', () => {
+      payrollReviewDialog.close();
+    });
+
+    confirmPayrollReviewButton.addEventListener('click', async () => {
+      if (!payrollIdToReview) {
         return;
       }
-
+      confirmPayrollReviewButton.disabled = true;
+      confirmPayrollReviewButton.textContent = 'Saving...';
+      payrollReviewError.hidden = true;
       try {
         const response = await fetch('config/Payroll_API.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `action=mark_paid&payroll_id=${id}`
+          method: 'POST',
+          body: new URLSearchParams({
+            action: 'mark_paid',
+            payroll_id: String(payrollIdToReview),
+            review_confirmed: '1',
+            csrf_token: <?php echo json_encode($_SESSION['payroll_csrf']); ?>
+          })
         });
         const data = await response.json();
         if (!response.ok || data.status !== 'success') {
@@ -817,9 +920,12 @@ while ($r = $payrolls->fetch_assoc()) {
         location.reload();
       } catch (error) {
         console.error(error);
-        window.alert(error.message || 'Could not mark payroll as paid.');
+        payrollReviewError.textContent = error.message || 'Could not confirm the payroll review. Please try again.';
+        payrollReviewError.hidden = false;
+        confirmPayrollReviewButton.disabled = false;
+        confirmPayrollReviewButton.textContent = 'Try again';
       }
-    }
+    });
 
     function calculateRegularPay() {
       let rate = parseFloat(document.getElementById('daily_rate').value) || 0;
@@ -851,6 +957,8 @@ while ($r = $payrolls->fetch_assoc()) {
                       
         if (!empId) {
             document.getElementById('days_worked').value = 0;
+            const paidLeaveDisplay = document.getElementById('paid_leaves_display');
+            if (paidLeaveDisplay) paidLeaveDisplay.value = '0.00';
             document.getElementById('late_deduction').value = '0.00';
             summaryMessage.textContent = '';
             excessiveLateDays = [];
@@ -881,8 +989,10 @@ while ($r = $payrolls->fetch_assoc()) {
                 throw new Error(data.message || 'Could not calculate attendance payroll.');
             }
             document.getElementById('days_worked').value = data.days_worked;
+            const paidLeaveDisplay = document.getElementById('paid_leaves_display');
+            if (paidLeaveDisplay) paidLeaveDisplay.value = Number(data.paid_leaves || 0).toFixed(2);
             document.getElementById('late_deduction').value = Number(data.late_deduction).toFixed(2);
-            summaryMessage.textContent = `${data.late_minutes} late minute(s) included in the deduction.`;
+            summaryMessage.textContent = `Paid SIL: ${Number(data.paid_leave_days || 0)} day(s); LWOP: ${Number(data.unpaid_leave_days || 0)} day(s). ${data.late_minutes} late minute(s) included in the deduction.`;
             excessiveLateDays = data.excessive_late_days || [];
             renderAttendanceValidationWarning();
             calculateRegularPay();
@@ -893,6 +1003,8 @@ while ($r = $payrolls->fetch_assoc()) {
             }
             console.error(error);
             document.getElementById('days_worked').value = 0;
+            const paidLeaveDisplay = document.getElementById('paid_leaves_display');
+            if (paidLeaveDisplay) paidLeaveDisplay.value = '0.00';
             document.getElementById('late_deduction').value = '0.00';
             excessiveLateDays = [];
             renderAttendanceValidationWarning();

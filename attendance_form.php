@@ -1,3 +1,11 @@
+<?php
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
+if (empty($_SESSION['attendance_csrf'])) {
+    $_SESSION['attendance_csrf'] = bin2hex(random_bytes(32));
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -48,20 +56,22 @@
 
 <script>
     const employeeIdInput = document.getElementById('employee_id');
+    const attendanceCsrfToken = <?= json_encode($_SESSION['attendance_csrf'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
     const employeeName = document.getElementById('employee-name');
     const alertMsg = document.getElementById('alert-msg');
     const submitButton = document.getElementById('submit-attendance');
     const actionLabels = {
-        time_in: 'Time In 1',
-        time_out: 'Time Out 1',
-        time_in_2: 'Time In 2',
-        time_out_2: 'Time Out 2'
+        time_in: 'AM Time In',
+        time_out: 'AM Time Out',
+        time_in_2: 'PM Time In',
+        time_out_2: 'PM Time Out'
     };
     let lookupTimer;
     let lookupRequest = 0;
     let resolvedEmployeeId = '';
     let currentEmployeeName = '';
     let nextAction = null;
+    let currentAttendanceSession = null;
 
     function renderNextAction(action, emptyMessage = 'Attendance is complete for today.') {
         nextAction = action;
@@ -76,7 +86,7 @@
         }
     }
 
-    employeeIdInput.addEventListener('input', () => {
+    function scheduleEmployeeLookup() {
         clearTimeout(lookupTimer);
         lookupRequest++;
         resolvedEmployeeId = '';
@@ -95,13 +105,16 @@
 
         employeeName.innerText = 'Looking up employee...';
         lookupTimer = setTimeout(() => lookupEmployee(employeeId), 300);
-    });
+    }
+
+    employeeIdInput.addEventListener('input', scheduleEmployeeLookup);
 
     async function lookupEmployee(employeeId) {
         const requestId = ++lookupRequest;
         const formData = new FormData();
         formData.append('employee_id', employeeId);
         formData.append('action_type', 'lookup');
+        formData.append('csrf_token', attendanceCsrfToken);
 
         try {
             const response = await fetch('config/attendance_API.php', {
@@ -134,6 +147,11 @@
         const now = new Date();
         document.getElementById('digital-clock').innerText = now.toLocaleTimeString('en-US');
         document.getElementById('current-date').innerText = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        const session = now.getHours() >= 12 ? 'pm' : 'am';
+        if (currentAttendanceSession !== null && currentAttendanceSession !== session && resolvedEmployeeId) {
+            lookupEmployee(resolvedEmployeeId);
+        }
+        currentAttendanceSession = session;
     }
     setInterval(updateClock, 1000);
     updateClock();
@@ -149,6 +167,7 @@
         const formData = new FormData();
         formData.append('employee_id', employeeId);
         formData.append('action_type', 'submit');
+        formData.append('csrf_token', attendanceCsrfToken);
         submitButton.disabled = true;
 
         try {
@@ -164,7 +183,7 @@
             if (data.status === 'success') {
                 alertMsg.style.color = "green";
                 alertMsg.innerText = data.message;
-                renderNextAction(data.next_action);
+                renderNextAction(data.next_action, data.next_action_message || undefined);
             } else {
                 alertMsg.style.color = "red";
                 alertMsg.innerText = data.message;

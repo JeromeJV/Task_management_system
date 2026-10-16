@@ -1022,7 +1022,18 @@ html[data-theme="dark"] body:has(.steps) .resume-upload .hint {
     color: #aab7b1 !important;
 }
 
-html[data-theme="dark"] body:has(.steps) .resume-upload .file-name {
+html[data-theme="dark"] body:has(.steps) .resume-picker {
+    border-color: #465258 !important;
+    background: #11191d !important;
+    color: #e1e8e4 !important;
+}
+
+html[data-theme="dark"] body:has(.steps) .resume-picker-button {
+    background: #244c36 !important;
+    color: #bce8c9 !important;
+}
+
+html[data-theme="dark"] body:has(.steps) .resume-picker-name {
     color: #8be0aa !important;
 }
 
