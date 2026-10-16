@@ -19,8 +19,6 @@ if ($action === 'update' && isset($_POST['submit'])) {
         $errors['delivery_id']
         ?? $errors['driver_id']
         ?? $errors['route']
-        ?? $errors['pieces']
-        ?? $errors['stock']
         ?? $errors['delivery_date']
         ?? ''
     );
@@ -673,15 +671,193 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
         }
         .delivery-report-table { min-width: 620px !important; }
         .delivery-report-filters label { max-width: 240px; }
-        .delivery-activity-modal { position: relative; max-width: 620px; }
-        .delivery-activity-close {
-            position: absolute; top: 12px; right: 14px; border: 0;
-            background: transparent; color: #59655d; font-size: 26px; cursor: pointer;
+        #deliveryActivityModal {
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            background: rgba(15, 23, 42, 0.58);
+            backdrop-filter: blur(5px);
         }
-        .delivery-activity-product { color: #6b7280; text-align: center; }
-        .delivery-activity-list { display: grid; max-height: 55vh; gap: 10px; overflow-y: auto; padding-left: 24px; }
-        .delivery-activity-list li { padding: 12px 14px; border: 1px solid #e6ebe7; border-radius: 9px; font-size: 13px; }
-        .delivery-activity-list time { display: block; margin-top: 6px; color: #778179; font-size: 11px; }
+        #deliveryActivityModal .delivery-activity-modal {
+            width: min(100%, 620px);
+            max-height: min(84vh, 740px);
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            border: 1px solid #e2e8f0;
+            border-radius: 20px;
+            box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
+            animation: delivery-activity-enter 180ms ease-out;
+        }
+        .delivery-activity-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 22px 26px 17px;
+            border-bottom: 1px solid #e8edf2;
+        }
+        .delivery-activity-heading { display: grid; gap: 5px; }
+        .delivery-activity-kicker {
+            color: #258152;
+            font-size: 0.68rem;
+            font-weight: 800;
+            letter-spacing: 0.13em;
+        }
+        #deliveryActivityModal #deliveryActivityTitle {
+            margin: 0;
+            color: #1f2937;
+            font-size: 1.25rem;
+            font-weight: 750;
+            text-align: left;
+        }
+        #deliveryActivityModal .delivery-activity-close {
+            display: grid;
+            width: 36px;
+            height: 36px;
+            flex: 0 0 auto;
+            place-items: center;
+            border: 1px solid #e3e8ee;
+            border-radius: 10px;
+            background: #fff;
+            color: #64748b;
+            font-size: 22px;
+            line-height: 1;
+            cursor: pointer;
+        }
+        #deliveryActivityModal .delivery-activity-close:hover {
+            border-color: #c8dfd0;
+            background: #f0f8f2;
+            color: #1f6e4a;
+        }
+        .delivery-activity-context {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 16px 26px 0;
+            padding: 12px 14px;
+            border: 1px solid #e1eee5;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #f4faf5, #f8fbf9);
+        }
+        .delivery-activity-context-icon {
+            display: grid;
+            width: 36px;
+            height: 36px;
+            flex: 0 0 auto;
+            place-items: center;
+            border-radius: 10px;
+            background: #e3f2e8;
+            color: #23784c;
+            font-size: 1.1rem;
+            font-weight: 800;
+        }
+        #deliveryActivityProduct {
+            min-width: 0;
+            margin: 0;
+            color: #334155;
+            font-size: 0.92rem;
+            font-weight: 650;
+            line-height: 1.5;
+            overflow-wrap: anywhere;
+        }
+        #deliveryActivityContent {
+            max-height: min(55vh, 470px);
+            overflow-y: auto;
+            padding: 20px 26px 25px;
+        }
+        .delivery-activity-list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+        .delivery-activity-item {
+            position: relative;
+            display: grid;
+            grid-template-columns: 32px minmax(0, 1fr);
+            gap: 12px;
+            align-items: start;
+        }
+        .delivery-activity-item:not(:last-child)::before {
+            position: absolute;
+            top: 30px;
+            bottom: -15px;
+            left: 15px;
+            width: 2px;
+            background: #e4eee7;
+            content: "";
+        }
+        .delivery-activity-marker {
+            z-index: 1;
+            display: grid;
+            width: 32px;
+            height: 32px;
+            place-items: center;
+            border: 1px solid #cfe6d6;
+            border-radius: 50%;
+            background: #eff8f1;
+            color: #23784c;
+            font-size: 0.85rem;
+            font-weight: 800;
+        }
+        .delivery-activity-entry {
+            min-width: 0;
+            padding: 13px 15px;
+            border: 1px solid #e8edf1;
+            border-radius: 12px;
+            background: #fff;
+            box-shadow: 0 2px 7px rgba(15, 23, 42, 0.035);
+        }
+        .delivery-activity-entry strong {
+            display: block;
+            color: #334155;
+            font-size: 0.9rem;
+            font-weight: 650;
+            line-height: 1.55;
+            overflow-wrap: anywhere;
+        }
+        .delivery-activity-entry time {
+            display: block;
+            margin-top: 7px;
+            color: #7b8794;
+            font-size: 0.76rem;
+            font-variant-numeric: tabular-nums;
+        }
+        .delivery-activity-message {
+            display: flex;
+            align-items: center;
+            gap: 11px;
+            margin: 0;
+            padding: 18px;
+            border: 1px dashed #d7e2db;
+            border-radius: 12px;
+            background: #f8fbf9;
+            color: #64748b;
+            font-size: 0.88rem;
+            line-height: 1.55;
+        }
+        .delivery-activity-message.is-error { border-color: #f0cccc; background: #fff7f7; color: #9f3434; }
+        .delivery-activity-spinner {
+            width: 17px;
+            height: 17px;
+            flex: 0 0 auto;
+            border: 2px solid #d8e9dd;
+            border-top-color: #258152;
+            border-radius: 50%;
+            animation: delivery-activity-spin 700ms linear infinite;
+        }
+        @keyframes delivery-activity-spin { to { transform: rotate(360deg); } }
+        @keyframes delivery-activity-enter {
+            from { opacity: 0; transform: translateY(8px) scale(0.985); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @media (max-width: 576px) {
+            #deliveryActivityModal { align-items: flex-end; padding: 10px; }
+            #deliveryActivityModal .delivery-activity-modal { max-height: 84vh; border-radius: 18px; }
+            .delivery-activity-header { padding: 20px 18px 15px; }
+            .delivery-activity-context { margin: 14px 18px 0; }
+            #deliveryActivityContent { max-height: 58vh; padding: 18px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            #deliveryActivityModal .delivery-activity-modal { animation: none; }
+            .delivery-activity-spinner { animation-duration: 1.4s; }
+        }
         @media (max-width: 640px) {
             .delivery-filters, .delivery-report-filters { align-items: stretch; flex-direction: column; }
             .delivery-filters label, .delivery-report-filters label { width: 100%; }
@@ -867,8 +1043,10 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
         ======================================================== -->
         <div class="topbar">
             <h1>Logistic Management</h1>
-            <div class="assign">
-                <button type="button" onclick="openDeliveryModal()">Add Delivery</button>
+            <div class="topbar-actions">
+                <div class="assign">
+                    <button type="button" onclick="openDeliveryModal()">Add Delivery</button>
+                </div>
             </div>
         </div>
         <!-- ========================================================
@@ -1464,11 +1642,19 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
 
 
 <div id="deliveryActivityModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="deliveryActivityTitle">
-    <div class="modal-content delivery-activity-modal">
-        <button type="button" class="delivery-activity-close" aria-label="Close delivery activity" onclick="closeDeliveryActivity()">×</button>
-        <h3 id="deliveryActivityTitle">Delivery Activity</h3>
-        <p id="deliveryActivityProduct" class="delivery-activity-product"></p>
-        <div id="deliveryActivityContent" aria-live="polite">Loading activity history...</div>
+    <div class="modal-content delivery-activity-modal" tabindex="-1">
+        <div class="delivery-activity-header">
+            <div class="delivery-activity-heading">
+                <span class="delivery-activity-kicker">SHIPMENT TIMELINE</span>
+                <h3 id="deliveryActivityTitle">Delivery Activity</h3>
+            </div>
+            <button type="button" class="delivery-activity-close" aria-label="Close delivery activity" onclick="closeDeliveryActivity()">×</button>
+        </div>
+        <div class="delivery-activity-context">
+            <span class="delivery-activity-context-icon" aria-hidden="true">↗</span>
+            <p id="deliveryActivityProduct"></p>
+        </div>
+        <div id="deliveryActivityContent" aria-live="polite" aria-busy="false"></div>
     </div>
 </div>
 
@@ -1721,42 +1907,6 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
                     type="text"
                     id="edit_route"
                     name="route"
-                    required
-                >
-
-            </div>
-
-
-            <!-- QUANTITY -->
-
-            <div class="form-group">
-
-                <label for="edit_pieces">
-                    Quantity (Pieces):
-                </label>
-
-                <input
-                    type="number"
-                    id="edit_pieces"
-                    name="pieces"
-                    required
-                >
-
-            </div>
-
-
-            <!-- STOCK -->
-
-            <div class="form-group">
-
-                <label for="edit_stock">
-                    Stock Number:
-                </label>
-
-                <input
-                    type="text"
-                    id="edit_stock"
-                    name="stock"
                     required
                 >
 
@@ -2485,8 +2635,15 @@ async function openDeliveryActivity(deliveryId, productName) {
     const content = document.getElementById('deliveryActivityContent');
     document.getElementById('deliveryActivityProduct').textContent =
         `Delivery #${deliveryId} — ${productName}`;
-    content.textContent = 'Loading activity history...';
-    modal.style.display = 'block';
+    content.setAttribute('aria-busy', 'true');
+    const loadingMessage = document.createElement('p');
+    loadingMessage.className = 'delivery-activity-message';
+    const spinner = document.createElement('span');
+    spinner.className = 'delivery-activity-spinner';
+    spinner.setAttribute('aria-hidden', 'true');
+    loadingMessage.append(spinner, document.createTextNode('Loading shipment activity...'));
+    content.replaceChildren(loadingMessage);
+    modal.style.display = 'flex';
 
     try {
         const response = await fetch(`delivery_main.php?activity_log=${encodeURIComponent(deliveryId)}`, {
@@ -2498,30 +2655,59 @@ async function openDeliveryActivity(deliveryId, productName) {
         }
         content.replaceChildren();
         if (result.activities.length === 0) {
-            content.textContent = 'No recorded activity for this delivery yet.';
+            const emptyMessage = document.createElement('p');
+            emptyMessage.className = 'delivery-activity-message';
+            emptyMessage.textContent = 'No activity has been recorded for this delivery yet.';
+            content.appendChild(emptyMessage);
             return;
         }
         const list = document.createElement('ol');
         list.className = 'delivery-activity-list';
         result.activities.forEach((activity) => {
             const item = document.createElement('li');
+            item.className = 'delivery-activity-item';
+            const marker = document.createElement('span');
+            marker.className = 'delivery-activity-marker';
+            marker.setAttribute('aria-hidden', 'true');
+            const markerIcons = {
+                delivery_assigned: '↗',
+                driver_reassigned: '↻',
+                delivery_updated: '✎',
+                delivery_submitted_for_review: '↑',
+                delivery_approved: '✓',
+                delivery_changes_requested: '!',
+                delivery_completed: '✓'
+            };
+            marker.textContent = markerIcons[activity.event_type] || '•';
+            const entry = document.createElement('div');
+            entry.className = 'delivery-activity-entry';
             const summary = document.createElement('strong');
             const messages = {
                 delivery_assigned: `${activity.actor_name} created and assigned the delivery to ${activity.to_driver_name || 'a driver'}.`,
                 driver_reassigned: `${activity.actor_name} reassigned the delivery from ${activity.from_driver_name || 'a driver'} to ${activity.to_driver_name || 'a driver'}.`,
                 delivery_updated: `${activity.actor_name} updated the delivery details.`,
+                delivery_submitted_for_review: `${activity.actor_name} submitted this delivery for supervisor approval.`,
+                delivery_approved: `${activity.actor_name} approved this delivery.`,
+                delivery_changes_requested: `${activity.actor_name} requested changes for this delivery.`,
                 delivery_completed: `${activity.actor_name} confirmed the delivery.`
             };
             summary.textContent = messages[activity.event_type] || `${activity.actor_name} updated this delivery.`;
             const time = document.createElement('time');
             time.dateTime = activity.occurred_at.replace(' ', 'T');
             time.textContent = activity.occurred_at;
-            item.append(summary, time);
+            entry.append(summary, time);
+            item.append(marker, entry);
             list.appendChild(item);
         });
         content.appendChild(list);
     } catch (error) {
-        content.textContent = error.message || 'Unable to load activity history.';
+        const errorMessage = document.createElement('p');
+        errorMessage.className = 'delivery-activity-message is-error';
+        errorMessage.setAttribute('role', 'alert');
+        errorMessage.textContent = error.message || 'Unable to load activity history.';
+        content.replaceChildren(errorMessage);
+    } finally {
+        content.setAttribute('aria-busy', 'false');
     }
 }
 
@@ -2573,8 +2759,6 @@ function closeDeliveryModal() {
 function openEditDeliveryModal(
     id,
     route,
-    pieces,
-    stock,
     date,
     driverId,
     driverName
@@ -2583,10 +2767,6 @@ function openEditDeliveryModal(
     document.getElementById("edit_delivery_id").value = id;
 
     document.getElementById("edit_route").value = route;
-
-    document.getElementById("edit_pieces").value = pieces;
-
-    document.getElementById("edit_stock").value = stock;
 
     document.getElementById("edit_delivery_date").value = date;
     document.getElementById("edit_delivery_date").dispatchEvent(
@@ -2617,8 +2797,6 @@ document.querySelectorAll(".delivery-update-button").forEach(button => {
         openEditDeliveryModal(
             button.dataset.deliveryId,
             button.dataset.route,
-            button.dataset.pieces,
-            button.dataset.stock,
             button.dataset.deliveryDate,
             button.dataset.driverId,
             button.dataset.driverName

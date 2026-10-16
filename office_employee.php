@@ -390,7 +390,7 @@ if ($initials === '') {
 <body>
 <?php if ($accountRole === 'HR'): ?>
 <div class="hr-shell">
-    <aside class="hr-sidebar" aria-label="HR navigation">
+    <aside class="hr-sidebar" id="hrSidebar" aria-label="HR navigation">
         <a class="hr-brand" href="HR.php" aria-label="TaskTrack HR home">
             <span class="hr-brand-mark" aria-hidden="true">T</span>
             <span class="hr-brand-name">TASKTRACK</span>
@@ -428,6 +428,7 @@ if ($initials === '') {
             <span class="hr-nav-label">Log out</span>
         </a>
     </aside>
+    <?php include __DIR__ . '/config/hr_mobile_navigation.php'; ?>
     <?php include __DIR__ . '/config/notification_bell.php'; ?>
     <div class="hr-main employee-main">
 <?php elseif ($accountRole === 'payroll'): ?>
@@ -799,5 +800,6 @@ if ($initials === '') {
         });
     });
 </script>
+<?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

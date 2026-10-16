@@ -11,6 +11,34 @@ require_once 'config/PHPMailer/Exception.php';
 require_once 'config/PHPMailer/PHPMailer.php';
 require_once 'config/PHPMailer/SMTP.php';
 
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
+
+$internalApplicantMode = !empty($application_list_mode) || !empty($interview_schedule_mode);
+$internalApplicantAction = false;
+foreach (['reject_applicant', 'delete_failed_applicant', 'del', 'upd', 'update_submit', 'save_interview'] as $internalAction) {
+    if (isset($_POST[$internalAction])) {
+        $internalApplicantAction = true;
+        break;
+    }
+}
+if ($internalApplicantMode || $internalApplicantAction) {
+    require_once __DIR__ . '/account_access.php';
+    if (!isset($_SESSION['id'], $_SESSION['email'], $_SESSION['role']) || $_SESSION['role'] !== 'HR') {
+        http_response_code(403);
+        exit('HR access is required to manage applicants and interviews.');
+    }
+    requireActiveAccount($conn);
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+        $postedToken = (string) ($_POST['csrf_token'] ?? '');
+        if (empty($_SESSION['applicant_csrf']) || !hash_equals((string) $_SESSION['applicant_csrf'], $postedToken)) {
+            http_response_code(403);
+            exit('Your session token expired. Refresh the page and try again.');
+        }
+    }
+}
+
 $sendApplicantStatusEmail = static function (string $email, string $applicantName, string $subject, string $message): bool {
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         error_log('Applicant status email not sent: invalid or missing email address.');
@@ -296,6 +324,97 @@ if (isset($_POST['reject_applicant']) && !empty($_POST['reject_applicant_id'])) 
         }
     }
 
+} elseif (isset($_POST['delete_failed_applicant'])) {
+    $applicant_id = filter_var($_POST['applicant_id'] ?? null, FILTER_VALIDATE_INT);
+    if ($applicant_id === false || $applicant_id === null || $applicant_id < 1) {
+        $_SESSION['interview_schedule_error'] = 'Invalid applicant selected for deletion.';
+        header('Location: interview_sched.php');
+        exit();
+    }
+
+    $applicant_stmt = $conn->prepare("SELECT resume_path, status FROM applicant WHERE applicant_id = ?");
+    if (!$applicant_stmt) {
+        throw new RuntimeException('Unable to load failed applicant for deletion: ' . $conn->error);
+    }
+    $applicant_stmt->bind_param('i', $applicant_id);
+    if (!$applicant_stmt->execute()) {
+        $error = $applicant_stmt->error;
+        $applicant_stmt->close();
+        throw new RuntimeException('Unable to load failed applicant for deletion: ' . $error);
+    }
+    $applicant = $applicant_stmt->get_result()->fetch_assoc();
+    $applicant_stmt->close();
+
+    if (!$applicant) {
+        $_SESSION['interview_schedule_error'] = 'Applicant not found; no record was deleted.';
+        header('Location: interview_sched.php');
+        exit();
+    }
+    if (strtolower(trim((string) ($applicant['status'] ?? ''))) !== 'failed') {
+        $_SESSION['interview_schedule_error'] = 'Only applicants with a Failed result can be deleted here.';
+        header('Location: interview_sched.php');
+        exit();
+    }
+
+    $delete_stmt = $conn->prepare("DELETE FROM applicant WHERE applicant_id = ? AND status = 'Failed'");
+    if (!$delete_stmt) {
+        throw new RuntimeException('Unable to prepare failed applicant deletion: ' . $conn->error);
+    }
+    $delete_stmt->bind_param('i', $applicant_id);
+    if (!$delete_stmt->execute()) {
+        $error = $delete_stmt->error;
+        $delete_stmt->close();
+        throw new RuntimeException('Unable to delete failed applicant: ' . $error);
+    }
+    $deleted = $delete_stmt->affected_rows === 1;
+    $delete_stmt->close();
+
+    if (!$deleted) {
+        $_SESSION['interview_schedule_error'] = 'Applicant status changed before deletion; no record was deleted.';
+        header('Location: interview_sched.php');
+        exit();
+    }
+
+    $resumeName = basename(str_replace('\\', '/', (string) ($applicant['resume_path'] ?? '')));
+    $resumeRemoved = true;
+    if ($resumeName !== '') {
+        $resumeReferenceStmt = $conn->prepare('SELECT COUNT(*) AS reference_count FROM applicant WHERE resume_path = ?');
+        if (!$resumeReferenceStmt) {
+            $resumeRemoved = false;
+            error_log('Unable to check resume references after deleting failed applicant #' . $applicant_id . ': ' . $conn->error);
+        } else {
+            $resumeReferenceStmt->bind_param('s', $resumeName);
+            if (!$resumeReferenceStmt->execute()) {
+                $resumeRemoved = false;
+                error_log('Unable to check resume references after deleting failed applicant #' . $applicant_id . ': ' . $resumeReferenceStmt->error);
+            } else {
+                $referenceCount = (int) ($resumeReferenceStmt->get_result()->fetch_assoc()['reference_count'] ?? 0);
+                $uploadsDirectory = realpath(dirname(__DIR__) . DIRECTORY_SEPARATOR . 'uploads');
+                $resumePath = $uploadsDirectory
+                    ? realpath($uploadsDirectory . DIRECTORY_SEPARATOR . $resumeName)
+                    : false;
+                if (
+                    $referenceCount === 0
+                    && $uploadsDirectory
+                    && $resumePath
+                    && str_starts_with($resumePath, $uploadsDirectory . DIRECTORY_SEPARATOR)
+                    && is_file($resumePath)
+                    && !unlink($resumePath)
+                ) {
+                    $resumeRemoved = false;
+                    error_log('Unable to remove resume file after deleting failed applicant #' . $applicant_id . '.');
+                }
+            }
+            $resumeReferenceStmt->close();
+        }
+    }
+
+    $_SESSION['interview_schedule_message'] = $resumeRemoved
+        ? 'Failed applicant and application record deleted.'
+        : 'Failed applicant was deleted, but its resume file could not be removed. Check the server log.';
+    header('Location: interview_sched.php');
+    exit();
+
 } elseif (isset($_POST['del']) && !empty($passid)) {
     $stmt = $conn->prepare("DELETE FROM applicant WHERE applicant_id = ?");
     $stmt->bind_param("i", $passid);
@@ -431,7 +550,7 @@ if (isset($_POST['save_interview'])) {
     };
 
     if (!empty($applicant_id) && !empty($interview_date)) {
-        $current_stmt = $conn->prepare("SELECT interview_type, status, firstname, middlename, lastname, email FROM applicant WHERE applicant_id = ?");
+        $current_stmt = $conn->prepare("SELECT interview_type, interview_date, status, firstname, middlename, lastname, email FROM applicant WHERE applicant_id = ?");
         if (!$current_stmt) {
             $fail_schedule("Unable to check the applicant's interview progress: " . $conn->error);
         }
@@ -468,7 +587,10 @@ if (isset($_POST['save_interview'])) {
             && $normalized_status === 'passed';
         $can_schedule_training = $current_type === 'initial interview' && $current_stage_passed;
         $can_schedule_final = $current_type === 'training' && $current_stage_passed;
-        $can_hire = $current_type === 'final interview' && $current_stage_passed;
+        $hasScheduledFinalInterview = $current_type === 'final interview'
+            && !empty($current_applicant['interview_date']);
+        $can_hire = $hasScheduledFinalInterview
+            && in_array($current_status, ['scheduled', 'pending', 'passed'], true);
 
         if ($normalized_type === 'training' && !$is_same_stage && !$can_schedule_training) {
             $fail_schedule("The applicant must pass the Initial Interview before scheduling Training.");

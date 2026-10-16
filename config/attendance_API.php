@@ -19,7 +19,7 @@ $action_type = $_POST['action_type'] ?? '';
 $postedCsrfToken = (string) ($_POST['csrf_token'] ?? '');
 $nowTime = date('H:i:s');
 $timeInClosed = $nowTime >= '17:01:00' || $nowTime < '05:01:00';
-$timeInActions = ['time_in', 'time_in_2'];
+$attendanceActions = ['time_in', 'time_out', 'time_in_2', 'time_out_2', 'submit'];
 
 // Sanitize & validate action types
 $allowed_actions = ['time_in', 'time_out', 'time_in_2', 'time_out_2', 'lookup', 'submit'];
@@ -33,6 +33,15 @@ if (
 ) {
     http_response_code(403);
     echo json_encode(['status' => 'error', 'message' => 'Attendance session expired. Refresh the page and try again.']);
+    exit;
+}
+
+if ($timeInClosed && in_array($action_type, $attendanceActions, true)) {
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'Attendance is closed from 5:01 PM to 5:00 AM. It opens again at 5:01 AM.',
+        'next_action' => null
+    ]);
     exit;
 }
 
@@ -73,9 +82,9 @@ if ($action_type === 'lookup') {
     $isLogistics = isLogisticsEmployee($conn, $lookupEmployeeId);
     $nextAction = getNextAttendanceActionForSession($attendanceRow, $isLogistics, $nowTime);
     $lookupMessage = null;
-    if ($timeInClosed && in_array($nextAction, $timeInActions, true)) {
+    if ($timeInClosed) {
         $nextAction = null;
-        $lookupMessage = 'Time In is closed from 5:01 PM to 5:00 AM. It opens again at 5:01 AM.';
+        $lookupMessage = 'Attendance is closed from 5:01 PM to 5:00 AM. It opens again at 5:01 AM.';
     } elseif (
         !$isLogistics
         && $nowTime < '12:00:00'
@@ -263,15 +272,6 @@ if ($action_type === 'submit') {
         ]);
         exit;
     }
-}
-
-if ($timeInClosed && in_array($action_type, $timeInActions, true)) {
-    echo json_encode([
-        'status' => 'error',
-        'message' => 'Time In is closed from 5:01 PM to 5:00 AM. It opens again at 5:01 AM.',
-        'next_action' => null
-    ]);
-    exit;
 }
 
 if ($attRow) {

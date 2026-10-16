@@ -1766,50 +1766,254 @@ textarea:focus-visible {
     min-width: 520px !important;
 }
 
-.production-activity-modal {
-    position: relative;
-    max-width: 620px;
+#productionActivityModal {
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(15, 23, 42, 0.58);
+    backdrop-filter: blur(5px);
 }
 
-.production-activity-close {
-    position: absolute;
-    top: 12px;
-    right: 14px;
-    border: 0;
-    background: transparent;
-    color: #59655D;
-    font-size: 26px;
+#productionActivityModal .production-activity-modal {
+    width: min(100%, 620px);
+    max-height: min(84vh, 740px);
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid #E2E8F0;
+    border-radius: 20px;
+    box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
+    animation: production-activity-enter 180ms ease-out;
+}
+
+.production-activity-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 22px 26px 17px;
+    border-bottom: 1px solid #E8EDF2;
+}
+
+.production-activity-heading {
+    display: grid;
+    gap: 5px;
+}
+
+.production-activity-kicker {
+    color: #258152;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.13em;
+}
+
+#productionActivityModal #productionActivityTitle {
+    margin: 0 0 0;
+    color: #1F2937;
+    font-size: 1.25rem;
+    font-weight: 750;
+    text-align: left;
+}
+
+#productionActivityModal .production-activity-close {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 1px solid #E3E8EE;
+    border-radius: 10px;
+    background: #FFFFFF;
+    color: #64748B;
+    font-size: 22px;
     line-height: 1;
     cursor: pointer;
 }
 
-.production-activity-product {
-    margin: 0 0 18px;
-    color: #6B7280;
-    text-align: center;
+#productionActivityModal .production-activity-close:hover {
+    border-color: #C8DFD0;
+    background: #F0F8F2;
+    color: #1F6E4A;
+}
+
+.production-activity-context {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 16px 26px 0;
+    padding: 12px 14px;
+    border: 1px solid #E1EEE5;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #F4FAF5, #F8FBF9);
+}
+
+.production-activity-context-icon {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: 10px;
+    background: #E3F2E8;
+    color: #23784C;
+    font-size: 1.1rem;
+    font-weight: 800;
+}
+
+#productionActivityProduct {
+    min-width: 0;
+    margin: 0;
+    color: #334155;
+    font-size: 0.92rem;
+    font-weight: 650;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+#productionActivityContent {
+    max-height: min(55vh, 470px);
+    overflow-y: auto;
+    padding: 20px 26px 25px;
 }
 
 .production-activity-list {
     display: grid;
-    max-height: 55vh;
-    gap: 10px;
-    overflow-y: auto;
-    padding: 0 6px 0 24px;
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
 }
 
-.production-activity-list li {
-    padding: 12px 14px;
-    border: 1px solid #E6EBE7;
-    border-radius: 9px;
-    color: #26352C;
-    font-size: 13px;
+.production-activity-item {
+    position: relative;
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr);
+    gap: 12px;
+    align-items: start;
 }
 
-.production-activity-list time {
+.production-activity-item:not(:last-child)::before {
+    position: absolute;
+    top: 30px;
+    bottom: -15px;
+    left: 15px;
+    width: 2px;
+    background: #E4EEE7;
+    content: "";
+}
+
+.production-activity-marker {
+    z-index: 1;
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    border: 1px solid #CFE6D6;
+    border-radius: 50%;
+    background: #EFF8F1;
+    color: #23784C;
+    font-size: 0.85rem;
+    font-weight: 800;
+}
+
+.production-activity-entry {
+    min-width: 0;
+    padding: 13px 15px;
+    border: 1px solid #E8EDF1;
+    border-radius: 12px;
+    background: #FFFFFF;
+    box-shadow: 0 2px 7px rgba(15, 23, 42, 0.035);
+}
+
+.production-activity-entry strong {
     display: block;
-    margin-top: 6px;
-    color: #778179;
-    font-size: 11px;
+    color: #334155;
+    font-size: 0.9rem;
+    font-weight: 650;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+}
+
+.production-activity-entry time {
+    display: block;
+    margin-top: 7px;
+    color: #7B8794;
+    font-size: 0.76rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.production-activity-message {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    margin: 0;
+    padding: 18px;
+    border: 1px dashed #D7E2DB;
+    border-radius: 12px;
+    background: #F8FBF9;
+    color: #64748B;
+    font-size: 0.88rem;
+    line-height: 1.55;
+}
+
+.production-activity-message.is-error {
+    border-color: #F0CCCC;
+    background: #FFF7F7;
+    color: #9F3434;
+}
+
+.production-activity-spinner {
+    width: 17px;
+    height: 17px;
+    flex: 0 0 auto;
+    border: 2px solid #D8E9DD;
+    border-top-color: #258152;
+    border-radius: 50%;
+    animation: production-activity-spin 700ms linear infinite;
+}
+
+@keyframes production-activity-spin {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes production-activity-enter {
+    from { opacity: 0; transform: translateY(8px) scale(0.985); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 576px) {
+    #productionActivityModal {
+        align-items: flex-end;
+        padding: 10px;
+    }
+
+    #productionActivityModal .production-activity-modal {
+        max-height: 84vh;
+        border-radius: 18px;
+    }
+
+    .production-activity-header {
+        padding: 20px 18px 15px;
+    }
+
+    .production-activity-context {
+        margin: 14px 18px 0;
+    }
+
+    #productionActivityContent {
+        max-height: 58vh;
+        padding: 18px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #productionActivityModal .production-activity-modal {
+        animation: none;
+    }
+
+    .production-activity-spinner {
+        animation-duration: 1.4s;
+    }
 }
 
 @media (max-width: 640px) {
@@ -1853,6 +2057,11 @@ textarea:focus-visible {
    ============================================================ */
 
 @media (max-width: 768px) {
+
+    .hamburger,
+    .sidebar-overlay {
+        display: none !important;
+    }
 
     .sidebar {
         width: 0;

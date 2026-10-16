@@ -707,9 +707,6 @@ $stage_progress = static function (array $row): array {
     <?php $tasktrackActive = 'production'; include __DIR__ . '/config/tasktrack_sidebar.php'; ?>
 
 
-    <div class="sidebar-overlay" id="sidebarOverlay"></div>
-
-
     <!-- =========================================================
          MAIN CONTENT
     ========================================================= -->
@@ -719,16 +716,6 @@ $stage_progress = static function (array $row): array {
         <!-- TOPBAR -->
 
         <div class="topbar">
-
-            <button
-                class="hamburger"
-                id="hamburgerBtn"
-                aria-label="Toggle menu"
-            >
-                <span></span>
-                <span></span>
-                <span></span>
-            </button>
 
             <h1>
                 Production Management
@@ -1377,13 +1364,19 @@ $stage_progress = static function (array $row): array {
 
 
 <div id="productionActivityModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="productionActivityTitle">
-    <div class="modal-content production-activity-modal">
-        <button type="button" class="production-activity-close" aria-label="Close activity history" onclick="closeProductionActivity()">×</button>
-        <h3 id="productionActivityTitle">Production Activity</h3>
-        <p id="productionActivityProduct" class="production-activity-product"></p>
-        <div id="productionActivityContent" aria-live="polite">
-            <p class="production-report-note">Loading activity history...</p>
+    <div class="modal-content production-activity-modal" tabindex="-1">
+        <div class="production-activity-header">
+            <div class="production-activity-heading">
+                <span class="production-activity-kicker">PRODUCTION TIMELINE</span>
+                <h3 id="productionActivityTitle">Production Activity</h3>
+            </div>
+            <button type="button" class="production-activity-close" aria-label="Close activity history" onclick="closeProductionActivity()">×</button>
         </div>
+        <div class="production-activity-context">
+            <span class="production-activity-context-icon" aria-hidden="true">◈</span>
+            <p id="productionActivityProduct"></p>
+        </div>
+        <div id="productionActivityContent" aria-live="polite" aria-busy="false"></div>
     </div>
 </div>
 
@@ -1437,7 +1430,7 @@ $stage_progress = static function (array $row): array {
 
             <section id="productionAssignmentReview" class="production-assignment-review" hidden aria-labelledby="productionReviewTitle">
                 <h4 id="productionReviewTitle">Review production assignments</h4>
-                <p>Check each product, stock number, quantity, due date, and Cooking employee before confirming.</p>
+                <p>Check each product, its generated stock number, quantity, due date, and Cooking employee.</p>
                 <div id="productionReviewItems" class="production-review-list"></div>
             </section>
 
@@ -1734,31 +1727,6 @@ $stage_progress = static function (array $row): array {
 <script>
 
 /* =============================================================
-   SIDEBAR / HAMBURGER
-============================================================= */
-
-(function () {
-
-    const btn = document.getElementById('hamburgerBtn');
-    const sidebar = document.getElementById('sidebar');
-    const overlay = document.getElementById('sidebarOverlay');
-
-    if (!btn || !sidebar || !overlay) {
-        return;
-    }
-
-    function toggle() {
-        sidebar.classList.toggle('open');
-        overlay.classList.toggle('show');
-    }
-
-    btn.addEventListener('click', toggle);
-    overlay.addEventListener('click', toggle);
-
-})();
-
-
-/* =============================================================
    PRODUCTION TAB SWITCHING
 ============================================================= */
 
@@ -1843,8 +1811,15 @@ async function openProductionActivity(productionId, productName) {
     const content = document.getElementById('productionActivityContent');
     document.getElementById('productionActivityProduct').textContent =
         `Product #${productionId} — ${productName}`;
-    content.innerHTML = '<p class="production-report-note">Loading activity history...</p>';
-    modal.style.display = 'block';
+    content.setAttribute('aria-busy', 'true');
+    const loadingMessage = document.createElement('p');
+    loadingMessage.className = 'production-activity-message';
+    const spinner = document.createElement('span');
+    spinner.className = 'production-activity-spinner';
+    spinner.setAttribute('aria-hidden', 'true');
+    loadingMessage.append(spinner, document.createTextNode('Loading production activity...'));
+    content.replaceChildren(loadingMessage);
+    modal.style.display = 'flex';
 
     try {
         const response = await fetch(`factory_main.php?activity_log=${encodeURIComponent(productionId)}`, {
@@ -1858,7 +1833,7 @@ async function openProductionActivity(productionId, productName) {
         content.replaceChildren();
         if (result.activities.length === 0) {
             const empty = document.createElement('p');
-            empty.className = 'production-report-note';
+            empty.className = 'production-activity-message';
             empty.textContent = 'No recorded activity for this product yet. New actions will appear here.';
             content.appendChild(empty);
             return;
@@ -1868,6 +1843,23 @@ async function openProductionActivity(productionId, productName) {
         list.className = 'production-activity-list';
         result.activities.forEach((activity) => {
             const item = document.createElement('li');
+            item.className = 'production-activity-item';
+            const marker = document.createElement('span');
+            marker.className = 'production-activity-marker';
+            marker.setAttribute('aria-hidden', 'true');
+            const markerIcons = {
+                product_created: '＋',
+                stage_assigned: '↗',
+                stage_reassigned: '↻',
+                stage_completed: '✓',
+                stage_submitted_for_review: '↑',
+                stage_approved: '✓',
+                stage_changes_requested: '!',
+                product_updated: '✎'
+            };
+            marker.textContent = markerIcons[activity.event_type] || '•';
+            const entry = document.createElement('div');
+            entry.className = 'production-activity-entry';
             const summary = document.createElement('strong');
             const stageName = activity.work_type ? `${activity.work_type} stage` : 'product';
             const targetName = activity.to_employee_name || 'an employee';
@@ -1887,16 +1879,20 @@ async function openProductionActivity(productionId, productName) {
             const time = document.createElement('time');
             time.dateTime = activity.occurred_at.replace(' ', 'T');
             time.textContent = activity.occurred_at;
-            item.append(summary, time);
+            entry.append(summary, time);
+            item.append(marker, entry);
             list.appendChild(item);
         });
         content.appendChild(list);
     } catch (error) {
         content.replaceChildren();
         const failure = document.createElement('p');
-        failure.className = 'production-report-error';
+        failure.className = 'production-activity-message is-error';
+        failure.setAttribute('role', 'alert');
         failure.textContent = error.message || 'Unable to load activity history.';
         content.appendChild(failure);
+    } finally {
+        content.setAttribute('aria-busy', 'false');
     }
 }
 
@@ -1958,8 +1954,6 @@ if (addProductForm) {
         const definitions = [
             { key: 'product_name', label: 'Product', type: 'select', placeholder: '-- Select Product --', options: assignmentData.products },
             { key: 'cooking_employee_id', label: 'Cooking Employee', type: 'select', placeholder: '-- Assign Cooking --', options: assignmentData.employees },
-            { key: 'target_pcs', label: 'Target PCS', type: 'number', placeholder: 'Enter target pieces', min: '0', step: '1' },
-            { key: 'Stock_number', label: 'Stock Number', type: 'text', placeholder: '4-digit stock number', inputMode: 'numeric', pattern: '[0-9]{4}', maxLength: 4 },
             { key: 'quantity', label: 'Quantity', type: 'number', placeholder: 'Enter quantity', min: '0', step: '1' },
             { key: 'due_date', label: 'Due Date', type: 'date', calendar: true }
         ];
@@ -2004,6 +1998,10 @@ if (addProductForm) {
         });
 
         item.appendChild(fields);
+        const stockNumber = document.createElement('input');
+        stockNumber.type = 'hidden';
+        stockNumber.dataset.field = 'stock_number';
+        item.appendChild(stockNumber);
         assignmentItems.appendChild(item);
         reindexProductionBatchItems();
     }
@@ -2044,7 +2042,20 @@ if (addProductForm) {
 
     function showProductionAssignmentReview() {
         reviewItems.replaceChildren();
-        assignmentItems.querySelectorAll('.production-batch-item').forEach((item, index) => {
+        const items = Array.from(assignmentItems.querySelectorAll('.production-batch-item'));
+        const generatedStockNumbers = new Set();
+        items.forEach((item) => {
+            let stockNumber;
+            do {
+                const randomValue = new Uint32Array(1);
+                window.crypto.getRandomValues(randomValue);
+                stockNumber = String(1000 + (randomValue[0] % 9000));
+            } while (generatedStockNumbers.has(stockNumber));
+            generatedStockNumbers.add(stockNumber);
+            item.querySelector('[data-field="stock_number"]').value = stockNumber;
+        });
+
+        items.forEach((item, index) => {
             const fieldValue = (name) => item.querySelector(`[data-field="${name}"]`).value;
             const selectedEmployee = item.querySelector('[data-field="cooking_employee_id"]');
             const card = document.createElement('article');
@@ -2054,8 +2065,7 @@ if (addProductForm) {
             const details = document.createElement('p');
             details.textContent = [
                 `Cooking: ${selectedEmployee.selectedOptions[0].textContent}`,
-                `Stock: ${fieldValue('Stock_number')}`,
-                `Target PCS: ${fieldValue('target_pcs')}`,
+                `Stock: ${fieldValue('stock_number')}`,
                 `Quantity: ${fieldValue('quantity')}`,
                 `Due date: ${fieldValue('due_date')}`
             ].join(' · ');

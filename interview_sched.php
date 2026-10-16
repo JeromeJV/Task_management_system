@@ -1,5 +1,8 @@
 <?php
 session_start();
+if (empty($_SESSION['applicant_csrf'])) {
+    $_SESSION['applicant_csrf'] = bin2hex(random_bytes(32));
+}
 include('config/autoLog.php');
 $interview_schedule_mode = true;
 include('config/application_API.php');
@@ -65,7 +68,7 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
 </head>
 <body>
 <div class="hr-shell">
-    <aside class="hr-sidebar" aria-label="HR navigation">
+    <aside class="hr-sidebar" id="hrSidebar" aria-label="HR navigation">
         <a class="hr-brand" href="HR.php" aria-label="TaskTrack HR home">
             <span class="hr-brand-mark" aria-hidden="true">T</span>
             <span class="hr-brand-name">TASKTRACK</span>
@@ -101,6 +104,7 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
             <span class="hr-nav-label">Log out</span>
         </a>
     </aside>
+    <?php include __DIR__ . '/config/hr_mobile_navigation.php'; ?>
     <?php include __DIR__ . '/config/notification_bell.php'; ?>
 
     <main class="hr-main">
@@ -215,6 +219,7 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
                             $interviewType = 'Training';
                             $normalizedType = 'training';
                         }
+                        $positiveOutcome = $normalizedType === 'final interview' ? 'Hired' : 'Passed';
                         $readyForNextStage = false;
                         if (strtolower($status) === 'passed' && $normalizedType === 'initial interview') {
                             $interviewType = 'Training';
@@ -266,7 +271,7 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
                             <td><?= $escape($position !== '' ? $position : '—') ?></td>
                             <td>
                                 <?php if ($resumeUrl !== ''): ?>
-                                    <a class="resume-link" href="view_resume.php?file=<?= rawurlencode($resumeName) ?>" target="_blank" rel="noopener">View resume</a>
+                                    <a class="resume-link" href="resume.php?id=<?= $id ?>&amp;preview=1" target="_blank" rel="noopener">View resume</a>
                                 <?php else: ?><span class="muted">Not provided</span><?php endif; ?>
                             </td>
                             <td><span class="status-pill status-<?= $escape($statusClass !== '' ? $statusClass : 'pending') ?>"><?= $escape($status !== '' ? $status : 'Pending') ?></span></td>
@@ -275,10 +280,18 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
                                 <small class="cell-secondary"><?= $escape($interviewType !== '' ? $interviewType : 'Interview') ?><?= $interviewMode !== '' ? ' · ' . $escape($interviewMode) : '' ?></small>
                             </td>
                             <td class="row-actions">
-                                <?php if (in_array($statusKey, ['failed', 'hired'], true)): ?>
+                                <?php if ($statusKey === 'failed'): ?>
+                                    <form method="post" class="outcome-form" data-delete-failed-form data-applicant-name="<?= $escape($fullName) ?>">
+                                        <input type="hidden" name="csrf_token" value="<?= $escape($_SESSION['applicant_csrf']); ?>">
+                                        <input type="hidden" name="delete_failed_applicant" value="1">
+                                        <input type="hidden" name="applicant_id" value="<?= $id ?>">
+                                        <button class="outcome-action failed-action" type="submit">Delete</button>
+                                    </form>
+                                <?php elseif ($statusKey === 'hired'): ?>
                                     <span class="muted">Closed</span>
                                 <?php elseif ($timestamp): ?>
-                                    <form method="post" class="outcome-form" data-outcome="Passed" data-applicant-name="<?= $escape($fullName) ?>">
+                                    <form method="post" class="outcome-form" data-outcome="<?= $positiveOutcome ?>" data-applicant-name="<?= $escape($fullName) ?>">
+                                        <input type="hidden" name="csrf_token" value="<?= $escape($_SESSION['applicant_csrf']); ?>">
                                         <input type="hidden" name="save_interview" value="1">
                                         <input type="hidden" name="applicant_id" value="<?= $id ?>">
                                         <input type="hidden" name="username" value="<?= $escape($fullName) ?>">
@@ -286,12 +299,13 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
                                         <input type="hidden" name="interview_type" value="<?= $escape($interviewType) ?>">
                                         <input type="hidden" name="interview_mode" value="<?= $escape($interviewMode) ?>">
                                         <input type="hidden" name="interview_date" value="<?= $escape($interviewDate) ?>">
-                                        <input type="hidden" name="status" value="Passed">
+                                        <input type="hidden" name="status" value="<?= $positiveOutcome ?>">
                                         <button class="outcome-action passed-action" type="submit">
-                                            Passed
+                                            <?= $positiveOutcome ?>
                                         </button>
                                     </form>
                                     <form method="post" class="outcome-form" data-outcome="Failed" data-applicant-name="<?= $escape($fullName) ?>">
+                                        <input type="hidden" name="csrf_token" value="<?= $escape($_SESSION['applicant_csrf']); ?>">
                                         <input type="hidden" name="save_interview" value="1">
                                         <input type="hidden" name="applicant_id" value="<?= $id ?>">
                                         <input type="hidden" name="username" value="<?= $escape($fullName) ?>">
@@ -348,6 +362,22 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
     </section>
 </div>
 
+<div class="modal-backdrop hidden failed-delete-backdrop" id="failedDeleteConfirmModal" role="dialog" aria-modal="true" aria-labelledby="failedDeleteConfirmTitle" aria-describedby="failedDeleteConfirmMessage">
+    <section class="modal-card compact-modal failed-delete-confirm-card">
+        <span class="confirm-icon" aria-hidden="true">!</span>
+        <div class="modal-kicker">PERMANENT ACTION</div>
+        <h2 id="failedDeleteConfirmTitle">Delete this applicant?</h2>
+        <p class="modal-subtitle" id="failedDeleteConfirmMessage">
+            You are about to permanently delete <strong id="failedDeleteApplicantName"></strong>,
+            including the application record and resume. This action cannot be undone.
+        </p>
+        <div class="modal-actions">
+            <button class="secondary-button" type="button" id="cancelFailedDeleteButton">Cancel</button>
+            <button class="danger-button" type="button" id="confirmFailedDeleteButton">Delete permanently</button>
+        </div>
+    </section>
+</div>
+
 <div class="submission-overlay hidden" id="submissionOverlay" role="status" aria-live="polite" aria-hidden="true">
     <div class="submission-card">
         <span class="submission-spinner" aria-hidden="true"></span>
@@ -363,6 +393,7 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
         <h2 id="scheduleTitle">Set interview schedule</h2>
         <p class="modal-subtitle">Update interview details for <strong id="scheduleApplicantName"></strong>.</p>
         <form method="post" class="schedule-form" id="interviewScheduleForm">
+            <input type="hidden" name="csrf_token" value="<?= $escape($_SESSION['applicant_csrf']); ?>">
             <input type="hidden" name="applicant_id" id="scheduleApplicantId">
             <input type="hidden" name="username" id="scheduleApplicantHiddenName">
             <input type="hidden" name="email" id="scheduleApplicantEmail">
@@ -428,8 +459,11 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
     const noResults = document.getElementById('noScheduleResults');
     const modal = document.getElementById('scheduleModal');
     const outcomeConfirmModal = document.getElementById('outcomeConfirmModal');
+    const failedDeleteConfirmModal = document.getElementById('failedDeleteConfirmModal');
     const submissionOverlay = document.getElementById('submissionOverlay');
     let pendingOutcomeForm = null;
+    let pendingDeleteForm = null;
+    let pendingDeleteTrigger = null;
     const normalizeStage = (value) => {
         const stage = (value || '').trim().replace(/_/g, ' ').replace(/\s+/g, ' ').toLowerCase();
         return stage === 'technical interview' ? 'training' : stage;
@@ -453,15 +487,35 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
     statusFilter.addEventListener('change', filterRows);
     document.querySelectorAll('.outcome-form').forEach((form) => {
         form.addEventListener('submit', (event) => {
+            if (form.hasAttribute('data-delete-failed-form')) {
+                if (form.dataset.confirmed !== 'true') {
+                    event.preventDefault();
+                    pendingDeleteForm = form;
+                    pendingDeleteTrigger = form.querySelector('button[type="submit"]');
+                    document.getElementById('failedDeleteApplicantName').textContent =
+                        form.dataset.applicantName || 'this applicant';
+                    failedDeleteConfirmModal.classList.remove('hidden');
+                    document.getElementById('cancelFailedDeleteButton').focus();
+                    return;
+                }
+                form.dataset.confirmed = 'false';
+                document.getElementById('submissionMessage').textContent = 'Deleting failed applicant...';
+                submissionOverlay.classList.remove('hidden');
+                submissionOverlay.setAttribute('aria-hidden', 'false');
+                form.querySelector('button[type="submit"]').disabled = true;
+                return;
+            }
             if (form.dataset.confirmed !== 'true') {
                 event.preventDefault();
                 pendingOutcomeForm = form;
                 const applicantName = form.dataset.applicantName || 'this applicant';
                 const outcome = form.dataset.outcome || 'this outcome';
-                document.getElementById('outcomeConfirmTitle').textContent =
-                    outcome === 'Passed' ? 'Mark interview as passed?' : 'Reject this applicant?';
-                document.getElementById('outcomeConfirmMessage').textContent =
-                    outcome === 'Passed'
+                document.getElementById('outcomeConfirmTitle').textContent = outcome === 'Hired'
+                    ? 'Hire this applicant?'
+                    : outcome === 'Passed' ? 'Mark interview as passed?' : 'Reject this applicant?';
+                document.getElementById('outcomeConfirmMessage').textContent = outcome === 'Hired'
+                    ? `${applicantName} will be marked as Hired and transferred to the employee directory.`
+                    : outcome === 'Passed'
                         ? `${applicantName} will be marked as Passed for this interview.`
                         : `${applicantName} will be marked as Failed and removed from the active interview queue.`;
                 outcomeConfirmModal.classList.remove('hidden');
@@ -469,7 +523,9 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
             }
             form.dataset.confirmed = 'false';
             document.getElementById('submissionMessage').textContent =
-                `Saving ${form.dataset.outcome === 'Passed' ? 'passed' : 'rejected'} result...`;
+                form.dataset.outcome === 'Hired'
+                    ? 'Hiring applicant and updating employee directory...'
+                    : `Saving ${form.dataset.outcome === 'Passed' ? 'passed' : 'rejected'} result...`;
             submissionOverlay.classList.remove('hidden');
             submissionOverlay.setAttribute('aria-hidden', 'false');
             form.querySelector('button[type="submit"]').disabled = true;
@@ -493,6 +549,7 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
             if (!date.value) {
                 pickerTrigger?.setAttribute('aria-invalid', 'true');
                 pickerTrigger?.focus();
+                pickerTrigger?.click();
             } else if (!hour.value || !minute.value || !period.value) {
                 (!hour.value ? hour : !minute.value ? minute : period).focus();
             } else {
@@ -524,11 +581,41 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
         } else {
             form.dataset.confirmed = 'false';
             document.getElementById('submissionMessage').textContent =
-                `Saving ${form.dataset.outcome === 'Passed' ? 'passed' : 'rejected'} result...`;
+                form.dataset.outcome === 'Hired'
+                    ? 'Hiring applicant and updating employee directory...'
+                    : `Saving ${form.dataset.outcome === 'Passed' ? 'passed' : 'rejected'} result...`;
             submissionOverlay.classList.remove('hidden');
             submissionOverlay.setAttribute('aria-hidden', 'false');
             form.submit();
         }
+    });
+    const closeFailedDeleteConfirm = () => {
+        failedDeleteConfirmModal.classList.add('hidden');
+        pendingDeleteForm = null;
+        pendingDeleteTrigger?.focus();
+        pendingDeleteTrigger = null;
+    };
+    document.getElementById('cancelFailedDeleteButton').addEventListener('click', closeFailedDeleteConfirm);
+    document.getElementById('confirmFailedDeleteButton').addEventListener('click', () => {
+        if (!pendingDeleteForm) return;
+        const form = pendingDeleteForm;
+        pendingDeleteForm = null;
+        pendingDeleteTrigger = null;
+        form.dataset.confirmed = 'true';
+        failedDeleteConfirmModal.classList.add('hidden');
+        if (typeof form.requestSubmit === 'function') {
+            form.requestSubmit();
+        } else {
+            form.dataset.confirmed = 'false';
+            document.getElementById('submissionMessage').textContent = 'Deleting failed applicant...';
+            submissionOverlay.classList.remove('hidden');
+            submissionOverlay.setAttribute('aria-hidden', 'false');
+            form.querySelector('button[type="submit"]').disabled = true;
+            HTMLFormElement.prototype.submit.call(form);
+        }
+    });
+    failedDeleteConfirmModal.addEventListener('click', (event) => {
+        if (event.target === failedDeleteConfirmModal) closeFailedDeleteConfirm();
     });
 
     let activeApplicant = null;
@@ -652,10 +739,16 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
             pendingOutcomeForm = null;
             outcomeConfirmModal.classList.add('hidden');
         }
+        if (event.key === 'Escape' && !failedDeleteConfirmModal.classList.contains('hidden')) {
+            closeFailedDeleteConfirm();
+        }
     });
 })();
 </script>
 <script src="js/calendar-picker.js?v=<?= filemtime(__DIR__ . '/js/calendar-picker.js'); ?>"></script>
 <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
+<?php if (isset($_SESSION['id'], $_SESSION['role']) && in_array($_SESSION['role'], ['admin', 'super', 'log', 'HR', 'payroll', 'employee', 'pro', 'cooking', 'packaging'], true)): ?>
+    <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
+<?php endif; ?>
 </body>
 </html>

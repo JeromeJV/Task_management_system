@@ -304,13 +304,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         } elseif ($action === 'create_account') {
             $employeeId = filter_var($_POST['employee_id'] ?? null, FILTER_VALIDATE_INT);
             $role = (string) ($_POST['role'] ?? '');
-            $password = (string) ($_POST['password'] ?? '');
             if (!$employeeId || $employeeId < 1) {
                 $errorMessage = 'Choose a valid employee profile.';
             } elseif (!isset($roles[$role])) {
                 $errorMessage = 'Choose a valid account role.';
-            } elseif (strlen($password) < 8 || !preg_match('/[0-9]/', $password)) {
-                $errorMessage = 'Password must be at least 8 characters and include a number.';
             } else {
                 $employeeStmt = $conn->prepare(
                     'SELECT username, email FROM employee WHERE employee_id = ? LIMIT 1'
@@ -352,14 +349,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                         $errorMessage = 'An account already exists for this employee email.';
                     } else {
                         $name = (string) $employee['username'];
-                        $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+                        $temporaryPassword = bin2hex(random_bytes(32));
+                        $hashedPassword = password_hash($temporaryPassword, PASSWORD_DEFAULT);
+                        if ($hashedPassword === false) {
+                            throw new RuntimeException('Unable to securely initialize the account password.');
+                        }
+                        $setupToken = bin2hex(random_bytes(32));
                         $insertStmt = $conn->prepare(
-                            'INSERT INTO users (name, email, employee_id, password, role) VALUES (?, ?, ?, ?, ?)'
+                            'INSERT INTO users (name, email, employee_id, password, role, reset_token, reset_expires_at)
+                             VALUES (?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 30 MINUTE))'
                         );
                         if (!$insertStmt) {
                             throw new RuntimeException('Unable to prepare the account creation: ' . $conn->error);
                         }
-                        $insertStmt->bind_param('sisss', $name, $employeeEmail, $employeeId, $hashedPassword, $role);
+                        $insertStmt->bind_param('sissss', $name, $employeeEmail, $employeeId, $hashedPassword, $role, $setupToken);
                         if (!$insertStmt->execute()) {
                             $error = $insertStmt->error;
                             $insertStmt->close();
@@ -381,18 +384,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                             throw new RuntimeException('Unable to save the new account: ' . $conn->error);
                         }
                         try {
-                            sendTaskTrackAccountPassword(
+                            sendTaskTrackPasswordSetupLink(
                                 $employeeEmail,
                                 $name,
                                 $roles[$role],
-                                $password
+                                $setupToken
                             );
-                            $_SESSION['admin_flash'] = 'Account created and password email sent to ' . $employeeEmail . '.';
+                            $_SESSION['admin_flash'] = 'Account created and password setup link sent to ' . $employeeEmail . '.';
                         } catch (RuntimeException $mailError) {
                             $_SESSION['admin_flash_type'] = 'warning';
-                            $_SESSION['admin_flash'] = 'Account created, but the password email was not sent. '
+                            $_SESSION['admin_flash'] = 'Account created, but the password setup link was not sent. '
                                 . $mailError->getMessage()
-                                . ' Use Reset password below to set a new password and try again.';
+                                . ' The employee can use Forgot password after email delivery is fixed.';
                         }
                         header('Location: admin.php?section=accounts');
                         exit();
@@ -558,70 +561,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                         throw new RuntimeException('Unable to save the account status: ' . $conn->error);
                     }
                     $_SESSION['admin_flash'] = $isActive === 1 ? 'Account enabled successfully.' : 'Account disabled. Any active session has been blocked.';
-                    header('Location: admin.php?section=accounts');
-                    exit();
-                }
-            }
-        } elseif ($action === 'reset_password') {
-            $userId = filter_var($_POST['user_id'] ?? null, FILTER_VALIDATE_INT);
-            $password = (string) ($_POST['password'] ?? '');
-            if (!$userId || $userId < 1 || $userId === $currentAdminId) {
-                $errorMessage = 'Choose another valid account to reset.';
-            } elseif (strlen($password) < 8 || !preg_match('/[0-9]/', $password)) {
-                $errorMessage = 'Password must be at least 8 characters and include a number.';
-            } else {
-                if (!$conn->begin_transaction()) {
-                    throw new RuntimeException('Unable to start the password reset: ' . $conn->error);
-                }
-                $targetStmt = $conn->prepare('SELECT name, email, role FROM users WHERE id = ? LIMIT 1');
-                if (!$targetStmt) {
-                    throw new RuntimeException('Unable to prepare the account email lookup: ' . $conn->error);
-                }
-                $targetStmt->bind_param('i', $userId);
-                if (!$targetStmt->execute()) {
-                    $error = $targetStmt->error;
-                    $targetStmt->close();
-                    throw new RuntimeException('Unable to load the account email: ' . $error);
-                }
-                $targetAccount = $targetStmt->get_result()->fetch_assoc();
-                $targetStmt->close();
-                if (!$targetAccount) {
-                    $conn->rollback();
-                    $errorMessage = 'The selected account no longer exists.';
-                    $targetAccount = null;
-                }
-                if ($targetAccount) {
-                    $resetStmt = $conn->prepare('UPDATE users SET password = ?, login_attempts = 0, lockout_time = NULL WHERE id = ?');
-                    if (!$resetStmt) {
-                        throw new RuntimeException('Unable to prepare the password reset: ' . $conn->error);
-                    }
-                    $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
-                    $resetStmt->bind_param('si', $hashedPassword, $userId);
-                    if (!$resetStmt->execute() || $resetStmt->affected_rows < 1) {
-                        $error = $resetStmt->error;
-                        $resetStmt->close();
-                        $conn->rollback();
-                        throw new RuntimeException('Unable to reset the account password: ' . $error);
-                    }
-                    $resetStmt->close();
-                    recordSystemAudit($conn, $currentAdminId, (string) $_SESSION['name'], 'password_reset', 'user', $userId, 'Reset the password and cleared login lockout for user #' . $userId . '.');
-                    if (!$conn->commit()) {
-                        throw new RuntimeException('Unable to save the password reset: ' . $conn->error);
-                    }
-                    try {
-                        sendTaskTrackAccountPassword(
-                            (string) $targetAccount['email'],
-                            (string) $targetAccount['name'],
-                            $roles[(string) $targetAccount['role']] ?? (string) $targetAccount['role'],
-                            $password
-                        );
-                        $_SESSION['admin_flash'] = 'Password updated and email sent to ' . $targetAccount['email'] . '.';
-                    } catch (RuntimeException $mailError) {
-                        $_SESSION['admin_flash_type'] = 'warning';
-                        $_SESSION['admin_flash'] = 'Password updated, but the email was not sent. '
-                            . $mailError->getMessage()
-                            . ' Set a new password and try again.';
-                    }
                     header('Location: admin.php?section=accounts');
                     exit();
                 }
@@ -1029,7 +968,6 @@ $tasktrackActive = $section === 'dashboard' ? 'dashboard' : $section;
 <main class="admin-main">
     <header class="admin-header">
         <div><p class="admin-eyebrow">TASKTRACK ADMINISTRATION</p><h1><?= $escape($sectionTitles[$section]); ?></h1><p>System-wide visibility and account access management.</p></div>
-        <div class="admin-user"><strong><?= $escape($_SESSION['name'] ?? 'Administrator'); ?></strong><span><?= $escape(date('M j, Y')); ?></span></div>
     </header>
     <?php if ($flashMessage !== ''): ?><div class="admin-notice is-<?= $escape($flashType); ?>" role="status"><?= $escape($flashMessage); ?></div><?php endif; ?>
     <?php if ($errorMessage !== ''): ?><div class="admin-notice is-error" role="alert"><?= $escape($errorMessage); ?></div><?php endif; ?>
@@ -1040,7 +978,7 @@ $tasktrackActive = $section === 'dashboard' ? 'dashboard' : $section;
             <article class="admin-stat" title="Current total; system accounts do not have a reliable creation date."><span>System accounts · current total</span><strong><?= $userCount; ?></strong></article>
             <article class="admin-stat"><span>Active office tasks · selected period</span><strong><?= $activeTaskCount; ?></strong></article>
             <article class="admin-stat"><span>Attendance records · selected period</span><strong><?= $selectedPeriodAttendanceTotal; ?></strong></article>
-            <article class="admin-stat"><span>Paid payroll · selected period</span><strong>₱<?= number_format((float) $selectedPeriodPaidPayroll, 2); ?></strong></article>
+            <article class="admin-stat"><span>Payroll amount · marked Paid · selected period</span><strong>₱<?= number_format((float) $selectedPeriodPaidPayroll, 2); ?></strong></article>
         </section>
         <section class="admin-panel admin-dashboard-analytics">
             <div class="admin-panel-heading">
@@ -1182,17 +1120,14 @@ $tasktrackActive = $section === 'dashboard' ? 'dashboard' : $section;
                         <?php foreach ($roles as $role => $label): ?><option value="<?= $escape($role); ?>"><?= $escape($label); ?></option><?php endforeach; ?>
                     </select>
                 </label>
-                <label>Password (sent to the employee's email)
-                    <input type="password" name="password" minlength="8" required autocomplete="new-password">
-                    <small>At least 8 characters and one number. The employee can change it later in account settings.</small>
-                </label>
-                <button type="submit">Create account &amp; email password</button>
+                <p class="admin-muted">A one-time password setup link will be sent to the employee's email.</p>
+                <button type="submit">Create account &amp; send setup link</button>
             </form>
             <?php if ($employees === []): ?><p class="admin-muted">All employee profiles with email addresses already have accounts.</p><?php endif; ?>
         </section>
         <section class="admin-panel">
             <div class="admin-panel-heading"><div><p class="admin-eyebrow">SYSTEM ACCESS</p><h2>Registered accounts</h2></div><span><?= $userCount; ?> accounts</span></div>
-            <div class="admin-table-wrap"><table><thead><tr><th>Name</th><th>Profile picture</th><th>Email</th><th>Employee profile</th><th>Role</th><th>Account status</th><th>Reset password</th></tr></thead><tbody>
+            <div class="admin-table-wrap"><table><thead><tr><th>Name</th><th>Profile picture</th><th>Email</th><th>Employee profile</th><th>Role</th><th>Account status</th></tr></thead><tbody>
             <?php foreach ($accounts as $account): ?>
                 <tr>
                     <td><?= $escape($account['name']); ?><?= (int) $account['id'] === $currentAdminId ? ' (you)' : ''; ?></td>
@@ -1275,20 +1210,9 @@ $tasktrackActive = $section === 'dashboard' ? 'dashboard' : $section;
                             </form>
                         <?php endif; ?>
                     </td>
-                    <td>
-                        <?php if ((int) $account['id'] !== $currentAdminId): ?>
-                            <form method="post" class="admin-inline-form">
-                                <input type="hidden" name="csrf_token" value="<?= $escape($_SESSION['admin_csrf']); ?>">
-                                <input type="hidden" name="action" value="reset_password">
-                                <input type="hidden" name="user_id" value="<?= (int) $account['id']; ?>">
-                                <input type="password" name="password" minlength="8" placeholder="Set new password" required autocomplete="new-password" aria-label="New password for <?= $escape($account['name']); ?>">
-                                <button type="submit" class="admin-secondary-button">Set &amp; email</button>
-                            </form>
-                        <?php else: ?>—<?php endif; ?>
-                    </td>
                 </tr>
             <?php endforeach; ?>
-            <?php if ($accounts === []): ?><tr><td colspan="7">No system accounts.</td></tr><?php endif; ?>
+            <?php if ($accounts === []): ?><tr><td colspan="6">No system accounts.</td></tr><?php endif; ?>
             </tbody></table></div>
         </section>
     <?php elseif ($section === 'audit'): ?>
@@ -1335,7 +1259,7 @@ $tasktrackActive = $section === 'dashboard' ? 'dashboard' : $section;
             </nav>
             <section class="admin-report-stat-grid" aria-label="Selected period totals">
                 <article><span>Attendance records</span><strong><?= $reportAttendanceTotal; ?></strong></article>
-                <article><span>Payroll credited</span><strong>₱<?= number_format($reportPayrollTotal, 2); ?></strong></article>
+                <article><span>Payroll amount · all statuses</span><strong>₱<?= number_format($reportPayrollTotal, 2); ?></strong></article>
                 <article><span>Office tasks submitted</span><strong><?= array_sum($reportTaskCounts); ?></strong></article>
                 <article><span>Deliveries</span><strong><?= $reportDeliveryTotal; ?></strong></article>
             </section>
@@ -1354,9 +1278,9 @@ $tasktrackActive = $section === 'dashboard' ? 'dashboard' : $section;
                     </div>
                 </article>
                 <article class="admin-report-chart">
-                    <h3>Payroll credited</h3>
-                    <p><?= $reportDays <= 31 ? 'Amount per day' : 'Amount per month'; ?></p>
-                    <div class="admin-chart-bars" role="list" aria-label="Payroll credited totals by period">
+                    <h3>Payroll amount · all statuses</h3>
+                    <p><?= $reportDays <= 31 ? 'Recorded amount per day' : 'Recorded amount per month'; ?>, including Pending and Paid records</p>
+                    <div class="admin-chart-bars" role="list" aria-label="Recorded payroll amounts across all statuses by period">
                         <?php foreach ($payrollTrend as $point): ?>
                             <div class="admin-chart-row" role="listitem" aria-label="<?= $escape($point['label']); ?>: ₱<?= number_format($point['value'], 2); ?>">
                                 <span><?= $escape($point['label']); ?></span><div class="admin-chart-track is-gold" aria-hidden="true"><i style="width: <?= number_format(($point['value'] / $maxPayrollTrend) * 100, 2, '.', ''); ?>%"></i></div><strong>₱<?= number_format($point['value'], 0); ?></strong>
@@ -1416,5 +1340,6 @@ $tasktrackActive = $section === 'dashboard' ? 'dashboard' : $section;
 </dialog>
 <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
 <script src="js/admin-profile-picture.js?v=<?= filemtime(__DIR__ . '/js/admin-profile-picture.js'); ?>"></script>
+<?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

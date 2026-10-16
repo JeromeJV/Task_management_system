@@ -341,6 +341,10 @@ foreach ($history_records as $hrec) {
             grid-column: 1 / -1;
         }
 
+        .shipment-actions .delivery-activity-btn {
+            grid-column: 1 / -1;
+        }
+
         .feedback-button {
             padding: 7px 10px;
             border: 1px solid #fecaca;
@@ -533,27 +537,33 @@ foreach ($history_records as $hrec) {
         }
 
         .delivery-proof-picker {
-            position: relative;
             display: flex;
             min-height: 92px;
+            width: 100%;
             align-items: center;
             justify-content: center;
             gap: 13px;
             padding: 16px;
-            overflow: hidden;
             border: 2px dashed #b7cbbd;
             border-radius: 12px;
             background: linear-gradient(135deg, #f8fbf9, #eff7f1);
             color: #245b38;
             cursor: pointer;
+            font: inherit;
+            text-align: left;
             transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
         }
 
         .delivery-proof-picker:hover,
-        .delivery-proof-picker:focus-within {
+        .delivery-proof-picker:focus-visible {
             border-color: var(--primary-green);
             background: #edf7ef;
             box-shadow: 0 0 0 3px rgba(45, 138, 84, 0.12);
+        }
+
+        .delivery-proof-picker:focus-visible {
+            outline: 3px solid rgba(45, 138, 84, 0.2);
+            outline-offset: 2px;
         }
 
         .delivery-proof-picker-icon {
@@ -589,11 +599,150 @@ foreach ($history_records as $hrec) {
 
         .delivery-proof-input {
             position: absolute;
-            inset: 0;
-            width: 100%;
-            height: 100%;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            clip-path: inset(50%);
+            border: 0;
             opacity: 0;
+        }
+
+        .photo-source-overlay {
+            z-index: 1100;
+            background: rgba(15, 23, 42, 0.62);
+            backdrop-filter: blur(4px);
+        }
+
+        .photo-source-card {
+            width: min(100%, 430px);
+            padding: 24px;
+            border: 1px solid #e5ece7;
+            border-radius: 18px;
+            box-shadow: 0 22px 60px rgba(15, 23, 42, 0.24);
+        }
+
+        .photo-source-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+
+        .photo-source-header h3 {
+            margin: 0 0 6px;
+            color: var(--text-dark);
+            font-size: 1.1rem;
+        }
+
+        .photo-source-header p {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            line-height: 1.5;
+        }
+
+        .photo-source-close {
+            display: grid;
+            width: 34px;
+            height: 34px;
+            flex: 0 0 auto;
+            place-items: center;
+            border: 1px solid var(--border-color);
+            border-radius: 9px;
+            background: #fff;
+            color: #66756b;
+            font-size: 21px;
             cursor: pointer;
+        }
+
+        .photo-source-options {
+            display: grid;
+            gap: 10px;
+        }
+
+        .photo-source-option {
+            display: flex;
+            min-height: 70px;
+            align-items: center;
+            gap: 13px;
+            padding: 12px 14px;
+            border: 1px solid #e0e9e3;
+            border-radius: 12px;
+            background: #fff;
+            color: var(--text-dark);
+            text-align: left;
+            cursor: pointer;
+            transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+        }
+
+        .photo-source-option:hover,
+        .photo-source-option:focus-visible {
+            transform: translateY(-1px);
+            border-color: #80b291;
+            background: #f4faf5;
+        }
+
+        .photo-source-option:focus-visible,
+        .photo-source-close:focus-visible {
+            outline: 3px solid rgba(45, 138, 84, 0.2);
+            outline-offset: 2px;
+        }
+
+        .photo-source-option-icon {
+            display: grid;
+            width: 42px;
+            height: 42px;
+            flex: 0 0 auto;
+            place-items: center;
+            border-radius: 11px;
+            background: #e7f3ea;
+            color: #247144;
+        }
+
+        .photo-source-option-icon svg {
+            width: 22px;
+            height: 22px;
+        }
+
+        .photo-source-option-copy {
+            display: grid;
+            gap: 4px;
+        }
+
+        .photo-source-option-copy strong {
+            font-size: 0.88rem;
+        }
+
+        .photo-source-option-copy span {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        .photo-source-cancel {
+            width: 100%;
+            min-height: 40px;
+            margin-top: 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 9px;
+            background: #fff;
+            color: #526157;
+            font-weight: 650;
+            cursor: pointer;
+        }
+
+        .photo-source-cancel:hover {
+            background: #f6f8f6;
+        }
+
+        @media (max-width: 576px) {
+            .photo-source-card {
+                padding: 20px;
+                border-radius: 16px;
+            }
         }
 
         .delivery-proof-selection {
@@ -814,6 +963,60 @@ foreach ($history_records as $hrec) {
         .delivery-success { margin: 16px 20px; padding: 12px 16px; border: 1px solid #a3cfbb; border-radius: 8px; background: #d1e7dd; color: #0f5132; }
         .delivery-filters { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 20px 18px; }
         .delivery-filters input, .delivery-filters select { min-height: 40px; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 6px; }
+        .shipment-filter-controls {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            align-items: stretch;
+        }
+        .history-filter-controls {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            align-items: stretch;
+        }
+        .shipment-filter-controls > input,
+        .history-filter-controls > input,
+        .shipment-filter-controls > .select-control,
+        .history-filter-controls > .select-control,
+        .shipment-filter-controls > .calendar-picker,
+        .history-filter-controls > .calendar-picker {
+            width: 100%;
+            min-width: 0;
+            height: 46px;
+            min-height: 46px;
+            margin: 0;
+        }
+        .shipment-filter-controls > input,
+        .history-filter-controls > input,
+        .shipment-filter-controls > .select-control .select-control__trigger,
+        .history-filter-controls > .select-control .select-control__trigger,
+        .shipment-filter-controls > .calendar-picker .calendar-picker__trigger,
+        .history-filter-controls > .calendar-picker .calendar-picker__trigger {
+            width: 100%;
+            height: 46px;
+            min-height: 46px;
+            border: 1px solid #d5e0d9;
+            border-radius: 11px;
+            background: linear-gradient(135deg, #ffffff 0%, #f7faf8 100%);
+            color: #27372e;
+            font-size: 13px;
+            box-shadow: 0 2px 7px rgba(32, 65, 46, 0.045);
+        }
+        .shipment-filter-controls > input,
+        .history-filter-controls > input {
+            padding: 10px 13px;
+        }
+        .shipment-filter-controls > .select-control .select-control__trigger,
+        .history-filter-controls > .select-control .select-control__trigger {
+            padding: 10px 13px;
+        }
+        .shipment-filter-controls > .calendar-picker,
+        .history-filter-controls > .calendar-picker {
+            flex: initial;
+        }
+        .shipment-filter-controls > .calendar-picker .calendar-picker__trigger,
+        .history-filter-controls > .calendar-picker .calendar-picker__trigger {
+            padding: 10px 13px;
+        }
         .container .delivery-filters .calendar-picker {
             width: auto;
             min-width: 170px;
@@ -939,17 +1142,242 @@ foreach ($history_records as $hrec) {
             height: 40px;
         }
 
+        .container .shipment-filter-controls > .calendar-picker,
+        .container .history-filter-controls > .calendar-picker {
+            width: 100%;
+            min-width: 0;
+            flex: initial;
+        }
+
+        .container .shipment-filter-controls > .calendar-picker .calendar-picker__trigger,
+        .container .history-filter-controls > .calendar-picker .calendar-picker__trigger {
+            height: 46px;
+            min-height: 46px;
+            border-color: #d5e0d9;
+            background: linear-gradient(135deg, #ffffff 0%, #f7faf8 100%);
+            box-shadow: 0 2px 7px rgba(32, 65, 46, 0.045);
+        }
+
+        .shipment-filter-controls > input:focus-visible,
+        .history-filter-controls > input:focus-visible {
+            outline: 3px solid rgba(31, 110, 74, 0.18);
+            outline-offset: 2px;
+            border-color: #28794f;
+        }
+
         .delivery-due-badge { display: inline-block; margin-top: 7px; padding: 4px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 700; }
         .delivery-due-overdue { background: var(--badge-red-bg); color: var(--badge-red-text); }
         .delivery-due-soon { background: var(--badge-yellow-bg); color: var(--badge-yellow-text); }
         .delivery-due-normal { background: #e9ecef; color: #495057; }
         .delivery-activity-btn { padding: 7px 10px; border: 1px solid var(--primary-green); border-radius: 6px; background: white; color: var(--primary-green); cursor: pointer; }
-        .delivery-activity-list { padding-left: 22px; }
-        .delivery-activity-list li { margin: 12px 0; }
-        .delivery-activity-list time { display: block; margin-top: 4px; color: var(--text-muted); font-size: 0.82rem; }
-        .delivery-report-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; padding: 20px; }
-        .delivery-report-card { padding: 18px; border: 1px solid var(--border-color); border-radius: 10px; background: white; }
-        .delivery-report-card strong { display: block; margin-top: 7px; font-size: 1.5rem; }
+        #deliveryActivityModal {
+            background: rgba(15, 23, 42, 0.56);
+            backdrop-filter: blur(5px);
+        }
+        #deliveryActivityModal .delivery-activity-modal {
+            width: min(100%, 620px);
+            max-height: min(82vh, 720px);
+            padding: 0;
+            overflow: hidden;
+            border: 1px solid rgba(226, 232, 240, 0.9);
+            border-radius: 20px;
+            box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
+            animation: delivery-activity-enter 180ms ease-out;
+        }
+        #deliveryActivityModal .delivery-activity-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin: 0;
+            padding: 24px 26px 18px;
+            border-bottom: 1px solid #e8edf2;
+        }
+        .delivery-activity-heading { display: grid; gap: 5px; }
+        .delivery-activity-kicker {
+            color: #258152;
+            font-size: 0.68rem;
+            font-weight: 800;
+            letter-spacing: 0.13em;
+        }
+        #deliveryActivityModal #deliveryActivityTitle {
+            margin: 0;
+            color: #1f2937;
+            font-size: 1.25rem;
+            font-weight: 750;
+        }
+        #deliveryActivityModal .delivery-activity-close {
+            display: grid;
+            width: 36px;
+            height: 36px;
+            flex: 0 0 auto;
+            place-items: center;
+            border: 1px solid #e3e8ee;
+            border-radius: 10px;
+            background: #fff;
+            color: #64748b;
+            font-size: 22px;
+            line-height: 1;
+            cursor: pointer;
+            transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+        }
+        #deliveryActivityModal .delivery-activity-close:hover {
+            border-color: #c8dfd0;
+            background: #f0f8f2;
+            color: #1f6e4a;
+        }
+        #deliveryActivityModal .delivery-activity-close:focus-visible {
+            outline: 3px solid rgba(37, 129, 82, 0.25);
+            outline-offset: 2px;
+        }
+        .delivery-activity-context {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 18px 26px 0;
+            padding: 13px 15px;
+            border: 1px solid #e1eee5;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #f4faf5, #f8fbf9);
+        }
+        .delivery-activity-context-icon {
+            display: grid;
+            width: 36px;
+            height: 36px;
+            flex: 0 0 auto;
+            place-items: center;
+            border-radius: 10px;
+            background: #e3f2e8;
+            color: #23784c;
+            font-size: 1.1rem;
+            font-weight: 800;
+        }
+        #deliveryActivityProduct {
+            min-width: 0;
+            margin: 0;
+            color: #334155;
+            font-size: 0.92rem;
+            font-weight: 650;
+            line-height: 1.5;
+            overflow-wrap: anywhere;
+        }
+        #deliveryActivityContent {
+            max-height: min(55vh, 470px);
+            overflow-y: auto;
+            padding: 22px 26px 26px;
+        }
+        .delivery-activity-list {
+            display: grid;
+            gap: 12px;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+        .delivery-activity-item {
+            position: relative;
+            display: grid;
+            grid-template-columns: 32px minmax(0, 1fr);
+            gap: 12px;
+            align-items: start;
+        }
+        .delivery-activity-item:not(:last-child)::before {
+            position: absolute;
+            top: 30px;
+            bottom: -15px;
+            left: 15px;
+            width: 2px;
+            background: #e4eee7;
+            content: "";
+        }
+        .delivery-activity-marker {
+            z-index: 1;
+            display: grid;
+            width: 32px;
+            height: 32px;
+            place-items: center;
+            border: 1px solid #cfe6d6;
+            border-radius: 50%;
+            background: #eff8f1;
+            color: #23784c;
+            font-size: 0.85rem;
+            font-weight: 800;
+        }
+        .delivery-activity-entry {
+            min-width: 0;
+            padding: 13px 15px;
+            border: 1px solid #e8edf1;
+            border-radius: 12px;
+            background: #fff;
+            box-shadow: 0 2px 7px rgba(15, 23, 42, 0.035);
+        }
+        .delivery-activity-entry strong {
+            display: block;
+            color: #334155;
+            font-size: 0.9rem;
+            font-weight: 650;
+            line-height: 1.55;
+            overflow-wrap: anywhere;
+        }
+        .delivery-activity-entry time {
+            display: block;
+            margin-top: 7px;
+            color: #7b8794;
+            font-size: 0.76rem;
+            font-weight: 550;
+            font-variant-numeric: tabular-nums;
+        }
+        .delivery-activity-message {
+            display: flex;
+            align-items: center;
+            gap: 11px;
+            margin: 0;
+            padding: 18px;
+            border: 1px dashed #d7e2db;
+            border-radius: 12px;
+            background: #f8fbf9;
+            color: #64748b;
+            font-size: 0.88rem;
+            line-height: 1.55;
+        }
+        .delivery-activity-message.is-error {
+            border-color: #f0cccc;
+            background: #fff7f7;
+            color: #9f3434;
+        }
+        .delivery-activity-spinner {
+            width: 17px;
+            height: 17px;
+            flex: 0 0 auto;
+            border: 2px solid #d8e9dd;
+            border-top-color: #258152;
+            border-radius: 50%;
+            animation: delivery-activity-spin 700ms linear infinite;
+        }
+        @keyframes delivery-activity-spin { to { transform: rotate(360deg); } }
+        @keyframes delivery-activity-enter {
+            from { opacity: 0; transform: translateY(8px) scale(0.985); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @media (max-width: 576px) {
+            #deliveryActivityModal { align-items: flex-end; padding: 10px; }
+            #deliveryActivityModal .delivery-activity-modal {
+                max-height: 84vh;
+                border-radius: 18px;
+            }
+            #deliveryActivityModal .delivery-activity-header { padding: 20px 18px 15px; }
+            .delivery-activity-context { margin: 14px 18px 0; }
+            #deliveryActivityContent { max-height: 58vh; padding: 18px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            #deliveryActivityModal .delivery-activity-modal { animation: none; }
+            .delivery-activity-spinner { animation-duration: 1.4s; }
+        }
+        @media (max-width: 767px) {
+            .shipment-filter-controls,
+            .history-filter-controls {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
 
         /* Mobile Adjustments (Smartphones) */
         @media (max-width: 576px) {
@@ -978,6 +1406,11 @@ foreach ($history_records as $hrec) {
             .container .delivery-filters .calendar-picker {
                 min-width: min(100%, 170px);
                 flex: 1 1 145px;
+            }
+            .container .shipment-filter-controls > .calendar-picker,
+            .container .history-filter-controls > .calendar-picker {
+                min-width: 0;
+                flex: initial;
             }
 
             .hero-section {
@@ -1026,7 +1459,6 @@ foreach ($history_records as $hrec) {
         <div class="nav-tabs">
             <button class="tab-btn active" id="tabMainBtn" onclick="switchTab('main')">Main</button>
             <button class="tab-btn" id="tabHistoryBtn" onclick="switchTab('history')">HISTORY</button>
-            <button class="tab-btn" id="tabReportsBtn" onclick="switchTab('reports')">REPORTS</button>
             <a href="logout.php" class="logout-icon-btn" title="Logout">
                 &#x21AA;
             </a>
@@ -1046,7 +1478,7 @@ foreach ($history_records as $hrec) {
     <?php endif; ?>
 
     <!-- Dashboard Metrics Top Cards -->
-    <div class="metrics-grid">
+    <div class="metrics-grid" id="dashboardMetrics">
         <div class="metric-card">
             <div class="metric-title">Completed Today</div>
             <div class="metric-value"><?= $completed_today_count; ?></div>
@@ -1074,7 +1506,7 @@ foreach ($history_records as $hrec) {
         <div class="section-header">
             <div class="section-title">Active Shipments</div>
         </div>
-        <div class="delivery-filters">
+        <div class="delivery-filters shipment-filter-controls">
             <input type="search" id="cardSearchInput" placeholder="Search ID, product, destination..." oninput="filterCards()">
             <select id="cardStatusFilter" onchange="filterCards()">
                 <option value="">All statuses</option>
@@ -1176,7 +1608,7 @@ foreach ($history_records as $hrec) {
         <div class="section-header">
             <div class="section-title">History Records</div>
         </div>
-        <div class="delivery-filters">
+        <div class="delivery-filters history-filter-controls">
             <input type="search" id="tableSearchInput" placeholder="Search ID, product, destination..." oninput="filterTable()">
             <input type="date" id="historyDueFrom" class="calendar-control" aria-label="Delivery date from" onchange="filterTable()">
             <input type="date" id="historyDueTo" class="calendar-control" aria-label="Delivery date to" onchange="filterTable()">
@@ -1245,32 +1677,22 @@ foreach ($history_records as $hrec) {
         </div>
     </div>
 
-    <div id="reportsView" class="hidden">
-        <div class="section-header"><div class="section-title">Monthly Delivery Report</div></div>
-        <form class="delivery-filters" method="get" action="logistic.php">
-            <label for="deliveryReportMonth">Report month</label>
-            <input type="month" id="deliveryReportMonth" class="calendar-control" name="report_month" value="<?= htmlspecialchars($delivery_report_month, ENT_QUOTES, 'UTF-8'); ?>">
-            <button type="submit" class="btn-view-details">View report</button>
-        </form>
-        <?php if ($delivery_report_error !== ''): ?><p class="delivery-error" role="alert"><?= htmlspecialchars($delivery_report_error, ENT_QUOTES, 'UTF-8'); ?></p><?php endif; ?>
-        <p style="padding: 0 20px;">Report for <?= htmlspecialchars($delivery_report_label, ENT_QUOTES, 'UTF-8'); ?></p>
-        <div class="delivery-report-grid">
-            <div class="delivery-report-card">Total assigned<strong><?= $delivery_report['total']; ?></strong></div>
-            <div class="delivery-report-card">Delivered<strong><?= $delivery_report['completed']; ?></strong></div>
-            <div class="delivery-report-card">Pending<strong><?= $delivery_report['pending']; ?></strong></div>
-            <div class="delivery-report-card">Overdue<strong><?= $delivery_report['overdue']; ?></strong></div>
-        </div>
-    </div>
 </div>
 
-<div class="modal-overlay" id="deliveryActivityModal" role="dialog" aria-modal="true" aria-labelledby="deliveryActivityTitle">
-    <div class="modal-card" style="max-width: 620px;">
-        <div class="modal-header">
-            <h3 id="deliveryActivityTitle">Delivery Activity</h3>
-            <button type="button" class="close-btn" onclick="closeDeliveryActivity()" aria-label="Close">&times;</button>
+<div class="modal-overlay" id="deliveryActivityModal" role="dialog" aria-modal="true" aria-labelledby="deliveryActivityTitle" onclick="if (event.target === this) closeDeliveryActivity()">
+    <div class="modal-card delivery-activity-modal" tabindex="-1">
+        <div class="delivery-activity-header">
+            <div class="delivery-activity-heading">
+                <span class="delivery-activity-kicker">SHIPMENT TIMELINE</span>
+                <h3 id="deliveryActivityTitle">Delivery Activity</h3>
+            </div>
+            <button type="button" class="delivery-activity-close" onclick="closeDeliveryActivity()" aria-label="Close activity history">&times;</button>
         </div>
-        <p id="deliveryActivityProduct" style="margin: 12px 0;"></p>
-        <div id="deliveryActivityContent" aria-live="polite">Loading activity history...</div>
+        <div class="delivery-activity-context">
+            <span class="delivery-activity-context-icon" aria-hidden="true">↗</span>
+            <p id="deliveryActivityProduct"></p>
+        </div>
+        <div id="deliveryActivityContent" aria-live="polite" aria-busy="false"></div>
     </div>
 </div>
 
@@ -1340,11 +1762,11 @@ foreach ($history_records as $hrec) {
 
         <form id="deliveryForm" action="logistic.php" method="post" enctype="multipart/form-data">
             <input type="hidden" name="idno" id="modalFormId">
-            <label class="delivery-proof-label" for="deliveryProofInput">
+            <div class="delivery-proof-label">
                 Delivery proof photo
                 <span class="delivery-proof-hint">JPG, PNG, or WebP · up to 5 MB</span>
-            </label>
-            <label class="delivery-proof-picker">
+            </div>
+            <button type="button" class="delivery-proof-picker" id="openPhotoSourceButton" aria-haspopup="dialog" aria-controls="photoSourceModal">
                 <span class="delivery-proof-picker-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none">
                         <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H9l1.4-1.5h3.2L15 5h2.5A2.5 2.5 0 0 1 20 7.5v10a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-10Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
@@ -1355,8 +1777,8 @@ foreach ($history_records as $hrec) {
                     <strong>Choose a photo or take one</strong>
                     <span>Tap here to add delivery proof</span>
                 </span>
-                <input type="file" class="delivery-proof-input" id="deliveryProofInput" name="delivery_proof" accept="image/jpeg,image/png,image/webp" capture="environment" required>
-            </label>
+            </button>
+            <input type="file" class="delivery-proof-input" id="deliveryProofInput" name="delivery_proof" accept="image/jpeg,image/png,image/webp" required>
             <div class="delivery-proof-selection" id="deliveryProofSelection" hidden>
                 <img class="delivery-proof-preview" id="deliveryProofPreview" alt="Selected delivery proof preview" hidden>
                 <span class="delivery-proof-filename" id="deliveryProofFilename"></span>
@@ -1364,6 +1786,46 @@ foreach ($history_records as $hrec) {
             <button type="button" class="btn-confirm-delivery" id="modalSubmitBtn" onclick="openConfirmModal()">Confirm Delivery</button>
         </form>
     </div>
+</div>
+
+<div class="modal-overlay photo-source-overlay" id="photoSourceModal" role="dialog" aria-modal="true" aria-labelledby="photoSourceTitle" aria-describedby="photoSourceDescription" onclick="if (event.target === this) closePhotoSourceModal()">
+    <section class="modal-card photo-source-card">
+        <div class="photo-source-header">
+            <div>
+                <h3 id="photoSourceTitle">Add delivery proof</h3>
+                <p id="photoSourceDescription">Choose how you want to add the delivery photo.</p>
+            </div>
+            <button type="button" class="photo-source-close" id="closePhotoSourceButton" aria-label="Close photo options">&times;</button>
+        </div>
+        <div class="photo-source-options">
+            <button type="button" class="photo-source-option" id="takeDeliveryPhotoButton" data-photo-source="camera">
+                <span class="photo-source-option-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H9l1.4-1.5h3.2L15 5h2.5A2.5 2.5 0 0 1 20 7.5v10a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-10Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                        <circle cx="12" cy="12.5" r="3.5" stroke="currentColor" stroke-width="1.7"/>
+                    </svg>
+                </span>
+                <span class="photo-source-option-copy">
+                    <strong>Take a photo</strong>
+                    <span>Open your device camera</span>
+                </span>
+            </button>
+            <button type="button" class="photo-source-option" id="chooseDeliveryPhotoButton" data-photo-source="gallery">
+                <span class="photo-source-option-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <rect x="3.5" y="4.5" width="17" height="15" rx="2" stroke="currentColor" stroke-width="1.7"/>
+                        <circle cx="9" cy="10" r="1.7" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="m5 17 4.5-4.5 3 3 2.5-2.5 4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </span>
+                <span class="photo-source-option-copy">
+                    <strong>Choose from gallery</strong>
+                    <span>Select an existing photo from your device</span>
+                </span>
+            </button>
+        </div>
+        <button type="button" class="photo-source-cancel" id="cancelPhotoSourceButton">Cancel</button>
+    </section>
 </div>
 
 <!-- MODAL 2: CONFIRMATION PROMPT MODAL -->
@@ -1447,16 +1909,14 @@ foreach ($history_records as $hrec) {
     function switchTab(tabName) {
         const mainView = document.getElementById('mainView');
         const historyView = document.getElementById('historyView');
-        const reportsView = document.getElementById('reportsView');
+        const dashboardMetrics = document.getElementById('dashboardMetrics');
         const tabMainBtn = document.getElementById('tabMainBtn');
         const tabHistoryBtn = document.getElementById('tabHistoryBtn');
-        const tabReportsBtn = document.getElementById('tabReportsBtn');
         mainView.classList.toggle('hidden', tabName !== 'main');
         historyView.classList.toggle('hidden', tabName !== 'history');
-        reportsView.classList.toggle('hidden', tabName !== 'reports');
+        dashboardMetrics.classList.toggle('hidden', tabName !== 'main');
         tabMainBtn.classList.toggle('active', tabName === 'main');
         tabHistoryBtn.classList.toggle('active', tabName === 'history');
-        tabReportsBtn.classList.toggle('active', tabName === 'reports');
     }
 
     // Dynamic Modal Opener
@@ -1490,6 +1950,7 @@ foreach ($history_records as $hrec) {
             delete proofPreview.dataset.objectUrl;
         }
         proofInput.value = '';
+        proofInput.removeAttribute('capture');
         proofSelection.hidden = true;
         proofPreview.hidden = true;
         proofPreview.removeAttribute('src');
@@ -1531,7 +1992,46 @@ foreach ($history_records as $hrec) {
         document.getElementById('detailModal').style.display = 'flex';
     }
 
-    document.getElementById('deliveryProofInput').addEventListener('change', (event) => {
+    const photoSourceModal = document.getElementById('photoSourceModal');
+    const openPhotoSourceButton = document.getElementById('openPhotoSourceButton');
+    const deliveryProofInput = document.getElementById('deliveryProofInput');
+    let photoSourceTrigger = null;
+
+    openPhotoSourceButton.addEventListener('click', () => {
+        photoSourceTrigger = openPhotoSourceButton;
+        photoSourceModal.style.display = 'flex';
+        document.getElementById('takeDeliveryPhotoButton').focus();
+    });
+
+    function closePhotoSourceModal(restoreFocus = true) {
+        photoSourceModal.style.display = 'none';
+        if (restoreFocus) {
+            photoSourceTrigger?.focus();
+        }
+    }
+
+    document.getElementById('closePhotoSourceButton').addEventListener('click', () => closePhotoSourceModal());
+    document.getElementById('cancelPhotoSourceButton').addEventListener('click', () => closePhotoSourceModal());
+
+    photoSourceModal.querySelectorAll('[data-photo-source]').forEach((button) => {
+        button.addEventListener('click', () => {
+            if (button.dataset.photoSource === 'camera') {
+                deliveryProofInput.setAttribute('capture', 'environment');
+            } else {
+                deliveryProofInput.removeAttribute('capture');
+            }
+            closePhotoSourceModal(false);
+            deliveryProofInput.click();
+        });
+    });
+
+    photoSourceModal.addEventListener('click', (event) => {
+        if (event.target === photoSourceModal) {
+            closePhotoSourceModal();
+        }
+    });
+
+    deliveryProofInput.addEventListener('change', (event) => {
         const input = event.currentTarget;
         const selection = document.getElementById('deliveryProofSelection');
         const preview = document.getElementById('deliveryProofPreview');
@@ -1711,9 +2211,11 @@ foreach ($history_records as $hrec) {
         emptyMessage.hidden = rows.length === 0 || visibleCount > 0;
     }
 
+    let deliveryActivityTrigger = null;
     document.querySelectorAll('[data-activity-id]').forEach(button => {
         button.addEventListener('click', event => {
             event.stopPropagation();
+            deliveryActivityTrigger = button;
             openDeliveryActivity(button.dataset.activityId, button.dataset.activityProduct);
         });
     });
@@ -1721,10 +2223,19 @@ foreach ($history_records as $hrec) {
     async function openDeliveryActivity(deliveryId, productName) {
         const modal = document.getElementById('deliveryActivityModal');
         const content = document.getElementById('deliveryActivityContent');
+        const closeButton = modal.querySelector('.delivery-activity-close');
         document.getElementById('deliveryActivityProduct').textContent =
             `Delivery #${deliveryId} — ${productName}`;
-        content.textContent = 'Loading activity history...';
+        content.setAttribute('aria-busy', 'true');
+        const loadingMessage = document.createElement('p');
+        loadingMessage.className = 'delivery-activity-message';
+        const spinner = document.createElement('span');
+        spinner.className = 'delivery-activity-spinner';
+        spinner.setAttribute('aria-hidden', 'true');
+        loadingMessage.append(spinner, document.createTextNode('Loading shipment activity...'));
+        content.replaceChildren(loadingMessage);
         modal.style.display = 'flex';
+        closeButton.focus();
 
         try {
             const response = await fetch(`logistic.php?activity_log=${encodeURIComponent(deliveryId)}`, {
@@ -1736,13 +2247,32 @@ foreach ($history_records as $hrec) {
             }
             content.replaceChildren();
             if (result.activities.length === 0) {
-                content.textContent = 'No recorded activity for this delivery yet.';
+                const emptyMessage = document.createElement('p');
+                emptyMessage.className = 'delivery-activity-message';
+                emptyMessage.textContent = 'No activity has been recorded for this delivery yet.';
+                content.appendChild(emptyMessage);
                 return;
             }
             const list = document.createElement('ol');
             list.className = 'delivery-activity-list';
             result.activities.forEach(activity => {
                 const item = document.createElement('li');
+                item.className = 'delivery-activity-item';
+                const marker = document.createElement('span');
+                marker.className = 'delivery-activity-marker';
+                marker.setAttribute('aria-hidden', 'true');
+                const markerIcons = {
+                    delivery_assigned: '↗',
+                    driver_reassigned: '↻',
+                    delivery_updated: '✎',
+                    delivery_submitted_for_review: '↑',
+                    delivery_approved: '✓',
+                    delivery_changes_requested: '!',
+                    delivery_completed: '✓'
+                };
+                marker.textContent = markerIcons[activity.event_type] || '•';
+                const entry = document.createElement('div');
+                entry.className = 'delivery-activity-entry';
                 const summary = document.createElement('strong');
                 const eventMessages = {
                     delivery_assigned: `${activity.actor_name} assigned this delivery${activity.to_driver_name ? ` to ${activity.to_driver_name}` : ''}.`,
@@ -1757,23 +2287,38 @@ foreach ($history_records as $hrec) {
                 const time = document.createElement('time');
                 time.dateTime = activity.occurred_at.replace(' ', 'T');
                 time.textContent = activity.occurred_at;
-                item.append(summary, time);
+                entry.append(summary, time);
+                item.append(marker, entry);
                 list.appendChild(item);
             });
             content.appendChild(list);
         } catch (error) {
-            content.textContent = error.message || 'Unable to load activity history.';
+            const errorMessage = document.createElement('p');
+            errorMessage.className = 'delivery-activity-message is-error';
+            errorMessage.setAttribute('role', 'alert');
+            errorMessage.textContent = error.message || 'Unable to load activity history.';
+            content.replaceChildren(errorMessage);
+        } finally {
+            content.setAttribute('aria-busy', 'false');
         }
     }
 
     function closeDeliveryActivity() {
         document.getElementById('deliveryActivityModal').style.display = 'none';
+        deliveryActivityTrigger?.focus();
     }
 
-    if (new URLSearchParams(window.location.search).has('report_month')
-        || new URLSearchParams(window.location.search).has('report_year')) {
-        switchTab('reports');
-    }
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && photoSourceModal.style.display === 'flex') {
+            closePhotoSourceModal();
+            return;
+        }
+        const modal = document.getElementById('deliveryActivityModal');
+        if (event.key === 'Escape' && modal.style.display === 'flex') {
+            closeDeliveryActivity();
+        }
+    });
+
 </script>
 <!-- try -->
 <script src="js/calendar-picker.js?v=<?= filemtime(__DIR__ . '/js/calendar-picker.js'); ?>"></script>

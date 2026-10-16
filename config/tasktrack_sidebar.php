@@ -108,4 +108,9 @@ $tasktrackIcons = [
         <span class="tasktrack-nav-label">LOG OUT</span>
     </a>
 </aside>
+<button class="tasktrack-mobile-menu-toggle" type="button" data-tasktrack-menu-toggle aria-controls="sidebar" aria-expanded="false" aria-label="Open navigation menu" title="Open navigation menu">
+    <span></span><span></span><span></span>
+</button>
+<div class="tasktrack-mobile-menu-backdrop" data-tasktrack-menu-backdrop hidden></div>
+<script src="js/tasktrack-mobile-menu.js?v=<?= filemtime(__DIR__ . '/../js/tasktrack-mobile-menu.js'); ?>"></script>
 <?php include __DIR__ . '/notification_bell.php'; ?>

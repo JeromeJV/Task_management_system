@@ -3,6 +3,7 @@ include('config/connection.php');
 require_once __DIR__ . '/account_access.php';
 require_once __DIR__ . '/leave_helpers.php';
 require_once __DIR__ . '/task_notifications.php';
+require_once __DIR__ . '/production_stock_numbers.php';
 
 // -----------------------------------------------------
 // 1. Connection & Initialization
@@ -526,13 +527,7 @@ if ($module === 'delivery') {
         $delivery_id   = filter_var($_POST['delivery_id'] ?? '', FILTER_VALIDATE_INT);
         $driver_id     = filter_var($_POST['driver_id'] ?? '', FILTER_VALIDATE_INT);
         $route         = trim($_POST['route'] ?? '');
-        $pieces        = trim($_POST['pieces'] ?? '');
-        $stock         = trim($_POST['stock'] ?? '');
         $delivery_date = trim($_POST['delivery_date'] ?? '');
-        $pieces_is_integer = ctype_digit($pieces);
-        $stock_is_integer = ctype_digit($stock);
-        $pieces_value = $pieces_is_integer ? (int) $pieces : 0;
-        $stock_value = $stock_is_integer ? (int) $stock : 0;
 
         if (!$delivery_id || $delivery_id < 1) {
             $errors['delivery_id'] = 'Choose a valid delivery record to update.';
@@ -542,12 +537,6 @@ if ($module === 'delivery') {
         }
         if ($route === '' || strlen($route) > 255) {
             $errors['route'] = 'Enter a destination with no more than 255 characters.';
-        }
-        if (!$pieces_is_integer || $pieces_value < 1 || $pieces_value > 2147483647) {
-            $errors['pieces'] = 'Enter a quantity of at least one piece.';
-        }
-        if (!$stock_is_integer || $stock_value < 1 || $stock_value > 2147483647) {
-            $errors['stock'] = 'Enter a valid stock number.';
         }
         $parsed_delivery_date = DateTimeImmutable::createFromFormat('!Y-m-d', $delivery_date);
         if (!$parsed_delivery_date || $parsed_delivery_date->format('Y-m-d') !== $delivery_date) {
@@ -594,7 +583,7 @@ if ($module === 'delivery') {
         if ($delivery_id && $delivery_id > 0 && empty($errors)) {
             $stmt = $conn->prepare(
                 "UPDATE delivery
-                 SET route = ?, pieces = ?, stock = ?, driver_id = ?, delivery_date = ?,
+                 SET route = ?, driver_id = ?, delivery_date = ?,
                     assigned_by = ?, completion_review_status = 'none',
                     completion_review_note = NULL, completion_reviewed_by = NULL,
                     completion_reviewed_at = NULL
@@ -605,10 +594,8 @@ if ($module === 'delivery') {
                 throw new RuntimeException('Unable to prepare delivery update: ' . $conn->error);
             }
             $stmt->bind_param(
-                'siiisii',
+                'sisii',
                 $route,
-                $pieces_value,
-                $stock_value,
                 $driver_id,
                 $delivery_date,
                 $current_user_id,
@@ -1527,7 +1514,7 @@ elseif ($module === 'factory') {
             $submitted_assignments = [[
                 'product_name' => $_POST['product_name'] ?? '',
                 'cooking_employee_id' => $_POST['cooking_employee_id'] ?? '',
-                'target_pcs' => $_POST['target_pcs'] ?? '',
+                'stock_number' => $_POST['stock_number'] ?? $_POST['Stock_number'] ?? '',
                 'Stock_number' => $_POST['Stock_number'] ?? '',
                 'quantity' => $_POST['quantity'] ?? '',
                 'due_date' => $_POST['due_date'] ?? '',
@@ -1548,9 +1535,8 @@ elseif ($module === 'factory') {
             }
 
             $product_name = trim((string) ($assignment['product_name'] ?? ''));
-            $target_pcs = trim((string) ($assignment['target_pcs'] ?? ''));
+            $stock_number = trim((string) ($assignment['stock_number'] ?? $assignment['Stock_number'] ?? ''));
             $due_date = trim((string) ($assignment['due_date'] ?? ''));
-            $stock_number = trim((string) ($assignment['Stock_number'] ?? ''));
             $quantity = trim((string) ($assignment['quantity'] ?? ''));
             $cooking_employee_id = filter_var(
                 $assignment['cooking_employee_id'] ?? '',
@@ -1560,14 +1546,11 @@ elseif ($module === 'factory') {
             if (!in_array($product_name, $allowed_products, true)) {
                 $errors['assignments'] = "Select a valid product for production item {$row_number}.";
             }
-            if ($target_pcs === '' || !preg_match('/^[0-9]+$/', $target_pcs)) {
-                $errors['assignments'] = "Enter a valid Target PCS for production item {$row_number}.";
+            if (!preg_match('/^[0-9]{4}$/', $stock_number)) {
+                $errors['assignments'] = "Generate a valid 4-digit stock number for production item {$row_number}.";
             }
             if ($quantity === '' || !preg_match('/^[0-9]+$/', $quantity)) {
                 $errors['assignments'] = "Enter a valid Quantity for production item {$row_number}.";
-            }
-            if (!preg_match('/^[0-9]{4}$/', $stock_number)) {
-                $errors['assignments'] = "Stock Number for production item {$row_number} must be exactly 4 digits.";
             }
             $date_parts = explode('-', $due_date);
             if (
@@ -1591,9 +1574,9 @@ elseif ($module === 'factory') {
 
             $validated_assignments[] = [
                 'product_name' => $product_name,
-                'target_pcs' => $target_pcs,
-                'due_date' => $due_date,
+                'target_pcs' => $quantity,
                 'stock_number' => $stock_number,
+                'due_date' => $due_date,
                 'quantity' => $quantity,
                 'cooking_employee_id' => (int) ($cooking_employee_id ?: 0),
             ];
@@ -1605,17 +1588,22 @@ elseif ($module === 'factory') {
             $assignment_stmt = null;
             $transaction_started = false;
             $work_type = 'Cooking';
+            $generated_stock_numbers = [];
+            $stock_lock_acquired = false;
             $actor_name = trim((string) ($_SESSION['name'] ?? ''));
             if ($actor_name === '') {
                 $actor_name = 'User #' . $assigned_by;
             }
 
             try {
+                acquireProductionStockNumberLock($conn);
+                $stock_lock_acquired = true;
+
                 $conn->begin_transaction();
                 $transaction_started = true;
                 $production_stmt = $conn->prepare(
-                    "INSERT INTO production (product_name, target_pcs, due_date, Stock_number, quantity)
-                     VALUES (?, ?, ?, ?, ?)"
+                    "INSERT INTO production (product_name, target_pcs, department, due_date, Stock_number, quantity)
+                     VALUES (?, ?, 'Production', ?, ?, ?)"
                 );
                 $assignment_stmt = $conn->prepare(
                     "INSERT INTO production_assignments (production_id, employee_id, work_type, assigned_by)
@@ -1626,12 +1614,18 @@ elseif ($module === 'factory') {
                 }
 
                 foreach ($validated_assignments as $assignment) {
+                    $stock_number = (int) $assignment['stock_number'];
+                    if (isset($generated_stock_numbers[$stock_number]) || productionStockNumberExists($conn, $stock_number)) {
+                        throw new RuntimeException("Stock number {$stock_number} is already in use. Go back and review assignments to generate a new number.");
+                    }
+                    $generated_stock_numbers[$stock_number] = true;
+
                     $production_stmt->bind_param(
                         "sssss",
                         $assignment['product_name'],
                         $assignment['target_pcs'],
                         $assignment['due_date'],
-                        $assignment['stock_number'],
+                        $stock_number,
                         $assignment['quantity']
                     );
                     if (!$production_stmt->execute()) {
@@ -1688,6 +1682,9 @@ elseif ($module === 'factory') {
                 }
                 if ($assignment_stmt) {
                     $assignment_stmt->close();
+                }
+                if ($stock_lock_acquired) {
+                    releaseProductionStockNumberLock($conn);
                 }
             }
         }
@@ -1747,47 +1744,65 @@ elseif ($module === 'factory') {
         }
 
         if (empty($errors)) {
-            $stmt = $conn->prepare(
-                "UPDATE production
-                 SET product_name = ?, target_pcs = ?, due_date = ?, Stock_number = ?, quantity = ?
-                 WHERE production_id = ?"
-            );
-            if (!$stmt) {
-                throw new RuntimeException('Unable to prepare production update: ' . $conn->error);
-            }
-            $stock_number_value = (int) $stock_number;
-            $stmt->bind_param("sisiii", $product_name, $target_pcs_value, $due_date, $stock_number_value, $quantity_value, $production_id);
-            if (!$conn->begin_transaction()) {
-                $stmt->close();
-                throw new RuntimeException('Unable to start production update transaction: ' . $conn->error);
-            }
-            if ($stmt->execute()) {
-                $actor_user_id = (int) ($_SESSION['id'] ?? $_SESSION['user_id'] ?? 0);
-                $actor_name = trim((string) ($_SESSION['name'] ?? ''));
-                if ($actor_name === '') {
-                    $actor_name = 'User #' . $actor_user_id;
+            $stockLockAcquired = false;
+            $transactionStarted = false;
+            $updateStatement = null;
+            try {
+                acquireProductionStockNumberLock($conn);
+                $stockLockAcquired = true;
+                $stockNumberValue = (int) $stock_number;
+                $currentStockNumber = getProductionStockNumber($conn, (int) $production_id);
+                if ($currentStockNumber === null) {
+                    throw new RuntimeException('The selected production task no longer exists.');
                 }
-                try {
-                    recordProductionActivity(
-                        $conn,
-                        $production_id,
-                        $actor_user_id,
-                        $actor_name,
-                        'product_updated'
-                    );
-                    if (!$conn->commit()) {
-                        throw new RuntimeException('The database could not commit the product update.');
-                    }
-                    $message = "Production Task updated successfully.";
-                } catch (RuntimeException $exception) {
+                if ($stockNumberValue !== $currentStockNumber && productionStockNumberExists($conn, $stockNumberValue, (int) $production_id)) {
+                    throw new RuntimeException('That stock number is already assigned to another product.');
+                }
+                $updateStatement = $conn->prepare(
+                    'UPDATE production
+                     SET product_name = ?, target_pcs = ?, due_date = ?, Stock_number = ?, quantity = ?
+                     WHERE production_id = ?'
+                );
+                if (!$updateStatement) {
+                    throw new RuntimeException('Unable to prepare production update: ' . $conn->error);
+                }
+                $updateStatement->bind_param(
+                    'sisiii',
+                    $product_name,
+                    $target_pcs_value,
+                    $due_date,
+                    $stockNumberValue,
+                    $quantity_value,
+                    $production_id
+                );
+                if (!$conn->begin_transaction()) {
+                    throw new RuntimeException('Unable to start production update transaction: ' . $conn->error);
+                }
+                $transactionStarted = true;
+                if (!$updateStatement->execute()) {
+                    throw new RuntimeException('Failed to update production task: ' . $updateStatement->error);
+                }
+                $actorUserId = (int) ($_SESSION['id'] ?? $_SESSION['user_id'] ?? 0);
+                $actorName = trim((string) ($_SESSION['name'] ?? '')) ?: 'User #' . $actorUserId;
+                recordProductionActivity($conn, $production_id, $actorUserId, $actorName, 'product_updated');
+                if (!$conn->commit()) {
+                    throw new RuntimeException('The database could not commit the product update.');
+                }
+                $transactionStarted = false;
+                $message = 'Production task updated successfully.';
+            } catch (RuntimeException $exception) {
+                if ($transactionStarted) {
                     $conn->rollback();
-                    $errors['update'] = "The product update and activity history could not be saved: " . $exception->getMessage();
                 }
-            } else {
-                $conn->rollback();
-                $errors['update'] = "Failed to update Production Task: " . $stmt->error;
+                $errors['update'] = $exception->getMessage();
+            } finally {
+                if ($updateStatement) {
+                    $updateStatement->close();
+                }
+                if ($stockLockAcquired) {
+                    releaseProductionStockNumberLock($conn);
+                }
             }
-            $stmt->close();
         }
     }
 
@@ -1958,10 +1973,20 @@ elseif ($module === 'factory') {
                                          LEFT JOIN users assignment_user ON assignment_user.id = pa.assigned_by
                                          LEFT JOIN users review_user ON review_user.id = pa.completion_reviewed_by";
             $history_assignment_source = $pending_assignment_source;
-            $pending_stage_visibility_filter = " AND NOT (
-                                                stages.work_type = 'Cooking'
-                                                AND COALESCE(pa.work_status, '') = 'Done'
-                                            )";
+            $pending_stage_visibility_filter = " AND (
+                                                    stages.work_type = 'Cooking'
+                                                    OR EXISTS (
+                                                        SELECT 1
+                                                        FROM production_assignments cooking_ready
+                                                        WHERE cooking_ready.production_id = CAST(p.production_id AS CHAR)
+                                                          AND cooking_ready.work_type = 'Cooking'
+                                                          AND cooking_ready.work_status = 'Done'
+                                                    )
+                                                )
+                                                AND NOT (
+                                                    stages.work_type = 'Cooking'
+                                                    AND COALESCE(pa.work_status, '') = 'Done'
+                                                )";
             $history_assignment_filter = "";
         }
         $assigned_status_expression = $is_production_worker

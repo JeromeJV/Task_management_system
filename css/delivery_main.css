@@ -643,6 +643,12 @@ textarea {
     letter-spacing: -0.4px;
 }
 
+.topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 
 /* ============================================================
    9. ADD DELIVERY AREA
@@ -2102,14 +2108,18 @@ textarea:focus-visible {
         width: 100%;
     }
 
-    .assign {
+    .topbar-actions {
         width: 100%;
+        justify-content: flex-end;
+    }
 
-        margin-top: 8px;
+    .assign {
+        width: auto;
+        margin-top: 0;
     }
 
     .assign button {
-        width: 100%;
+        width: auto;
     }
 
     .section-title {

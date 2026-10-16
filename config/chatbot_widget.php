@@ -1,3 +1,21 @@
+<?php
+if (empty($_SESSION['chatbot_csrf'])) {
+    $_SESSION['chatbot_csrf'] = bin2hex(random_bytes(32));
+}
+$chatbotRole = (string) ($_SESSION['role'] ?? '');
+$chatbotPlaceholder = match ($chatbotRole) {
+    'super' => 'Hal. alerts / assign production 123 Cooking to employee 45',
+    'admin' => 'Hal. alerts / attendance report this week',
+    'log' => 'Hal. my deliveries / delivery report this week',
+    'pro' => 'Hal. my production tasks / production report this week',
+    'cooking' => 'Hal. my Cooking tasks / alerts',
+    'packaging' => 'Hal. my Packaging tasks / alerts',
+    'HR' => 'Hal. applicants / attendance report this week',
+    'payroll' => 'Hal. pending payroll / payroll report this month',
+    'employee' => 'Hal. what should I handle / my tasks',
+    default => 'Magtanong tungkol sa features na available sa role mo',
+};
+?>
 <style>
     .tt-chatbot {
         position: fixed;
@@ -305,6 +323,30 @@
         cursor: wait;
         opacity: 0.65;
     }
+    .tt-chatbot-confirm-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 9px;
+        margin-top: 12px;
+    }
+    .tt-chatbot-confirm-actions .tt-chatbot-cancel {
+        min-height: 42px;
+        padding: 0 14px;
+        border: 1px solid #d6dfd9;
+        border-radius: 10px;
+        background: #fff;
+        color: #526158;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 650;
+    }
+    .tt-chatbot-confirm-actions .tt-chatbot-cancel:hover:not(:disabled) {
+        background: #f3f7f4;
+    }
+    .tt-chatbot-confirm-actions button:disabled {
+        cursor: wait;
+        opacity: 0.65;
+    }
     html[data-theme="dark"] body .tt-chatbot-panel {
         border-color: #303b40 !important;
         background: #20282c !important;
@@ -378,16 +420,21 @@
     html[data-theme="dark"] body .tt-chatbot-input::placeholder {
         color: #aab7b1 !important;
     }
+    html[data-theme="dark"] body .tt-chatbot-confirm-actions .tt-chatbot-cancel {
+        border-color: #465258 !important;
+        background: #20282c !important;
+        color: #e1e8e4 !important;
+    }
     @media (max-width: 480px) {
         .tt-chatbot {
-            right: 75px;
-            bottom: 15px;
+            right: 15px;
+            bottom: 76px;
         }
         .tt-chatbot-panel {
-            right: -2px;
+            right: 0;
             bottom: 68px;
-            width: min(390px, calc(100vw - 24px));
-            height: min(560px, calc(100dvh - 96px));
+            width: min(390px, calc(100vw - 30px));
+            height: min(560px, calc(100dvh - 160px));
             border-radius: 16px;
         }
         .tt-chatbot-messages {
@@ -418,24 +465,24 @@
     }
 </style>
 
-<div class="tt-chatbot" id="ttChatbot">
+<div class="tt-chatbot" id="ttChatbot" data-csrf="<?= htmlspecialchars($_SESSION['chatbot_csrf'], ENT_QUOTES, 'UTF-8'); ?>">
     <section class="tt-chatbot-panel" id="ttChatbotPanel" aria-label="TaskTrack assistant" hidden>
         <header class="tt-chatbot-header">
             <div class="tt-chatbot-brand">
                 <span class="tt-chatbot-title">TaskTrack Assistant</span>
-                <span class="tt-chatbot-subtitle"><span class="tt-chatbot-status" aria-hidden="true"></span>System information assistant</span>
+                <span class="tt-chatbot-subtitle"><span class="tt-chatbot-status" aria-hidden="true"></span>Tasks, alerts and workflow help</span>
             </div>
             <button class="tt-chatbot-close" id="ttChatbotClose" type="button" aria-label="Close chat">&times;</button>
         </header>
         <div class="tt-chatbot-messages" id="ttChatbotMessages" aria-live="polite">
             <div class="tt-chatbot-message bot">
                 <strong class="tt-chatbot-heading">Kumusta! 👋</strong>
-                <p class="tt-chatbot-paragraph">Magtanong tungkol sa system o mag-type ng <strong>help</strong> para makita ang mga command.</p>
-                <p class="tt-chatbot-paragraph">Ang mga record na makikita mo ay ayon sa access ng role mo.</p>
+                <p class="tt-chatbot-paragraph">Magtanong tungkol sa tasks, alerts, reports, o system process. Mag-type ng <strong>help</strong> para makita ang commands.</p>
+                <p class="tt-chatbot-paragraph">Makikita mo lang ang impormasyon, alerts, at reports na pinapayagan ng role mo. <?= $chatbotRole === 'super' ? 'Supervisor lang ang makakapag-save ng task changes; may preview bago kumpirmahin.' : 'Hindi makakapag-save ng task changes ang chatbot sa role mo.'; ?></p>
             </div>
         </div>
         <form class="tt-chatbot-form" id="ttChatbotForm">
-            <input class="tt-chatbot-input" id="ttChatbotInput" type="text" maxlength="300" placeholder="Hal. list production / search employee Ana" autocomplete="off" required>
+            <input class="tt-chatbot-input" id="ttChatbotInput" type="text" maxlength="300" placeholder="<?= htmlspecialchars($chatbotPlaceholder, ENT_QUOTES, 'UTF-8'); ?>" autocomplete="off" required>
             <button class="tt-chatbot-send" id="ttChatbotSend" type="submit">Send</button>
         </form>
     </section>
@@ -451,17 +498,65 @@
         const form = document.getElementById('ttChatbotForm');
         const input = document.getElementById('ttChatbotInput');
         const send = document.getElementById('ttChatbotSend');
+        const csrfToken = document.getElementById('ttChatbot').dataset.csrf;
 
-        function addMessage(text, sender) {
+        function addMessage(text, sender, confirmation) {
             const message = document.createElement('div');
             message.className = 'tt-chatbot-message ' + sender;
             if (sender === 'bot') {
                 renderBotReply(message, text);
+                if (confirmation && typeof confirmation.token === 'string') {
+                    const actions = document.createElement('div');
+                    actions.className = 'tt-chatbot-confirm-actions';
+                    const confirmButton = document.createElement('button');
+                    confirmButton.type = 'button';
+                    confirmButton.className = 'tt-chatbot-send';
+                    confirmButton.textContent = 'Confirm and save';
+                    confirmButton.addEventListener('click', function () {
+                        submitAction({ confirm_action: confirmation.token }, actions, confirmButton);
+                    });
+                    const cancelButton = document.createElement('button');
+                    cancelButton.type = 'button';
+                    cancelButton.className = 'tt-chatbot-cancel';
+                    cancelButton.textContent = 'Cancel';
+                    cancelButton.addEventListener('click', function () {
+                        submitAction({ cancel_action: confirmation.token }, actions, cancelButton);
+                    });
+                    actions.append(confirmButton, cancelButton);
+                    message.appendChild(actions);
+                }
             } else {
                 message.textContent = text;
             }
             messages.appendChild(message);
             messages.scrollTop = messages.scrollHeight;
+        }
+
+        async function submitAction(payload, actions, trigger) {
+            if (trigger.disabled) {
+                return;
+            }
+            actions.querySelectorAll('button').forEach(function (button) {
+                button.disabled = true;
+            });
+            try {
+                const response = await fetch('config/chatbot_API.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(Object.assign({ csrf: csrfToken }, payload))
+                });
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.reply || 'Hindi makontak ang assistant. Pakisubukan ulit.');
+                }
+                actions.remove();
+                addMessage(typeof result.reply === 'string' ? result.reply : 'Walang sagot mula sa assistant.', 'bot', result.confirmation);
+            } catch (error) {
+                actions.querySelectorAll('button').forEach(function (button) {
+                    button.disabled = false;
+                });
+                addMessage(error instanceof Error ? error.message : 'Nagkaroon ng error sa pagkuha ng sagot.', 'bot');
+            }
         }
 
         function renderBotReply(container, text) {
@@ -477,7 +572,7 @@
             const heading = document.createElement('strong');
             heading.className = 'tt-chatbot-heading';
 
-            const helpSectionPattern = /^(List records|Search|Record details|Next page):$/i;
+            const helpSectionPattern = /^(List records|Search|Record details|Next page|Action items|Reports|Process help|Safe changes):$/i;
             const firstHelpSection = lines.findIndex(function (line) {
                 return helpSectionPattern.test(line);
             });
@@ -657,13 +752,13 @@
                 const response = await fetch('config/chatbot_API.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: message })
+                    body: JSON.stringify({ message: message, csrf: csrfToken })
                 });
                 const result = await response.json();
                 if (!response.ok) {
                     throw new Error(result.reply || 'Hindi makontak ang assistant. Pakisubukan ulit.');
                 }
-                addMessage(typeof result.reply === 'string' ? result.reply : 'Walang sagot mula sa assistant.', 'bot');
+                addMessage(typeof result.reply === 'string' ? result.reply : 'Walang sagot mula sa assistant.', 'bot', result.confirmation);
             } catch (error) {
                 addMessage(error instanceof Error ? error.message : 'Nagkaroon ng error sa pagkuha ng sagot.', 'bot');
             } finally {

@@ -232,13 +232,17 @@ if (isset($_POST['register_user'])) {
 
     // I-save sa `users` table
     if ($isValid) {
+        $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+        if ($hashedPassword === false) {
+            throw new RuntimeException('Unable to securely hash the employee account password.');
+        }
         $insert_user = $conn->prepare(
-            'INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)'
+            'INSERT INTO users (name, email, employee_id, password, role) VALUES (?, ?, ?, ?, ?)'
         );
         if (!$insert_user) {
             throw new RuntimeException('Unable to prepare account creation: ' . $conn->error);
         }
-        $insert_user->bind_param('ssss', $name, $email, $password, $role);
+        $insert_user->bind_param('sisss', $name, $email, $employee_id, $hashedPassword, $role);
         if (!$insert_user->execute()) {
             $error = $insert_user->error;
             $insert_user->close();

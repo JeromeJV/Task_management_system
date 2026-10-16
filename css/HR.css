@@ -953,76 +953,145 @@ a {
 
 @media (max-width: 600px) {
     .hr-sidebar {
-        position: sticky;
-        inset: 0 0 auto;
-        width: 100%;
-        height: auto;
-        flex-direction: row;
-        align-items: center;
-        overflow-x: auto;
-        border-right: 0;
-        border-bottom: 1px solid #E1E5E2;
-        box-shadow: 0 2px 10px rgba(31, 41, 55, 0.04);
+        position: fixed;
+        z-index: 12001;
+        inset: 0 auto 0 0;
+        width: min(286px, calc(100vw - 52px));
+        height: 100vh;
+        height: 100dvh;
+        flex-direction: column;
+        align-items: stretch;
+        overflow-x: hidden;
+        overflow-y: auto;
+        padding-bottom: 12px;
+        scrollbar-width: none;
+        border-right: 1px solid #E1E5E2;
+        border-bottom: 0;
+        box-shadow: 8px 0 28px rgba(31, 41, 55, .14);
+        transform: translateX(-105%);
+        transition: transform 220ms ease;
+    }
+
+    .hr-sidebar::-webkit-scrollbar {
+        display: none;
+    }
+
+    .hr-sidebar.is-mobile-open {
+        transform: translateX(0);
     }
 
     .hr-sidebar:hover,
     .hr-sidebar:focus-within {
-        width: 100%;
+        width: min(286px, calc(100vw - 52px));
     }
 
     .hr-brand {
-        min-height: 58px;
-        padding: 0 10px;
-        border: 0;
+        min-height: 66px;
+        padding: 0 17px;
+        border-bottom: 1px solid #EEF0EF;
     }
 
     .hr-brand-mark {
-        width: 34px;
-        height: 34px;
-        flex-basis: 34px;
+        width: 38px;
+        height: 38px;
+        flex-basis: 38px;
     }
 
     .hr-brand-name {
-        display: none;
+        display: block;
+        opacity: 1;
+        transform: none;
     }
 
     .hr-nav {
-        flex: 0 0 auto;
-        flex-direction: row;
-        gap: 3px;
-        padding: 7px 5px;
+        flex: 1;
+        flex-direction: column;
+        gap: 7px;
+        padding: 18px 10px;
     }
 
     .hr-nav-link {
-        min-height: 40px;
-        justify-content: center;
-        gap: 7px;
-        padding: 0 9px;
+        width: 100%;
+        min-height: 46px;
+        justify-content: flex-start;
+        gap: 15px;
+        padding: 0 13px;
     }
 
     .hr-nav-icon {
-        width: 18px;
-        flex-basis: 18px;
-        font-size: 17px;
+        width: 20px;
+        flex-basis: 20px;
     }
 
     .hr-nav-label,
     .hr-sidebar:hover .hr-nav-label,
     .hr-sidebar:focus-within .hr-nav-label {
-        max-width: 0;
-        opacity: 0;
+        max-width: 180px;
+        opacity: 1;
+        transform: none;
+        font-size: 13px;
     }
 
     .hr-logout {
         flex: 0 0 auto;
-        margin: 0 8px 0 0;
-        padding: 0 10px;
+        margin: 10px;
+        margin-bottom: 8px;
+    }
+
+    .hr-mobile-menu-toggle {
+        position: fixed;
+        z-index: 12003;
+        top: 10px;
+        left: 10px;
+        display: grid;
+        width: 44px;
+        height: 44px;
+        align-content: center;
+        justify-items: center;
+        gap: 5px;
+        padding: 0;
+        border: 1px solid #DCE6DF;
+        border-radius: 11px;
+        background: #FFFFFF;
+        box-shadow: 0 3px 12px rgba(24, 37, 30, .11);
+    }
+
+    .hr-mobile-menu-toggle span {
+        display: block;
+        width: 19px;
+        height: 2px;
+        border-radius: 2px;
+        background: #1F6E4A;
+    }
+
+    .hr-mobile-menu-toggle:focus-visible {
+        outline: 3px solid rgba(31, 110, 74, .25);
+        outline-offset: 2px;
+    }
+
+    .hr-mobile-menu-backdrop:not([hidden]) {
+        position: fixed;
+        z-index: 12000;
+        inset: 0;
+        display: block;
+        border: 0;
+        background: rgba(16, 27, 21, .42);
+    }
+
+    body.hr-menu-open {
+        overflow: hidden;
     }
 
     .hr-main {
         width: 100%;
         margin-left: 0;
-        padding: 24px 16px 34px;
+        padding: 70px 16px 34px;
+    }
+
+    .hr-shell .hr-main.employee-main {
+        width: 100%;
+        margin-left: 0;
+        padding: 70px 16px 34px;
     }
 
     .hr-greeting {

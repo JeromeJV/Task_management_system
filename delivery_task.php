@@ -72,5 +72,6 @@ $count = $count ?? count($records);
 
     <button><a href="delivery_main.php">Back</a></button>
     <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
+    <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

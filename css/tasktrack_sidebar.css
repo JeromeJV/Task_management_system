@@ -173,6 +173,11 @@
     margin-top: auto;
 }
 
+.tasktrack-mobile-menu-toggle,
+.tasktrack-mobile-menu-backdrop {
+    display: none;
+}
+
 body .main {
     width: calc(100% - 75px);
     margin-left: 75px;
@@ -184,58 +189,157 @@ body .employee-main {
 
 @media (max-width: 768px) {
     .tasktrack-sidebar {
-        width: 58px;
+        position: fixed;
+        inset: 0 auto 0 0;
+        width: min(286px, calc(100vw - 52px));
+        height: 100vh;
+        height: 100dvh;
+        flex-direction: column;
+        align-items: stretch;
+        overflow-x: hidden;
+        overflow-y: auto;
+        padding: 16px 0;
+        border-right: 1px solid #e5e7eb;
+        border-bottom: 0;
+        box-shadow: 8px 0 28px rgba(24, 37, 30, .12);
+        transform: translateX(-105%);
+        transition: transform .24s ease;
+        will-change: transform;
     }
 
     .tasktrack-sidebar:hover,
     .tasktrack-sidebar:focus-within {
-        width: 58px;
+        width: min(286px, calc(100vw - 52px));
     }
 
-    .tasktrack-sidebar.open {
-        width: 240px;
+    .tasktrack-sidebar.is-mobile-open {
+        transform: translateX(0);
     }
 
-    .tasktrack-account,
-    .tasktrack-nav-label {
+    .tasktrack-sidebar::-webkit-scrollbar {
         display: none;
     }
 
-    .tasktrack-sidebar.open .tasktrack-account,
-    .tasktrack-sidebar.open .tasktrack-nav-label {
+    .tasktrack-brand {
+        width: 48px;
+        height: 48px;
+        flex-basis: 48px;
+        margin-bottom: 8px;
+    }
+
+    .tasktrack-account,
+    .tasktrack-sidebar:hover .tasktrack-account,
+    .tasktrack-sidebar:focus-within .tasktrack-account {
         display: flex;
+        min-height: 76px;
+        justify-content: flex-start;
+        margin: 10px 0 12px;
+        padding: 0 17px;
     }
 
-    .tasktrack-sidebar.open .tasktrack-nav-link,
-    .tasktrack-sidebar.open .tasktrack-logout {
+    .tasktrack-nav {
         width: 100%;
-    }
-
-    .tasktrack-sidebar.open .tasktrack-account-details strong,
-    .tasktrack-sidebar.open .tasktrack-account-details span,
-    .tasktrack-sidebar.open .tasktrack-nav-label {
-        opacity: 1;
-        transform: translateX(0);
+        flex: 1 0 auto;
+        flex-direction: column;
+        gap: 4px;
     }
 
     .tasktrack-nav-link,
     .tasktrack-logout {
-        width: 58px;
+        width: 100%;
+        height: 48px;
+        flex: 0 0 48px;
+        gap: 0;
+        padding: 0;
+        border-left: 4px solid transparent;
+        border-bottom: 0;
+        border-radius: 0;
+        font-size: 13px;
+    }
+
+    .tasktrack-nav-link:hover,
+    .tasktrack-nav-link.is-active,
+    .tasktrack-logout:hover {
+        border-left-color: #1f6e4a;
+        background: #f3f7f4;
+        color: #1f6e4a;
+    }
+
+    .tasktrack-nav-label {
+        display: block;
+        overflow: hidden;
+        opacity: 1;
+        transform: none;
+        font-size: 13px;
+    }
+
+    .tasktrack-logout {
+        margin-top: auto;
     }
 
     .tasktrack-icon-cell {
-        width: 54px;
-        min-width: 54px;
-        flex-basis: 54px;
+        width: 71px;
+        min-width: 71px;
+        height: 48px;
+        flex: 0 0 71px;
+    }
+
+    .tasktrack-mobile-menu-toggle {
+        position: fixed;
+        z-index: 12002;
+        top: 10px;
+        left: 10px;
+        display: grid;
+        width: 44px;
+        height: 44px;
+        align-content: center;
+        justify-items: center;
+        gap: 5px;
+        padding: 0;
+        border: 1px solid #dce6df;
+        border-radius: 11px;
+        background: #fff;
+        box-shadow: 0 3px 12px rgba(24, 37, 30, .11);
+        cursor: pointer;
+    }
+
+    .tasktrack-mobile-menu-toggle span {
+        display: block;
+        width: 19px;
+        height: 2px;
+        border-radius: 2px;
+        background: #1f6e4a;
+    }
+
+    .tasktrack-mobile-menu-toggle:focus-visible {
+        outline: 3px solid rgba(31, 110, 74, .25);
+        outline-offset: 2px;
+    }
+
+    .tasktrack-mobile-menu-backdrop:not([hidden]) {
+        position: fixed;
+        z-index: 12000;
+        inset: 0;
+        display: block;
+        border: 0;
+        background: rgba(16, 27, 21, .42);
+    }
+
+    body.tasktrack-menu-open {
+        overflow: hidden;
     }
 
     body .main {
-        width: calc(100% - 58px);
-        margin-left: 58px;
+        width: 100%;
+        margin-left: 0;
+        padding-top: 68px;
     }
 
-    body .employee-main {
-        margin-left: 58px;
+    body .employee-main,
+    body .admin-main {
+        width: 100%;
+        margin-left: 0;
+        padding-top: 68px;
     }
 }
 

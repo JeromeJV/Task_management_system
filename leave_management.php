@@ -380,6 +380,9 @@ if (!$leaveResult) {
     throw new RuntimeException('Unable to load leave records: ' . $conn->error);
 }
 $leaveRows = $leaveResult->fetch_all(MYSQLI_ASSOC);
+$paidLeaveCount = count(array_filter($leaveRows, static fn(array $leave): bool => $leave['leave_type'] === 'SIL'));
+$unpaidLeaveCount = count($leaveRows) - $paidLeaveCount;
+$employeesOnLeave = count(array_unique(array_column($leaveRows, 'employee_id')));
 $escape = static fn($value): string => htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 ?>
 <!DOCTYPE html>
@@ -393,26 +396,62 @@ $escape = static fn($value): string => htmlspecialchars((string) $value, ENT_QUO
     <link rel="stylesheet" href="css/select-control.css?v=<?= filemtime(__DIR__ . '/css/select-control.css'); ?>">
     <link rel="stylesheet" href="css/calendar-picker.css?v=<?= filemtime(__DIR__ . '/css/calendar-picker.css'); ?>">
     <style>
-        .leave-grid{display:grid;grid-template-columns:minmax(280px,360px) minmax(0,1fr);gap:22px;align-items:start}
-        .leave-card{background:#fff;border:1px solid #e1e8e3;border-radius:16px;padding:22px;box-shadow:0 8px 24px rgba(15,23,42,.05)}
-        .leave-card h2{margin:0 0 18px;color:#17251d;font-size:18px}.leave-form{display:grid;gap:15px}
+        .leave-main .hr-greeting{padding:22px 24px;border:1px solid #dce8e0;border-left:4px solid #1f6e4a;border-radius:13px;background:linear-gradient(110deg,#fff 0%,#f4f8f5 100%);box-shadow:0 5px 18px rgba(31,65,46,.045)}
+        .leave-main .hr-greeting h1{font-size:30px}
+        .leave-overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0 0 18px}
+        .leave-stat{display:flex;min-height:82px;align-items:center;justify-content:space-between;gap:12px;padding:14px 17px;border:1px solid #e1e8e3;border-radius:11px;background:#fff;box-shadow:0 3px 11px rgba(31,41,55,.035)}
+        .leave-stat span{color:#66756b;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.045em}
+        .leave-stat strong{color:#17251d;font-size:25px;line-height:1}
+        .leave-stat.is-paid{border-left:3px solid #258454}.leave-stat.is-paid strong{color:#1f6e4a}
+        .leave-stat.is-unpaid{border-left:3px solid #d89a26}.leave-stat.is-unpaid strong{color:#98650a}
+        .leave-grid{display:grid;grid-template-columns:minmax(300px,380px) minmax(0,1fr);gap:20px;align-items:start}
+        .leave-card{min-width:0;background:#fff;border:1px solid #e1e8e3;border-radius:14px;padding:20px;box-shadow:0 6px 20px rgba(15,23,42,.045)}
+        .leave-form-card{border-top:3px solid #1f6e4a}
+        .leave-records-card{border-top:3px solid #647d6d}
+        .leave-card-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+        .leave-card h2{margin:0;color:#17251d;font-size:17px}.leave-count{flex:0 0 auto;padding:5px 9px;border:1px solid #dce8e0;border-radius:999px;background:#f4f8f5;color:#53665a;font-size:11px;font-weight:700}
+        .leave-form{display:grid;gap:14px}
         .leave-form label{display:grid;gap:7px;color:#314239;font-size:12px;font-weight:700}
         .leave-form>label> :is(input,textarea,.select-control,.calendar-picker){width:100%}
-        .leave-form textarea{min-height:90px;resize:vertical}
+        .leave-form textarea{min-height:100px;resize:vertical}
         .leave-submit,.leave-cancel{border:0;border-radius:9px;padding:11px 14px;font-weight:700;cursor:pointer;transition:background-color .18s ease,transform .18s ease}
         .leave-submit{background:#1f6e4a;color:#fff}.leave-submit:hover{background:#185b3c;transform:translateY(-1px)}
         .leave-cancel{background:#fff0ef;color:#b42318}.leave-cancel:hover{background:#fee3e1}
         .leave-table-wrap{overflow:auto}
         .leave-table{width:100%;border-collapse:collapse;min-width:690px}.leave-table th,.leave-table td{text-align:left;padding:12px 10px;border-bottom:1px solid #e2e8f0;vertical-align:top}
-        .leave-table th{color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:.04em}.leave-type{font-weight:700}.leave-reason{max-width:250px;white-space:normal}
+        .leave-table th{color:#64748b;font-size:10px;text-transform:uppercase;letter-spacing:.06em;background:#f5f8f6}.leave-type{font-weight:700}.leave-reason{max-width:250px;white-space:normal}
+        .leave-type-chip{display:inline-flex;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:750;white-space:nowrap}
+        .leave-type-chip.is-paid{background:#e7f5ec;color:#176b3b}.leave-type-chip.is-unpaid{background:#fff4dc;color:#875b0b}
         .leave-help{margin:0;color:#6b7c70;font-size:11px;line-height:1.55}.leave-empty{padding:22px;color:#64748b;text-align:center}
         .leave-table small{color:#718078}
-        @media(max-width:900px){.leave-grid{grid-template-columns:1fr}}
+        @media(max-width:1050px){.leave-grid{grid-template-columns:minmax(260px,340px) minmax(0,1fr);gap:14px}.leave-card{padding:16px}}
+        @media(max-width:820px){.leave-grid{grid-template-columns:1fr}.leave-table{min-width:690px}}
+        @media(max-width:600px){
+            .hr-main.leave-main{padding:24px 15px 40px}
+            .leave-main .hr-greeting{padding:18px;border-radius:11px}
+            .leave-main .hr-greeting h1{font-size:25px}
+            .leave-overview{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+            .leave-stat{min-height:75px;align-items:flex-start;flex-direction:column;gap:7px;padding:11px 9px}
+            .leave-stat span{font-size:9px;line-height:1.3}
+            .leave-stat strong{font-size:21px}
+            .leave-grid{gap:14px}
+            .leave-card{padding:16px;border-radius:12px}
+            .leave-table-wrap{overflow:visible}
+            .leave-table{min-width:0;border-collapse:separate;border-spacing:0 10px}
+            .leave-table thead{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+            .leave-table tbody,.leave-table tr,.leave-table td{display:block;width:100%}
+            .leave-table tr{padding:8px 12px;border:1px solid #e1e8e3;border-radius:10px;background:#fff;box-shadow:0 2px 8px rgba(31,41,55,.035)}
+            .leave-table td{display:grid;grid-template-columns:minmax(88px,.35fr) minmax(0,1fr);gap:10px;padding:9px 0;border-bottom:1px solid #edf1ee;font-size:12px;overflow-wrap:anywhere}
+            .leave-table td::before{content:attr(data-label);color:#718078;font-size:10px;font-weight:750;text-transform:uppercase}
+            .leave-table td:last-child{display:flex;justify-content:flex-end;border-bottom:0}
+            .leave-table td:last-child::before{content:""}
+            .leave-reason{max-width:none}
+        }
     </style>
 </head>
 <body>
     <div class="hr-shell">
-        <aside class="hr-sidebar" aria-label="HR navigation">
+        <aside class="hr-sidebar" id="hrSidebar" aria-label="HR navigation">
             <a class="hr-brand" href="HR.php" aria-label="TaskTrack HR home">
                 <span class="hr-brand-mark" aria-hidden="true">T</span>
                 <span class="hr-brand-name">TASKTRACK</span>
@@ -448,8 +487,9 @@ $escape = static fn($value): string => htmlspecialchars((string) $value, ENT_QUO
                 <span class="hr-nav-label">Log out</span>
             </a>
         </aside>
+        <?php include __DIR__ . '/config/hr_mobile_navigation.php'; ?>
         <?php include __DIR__ . '/config/notification_bell.php'; ?>
-        <main class="hr-main">
+        <main class="hr-main leave-main">
             <header class="hr-greeting">
                 <div>
                     <p class="hr-greeting-kicker">HUMAN RESOURCES</p>
@@ -460,9 +500,14 @@ $escape = static fn($value): string => htmlspecialchars((string) $value, ENT_QUO
             </header>
             <?php if ($errorMessage !== ''): ?><div class="hr-alert is-error" role="alert"><?= $escape($errorMessage); ?></div><?php endif; ?>
             <?php if (!empty($_SESSION['leave_flash'])): ?><div class="hr-alert is-success" role="status"><?= $escape($_SESSION['leave_flash']); ?></div><?php unset($_SESSION['leave_flash']); endif; ?>
+            <section class="leave-overview" aria-label="Active leave summary">
+                <article class="leave-stat"><span>Active leave records</span><strong><?= count($leaveRows); ?></strong></article>
+                <article class="leave-stat is-paid"><span>Paid SIL</span><strong><?= $paidLeaveCount; ?></strong></article>
+                <article class="leave-stat is-unpaid"><span>Unpaid LWOP</span><strong><?= $unpaidLeaveCount; ?></strong></article>
+            </section>
             <div class="leave-grid">
-                <section class="leave-card">
-                    <h2>Record employee leave</h2>
+                <section class="leave-card leave-form-card">
+                    <div class="leave-card-heading"><h2>Record employee leave</h2></div>
                     <form class="leave-form" method="post">
                         <input type="hidden" name="csrf_token" value="<?= $escape($_SESSION['leave_csrf']); ?>">
                         <label>Employee
@@ -488,8 +533,11 @@ $escape = static fn($value): string => htmlspecialchars((string) $value, ENT_QUO
                         <button class="leave-submit" type="submit" name="record_leave" value="1">Record Leave</button>
                     </form>
                     </section>
-                    <section class="leave-card">
-                        <h2>Active leave records</h2>
+                    <section class="leave-card leave-records-card">
+                        <div class="leave-card-heading">
+                            <h2>Active leave records</h2>
+                            <span class="leave-count"><?= count($leaveRows); ?> active</span>
+                        </div>
                         <?php if ($leaveRows === []): ?>
                             <div class="leave-empty">No active leave records.</div>
                         <?php else: ?>
@@ -499,11 +547,11 @@ $escape = static fn($value): string => htmlspecialchars((string) $value, ENT_QUO
                                     <tbody>
                                     <?php foreach ($leaveRows as $leave): ?>
                                         <tr>
-                                            <td><?= $escape($leave['username']); ?></td>
-                                            <td><?= $escape($leave['start_date']); ?><?= $leave['end_date'] !== $leave['start_date'] ? ' – ' . $escape($leave['end_date']) : ''; ?><br>Full weekday(s)</td>
-                                            <td class="leave-type"><?= $leave['leave_type'] === 'SIL' ? 'Paid SIL' : 'Unpaid / LWOP'; ?></td>
-                                            <td class="leave-reason"><?= $escape($leave['reason']); ?></td>
-                                            <td><?= $escape($leave['recorder'] ?: 'HR'); ?><br><small><?= $escape($leave['recorded_at']); ?></small></td>
+                                            <td data-label="Employee"><?= $escape($leave['username']); ?></td>
+                                            <td data-label="Dates"><?= $escape($leave['start_date']); ?><?= $leave['end_date'] !== $leave['start_date'] ? ' – ' . $escape($leave['end_date']) : ''; ?><br>Full weekday(s)</td>
+                                            <td class="leave-type" data-label="Type"><span class="leave-type-chip <?= $leave['leave_type'] === 'SIL' ? 'is-paid' : 'is-unpaid'; ?>"><?= $leave['leave_type'] === 'SIL' ? 'Paid SIL' : 'Unpaid / LWOP'; ?></span></td>
+                                            <td class="leave-reason" data-label="Reason"><?= $escape($leave['reason']); ?></td>
+                                            <td data-label="Recorded by"><?= $escape($leave['recorder'] ?: 'HR'); ?><br><small><?= $escape($leave['recorded_at']); ?></small></td>
                                             <td>
                                                 <form method="post" onsubmit="return confirm('Cancel this leave record and restore attendance from the employee punches?');">
                                                     <input type="hidden" name="csrf_token" value="<?= $escape($_SESSION['leave_csrf']); ?>">

@@ -62,6 +62,9 @@ if (isset($_POST['Submit'])) {
                 }
 
                 if ($passwordMatches) {
+                    if (!session_regenerate_id(true)) {
+                        throw new RuntimeException('Unable to secure the sign-in session. Please try again.');
+                    }
                     if (!password_get_info($storedPassword)['algo'] || password_needs_rehash($storedPassword, PASSWORD_DEFAULT)) {
                         $upgradedPassword = password_hash($plain_password, PASSWORD_DEFAULT);
                         if ($upgradedPassword === false) {

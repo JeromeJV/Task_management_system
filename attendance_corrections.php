@@ -275,5 +275,6 @@ $escape = static fn ($value): string => htmlspecialchars((string) ($value ?? '')
         <?php endforeach; ?>
     </section>
 </main>
+<?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

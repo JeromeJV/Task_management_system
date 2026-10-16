@@ -122,5 +122,6 @@ document.getElementById('correctionForm').addEventListener('submit', async (even
     }
 });
 </script>
+<?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

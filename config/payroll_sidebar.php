@@ -9,7 +9,7 @@ $payrollSidebarItems = [
     'calculator' => ['Calculate Payroll', 'fa-calculator', 'calculator'],
 ];
 ?>
-<aside class="payroll-sidebar bg-white border-r border-zinc-200 flex flex-col justify-between h-screen sticky top-0 z-30 select-none">
+<aside class="payroll-sidebar bg-white border-r border-zinc-200 flex flex-col justify-between h-screen sticky top-0 z-30 select-none" id="payrollSidebar">
     <div class="flex flex-col w-full">
         <div class="p-5 border-b border-zinc-200 flex items-center gap-3">
             <div class="w-10 h-10 bg-zinc-300 rounded-xs shrink-0"></div>
@@ -66,3 +66,8 @@ $payrollSidebarItems = [
         </a>
     </div>
 </aside>
+<button class="payroll-mobile-menu-toggle" type="button" data-payroll-menu-toggle aria-controls="payrollSidebar" aria-expanded="false" aria-label="Open Payroll navigation" title="Open Payroll navigation">
+    <span></span><span></span><span></span>
+</button>
+<div class="payroll-mobile-menu-backdrop" data-payroll-menu-backdrop hidden></div>
+<script src="js/payroll-mobile-menu.js?v=<?= filemtime(__DIR__ . '/../js/payroll-mobile-menu.js'); ?>"></script>

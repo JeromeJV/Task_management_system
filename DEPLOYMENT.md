@@ -14,6 +14,7 @@ The application reads these process environment variables:
 - `TASKTRACK_SMTP_USERNAME`
 - `TASKTRACK_SMTP_PASSWORD`
 - `TASKTRACK_SMTP_FROM` (optional; defaults to the configured SMTP username)
+- `TASKTRACK_BASE_URL` (recommended; public base URL used in password setup/reset links)
 
 ## Appearance preference
 
@@ -34,6 +35,7 @@ SetEnv TASKTRACK_SMTP_PORT 587
 SetEnv TASKTRACK_SMTP_USERNAME replace-with-mailbox
 SetEnv TASKTRACK_SMTP_PASSWORD replace-with-a-secret
 SetEnv TASKTRACK_SMTP_FROM replace-with-mailbox
+SetEnv TASKTRACK_BASE_URL https://tasktrack.example.com
 ```
 
 Use the mail provider's recommended SMTP credentials (for example, a dedicated app password where supported) rather than an interactive account password.

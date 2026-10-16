@@ -50,6 +50,20 @@
     line-height: 1.5;
 }
 
+.task-review-proof-image {
+    display: block;
+    width: 100%;
+    max-height: min(48vh, 360px);
+    object-fit: contain;
+    border: 1px solid #e2e8e4;
+    border-radius: 10px;
+    background: #f5f8f6;
+}
+
+.task-review-proof-image[hidden] {
+    display: none;
+}
+
 .task-review-note-label {
     margin-top: 5px;
     color: #34423a;

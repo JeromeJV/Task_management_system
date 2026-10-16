@@ -2,7 +2,25 @@
 // -----------------------------------------------------
 //                      Insert
 // -----------------------------------------------------
-include('config/connection.php');
+require_once __DIR__ . '/connection.php';
+require_once __DIR__ . '/production_stock_numbers.php';
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
+require_once __DIR__ . '/account_access.php';
+if (!isset($_SESSION['id'], $_SESSION['email'], $_SESSION['role']) || $_SESSION['role'] !== 'super') {
+    http_response_code(403);
+    exit('Supervisor access is required.');
+}
+requireActiveAccount($conn);
+if (empty($_SESSION['production_legacy_csrf'])) {
+    $_SESSION['production_legacy_csrf'] = bin2hex(random_bytes(32));
+}
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
+    && !hash_equals((string) $_SESSION['production_legacy_csrf'], (string) ($_POST['csrf_token'] ?? ''))) {
+    http_response_code(403);
+    exit('Your session token expired. Refresh and try again.');
+}
 
 $message = "";
 $product_name_err = '';
@@ -42,31 +60,41 @@ if (isset($_POST['submit']) && !isset($_POST['is_update'])) {
         $isValid = false;
     }
 
-    if (mb_strlen($Stock_number) > 4 && !empty($Stock_number)) {
-        $Stock_number_err = "Your Stock Number must be at least 4 characters long.";
-        $isValid = false;
-    }
-
-    if (mb_strlen($Stock_number) < 4 && !empty($Stock_number)) {
-        $Stock_number_err = "Your Stock Number must be at least 4 characters long.";
+    if (!preg_match('/^[0-9]{4}$/', (string) $Stock_number)) {
+        $Stock_number_err = 'Stock Number must be exactly 4 digits.';
         $isValid = false;
     }
 
     if ($isValid) {
-        $safe_product_name = mysqli_real_escape_string($conn, $product_name);
-        $safe_target_pcs   = mysqli_real_escape_string($conn, $target_pcs);
-        $safe_due_date     = mysqli_real_escape_string($conn, $due_date);
-        $safe_Stock_number = mysqli_real_escape_string($conn, $Stock_number);
-        $safe_quantity     = mysqli_real_escape_string($conn, $quantity);
-        
-        $sql   = "INSERT INTO production (product_name, target_pcs, due_date, Stock_number, quantity) VALUES ('$safe_product_name', '$safe_target_pcs', '$safe_due_date', '$safe_Stock_number', '$safe_quantity')";
-        $query = mysqli_query($conn, $sql);
-
-        if ($query) {
-            $message = "New Task sent successfully.";
-        } elseif (isset($_POST['records'])) {
-            header("Location: factory_main.php");
-            exit();
+        $stockLockAcquired = false;
+        try {
+            acquireProductionStockNumberLock($conn);
+            $stockLockAcquired = true;
+            $stockNumberValue = (int) $Stock_number;
+            if (productionStockNumberExists($conn, $stockNumberValue)) {
+                $Stock_number_err = 'That stock number is already assigned to another product.';
+            } else {
+                $insertStatement = $conn->prepare(
+                    "INSERT INTO production (product_name, target_pcs, department, due_date, Stock_number, quantity)
+                     VALUES (?, ?, 'Production', ?, ?, ?)"
+                );
+                if (!$insertStatement) {
+                    throw new RuntimeException('Unable to prepare production product creation: ' . $conn->error);
+                }
+                $insertStatement->bind_param('sissi', $product_name, $target_pcs, $due_date, $stockNumberValue, $quantity);
+                if ($insertStatement->execute()) {
+                    $message = 'New Task sent successfully.';
+                } else {
+                    $message = 'Unable to save the production task.';
+                }
+                $insertStatement->close();
+            }
+        } catch (RuntimeException $error) {
+            $Stock_number_err = $error->getMessage();
+        } finally {
+            if ($stockLockAcquired) {
+                releaseProductionStockNumberLock($conn);
+            }
         }
     }
 }
@@ -80,14 +108,29 @@ $view_data = null;
 $delete_message = "";
 
 if (isset($_POST['del'])) {
-    $sql    = "DELETE FROM production WHERE production_id = '$passid'";
-    $result = mysqli_query($conn, $sql);
-    $delete_message = "Record Deleted Successfully. <br><a href='factory_main.php'>View Records</a>";
+    $productionId = filter_var($passid, FILTER_VALIDATE_INT);
+    $deleteStatement = $productionId ? $conn->prepare('DELETE FROM production WHERE production_id = ?') : false;
+    if ($deleteStatement) {
+        $deleteStatement->bind_param('i', $productionId);
+        $delete_message = $deleteStatement->execute()
+            ? 'Record Deleted Successfully.'
+            : 'Unable to delete the production record.';
+        $deleteStatement->close();
+    } else {
+        $delete_message = 'Choose a valid production record.';
+    }
 
 } elseif (isset($_POST['upd'])) {
-    $sql    = "SELECT * FROM production WHERE production_id = '$passid'";
-    $result = mysqli_query($conn, $sql);
-    $row    = mysqli_fetch_assoc($result);
+    $productionId = filter_var($passid, FILTER_VALIDATE_INT);
+    $lookupStatement = $productionId ? $conn->prepare('SELECT * FROM production WHERE production_id = ?') : false;
+    if ($lookupStatement) {
+        $lookupStatement->bind_param('i', $productionId);
+        $lookupStatement->execute();
+        $row = $lookupStatement->get_result()->fetch_assoc();
+        $lookupStatement->close();
+    } else {
+        $row = null;
+    }
 
     if ($row) {
         $view_data = [
@@ -116,18 +159,41 @@ if (isset($_POST['submit']) && isset($_POST['is_update'])) {
     $Stock_number  = $_POST['Stock_number'] ?? '';
     $quantity      = $_POST['quantity'] ?? '';
 
-    $safe_production_id = mysqli_real_escape_string($conn, $production_id);
-    $safe_product_name  = mysqli_real_escape_string($conn, $product_name);
-    $safe_target_pcs    = mysqli_real_escape_string($conn, $target_pcs);
-    $safe_due_date      = mysqli_real_escape_string($conn, $due_date);
-    $safe_Stock_number  = mysqli_real_escape_string($conn, $Stock_number);
-    $safe_quantity      = mysqli_real_escape_string($conn, $quantity);
-
-    $sql   = "UPDATE production SET product_name = '$safe_product_name', target_pcs = '$safe_target_pcs', due_date = '$safe_due_date', Stock_number = '$safe_Stock_number', quantity = '$safe_quantity' WHERE production_id = '$safe_production_id'";
-    $query = mysqli_query($conn, $sql);
-
-    if ($query) {
-        $status_message = "<br>Update Successful<br><br><a href='factory_main.php'><input type='button' name='back' value='View Records'></a>";
+    $updateId = filter_var($production_id, FILTER_VALIDATE_INT);
+    $stockNumberValue = preg_match('/^[0-9]{4}$/', $Stock_number) ? (int) $Stock_number : 0;
+    if (!$updateId || $updateId < 1 || $stockNumberValue < 1000) {
+        $status_message = 'Choose a valid production record and 4-digit stock number.';
+    } else {
+        $stockLockAcquired = false;
+        try {
+            acquireProductionStockNumberLock($conn);
+            $stockLockAcquired = true;
+            $currentStockNumber = getProductionStockNumber($conn, (int) $updateId);
+            if ($currentStockNumber === null) {
+                throw new RuntimeException('The selected production record no longer exists.');
+            }
+            if ($stockNumberValue !== $currentStockNumber && productionStockNumberExists($conn, $stockNumberValue, (int) $updateId)) {
+                $status_message = 'That stock number is already assigned to another product.';
+            } else {
+                $updateStatement = $conn->prepare(
+                    'UPDATE production SET product_name = ?, target_pcs = ?, due_date = ?, Stock_number = ?, quantity = ? WHERE production_id = ?'
+                );
+                if (!$updateStatement) {
+                    throw new RuntimeException('Unable to prepare production update: ' . $conn->error);
+                }
+                $updateStatement->bind_param('sisiii', $product_name, $target_pcs, $due_date, $stockNumberValue, $quantity, $updateId);
+                $status_message = $updateStatement->execute()
+                    ? 'Update Successful.'
+                    : 'Unable to update the production record.';
+                $updateStatement->close();
+            }
+        } catch (RuntimeException $error) {
+            $status_message = $error->getMessage();
+        } finally {
+            if ($stockLockAcquired) {
+                releaseProductionStockNumberLock($conn);
+            }
+        }
     }
 } elseif (isset($_POST['can'])) {
     header("Location: factory_main.php");

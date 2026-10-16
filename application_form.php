@@ -1,6 +1,9 @@
 <?php
 session_start();
 require_once __DIR__ . '/config/connection.php';
+if (empty($_SESSION['applicant_csrf'])) {
+    $_SESSION['applicant_csrf'] = bin2hex(random_bytes(32));
+}
 $application_list_mode = true;
 include('config/application_API.php');
 
@@ -53,7 +56,7 @@ $styleVersion = file_exists('css/applicant_admin.css') ? filemtime('css/applican
 </head>
 <body>
 <div class="hr-shell">
-    <aside class="hr-sidebar" aria-label="HR navigation">
+    <aside class="hr-sidebar" id="hrSidebar" aria-label="HR navigation">
         <a class="hr-brand" href="HR.php" aria-label="TaskTrack HR home">
             <span class="hr-brand-mark" aria-hidden="true">T</span>
             <span class="hr-brand-name">TASKTRACK</span>
@@ -89,6 +92,7 @@ $styleVersion = file_exists('css/applicant_admin.css') ? filemtime('css/applican
             <span class="hr-nav-label">Log out</span>
         </a>
     </aside>
+    <?php include __DIR__ . '/config/hr_mobile_navigation.php'; ?>
     <?php include __DIR__ . '/config/notification_bell.php'; ?>
 
     <main class="hr-main">
@@ -303,6 +307,7 @@ $styleVersion = file_exists('css/applicant_admin.css') ? filemtime('css/applican
         <h2 id="rejectTitle">Reject this application?</h2>
         <p id="rejectDescription">This applicant will be marked as Failed. This action can be changed later by updating their status.</p>
         <form method="post" class="modal-actions centered-actions">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['applicant_csrf'], ENT_QUOTES, 'UTF-8'); ?>">
             <input type="hidden" name="reject_applicant_id" id="rejectApplicantId">
             <button class="secondary-button" type="button" data-close>Cancel</button>
             <button class="danger-button" type="submit" name="reject_applicant" value="1">Confirm rejection</button>
@@ -317,6 +322,7 @@ $styleVersion = file_exists('css/applicant_admin.css') ? filemtime('css/applican
         <h2 id="scheduleTitle">Schedule interview</h2>
         <p class="modal-subtitle">Set an interview date and details for <strong id="scheduleApplicantName"></strong>.</p>
         <form method="post" class="schedule-form" id="applicantScheduleForm">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['applicant_csrf'], ENT_QUOTES, 'UTF-8'); ?>">
             <input type="hidden" name="applicant_id" id="scheduleApplicantId">
             <input type="hidden" name="username" id="scheduleApplicantHiddenName">
             <input type="hidden" name="email" id="scheduleApplicantEmail">
@@ -561,5 +567,8 @@ $styleVersion = file_exists('css/applicant_admin.css') ? filemtime('css/applican
 </script>
 <script src="js/calendar-picker.js?v=<?= filemtime(__DIR__ . '/js/calendar-picker.js'); ?>"></script>
 <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
+<?php if (isset($_SESSION['id'], $_SESSION['role']) && in_array($_SESSION['role'], ['admin', 'super', 'log', 'HR', 'payroll', 'employee', 'pro', 'cooking', 'packaging'], true)): ?>
+    <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
+<?php endif; ?>
 </body>
 </html>

@@ -1,5 +1,8 @@
 <?php
 session_start();
+if (empty($_SESSION['production_legacy_csrf'])) {
+    $_SESSION['production_legacy_csrf'] = bin2hex(random_bytes(32));
+}
 
 include('config/connection.php');
 include('config/autoLog.php');
@@ -894,6 +897,7 @@ $active_tab = $_GET['tab'] ?? 'main';
                                     </td>
                                     <td>
                                         <form action="factory_task.php" method="post" style="display:inline;">
+                                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['production_legacy_csrf'], ENT_QUOTES, 'UTF-8'); ?>">
                                             <input type="hidden" name="idno" value="<?= htmlspecialchars($row['production_id'] ?? ''); ?>">
                                             <button type="submit" name="del" class="btn-delete" onclick="return confirm('Are you sure you want to delete this record?');">Delete</button>
                                         </form>

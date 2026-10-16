@@ -119,6 +119,7 @@ $logistics_tasks_query = mysqli_query($conn, "
     SELECT CONCAT(COALESCE(NULLIF(p.product_name, ''), CONCAT('Production #', d.production_id)),
                   ' - ', d.route) AS task_name,
            d.delivery_id,
+           d.delivery_proof_image,
            d.assigned_by,
            u.name AS assigned_to,
            d.delivery_date AS due_date,
@@ -391,6 +392,7 @@ $quantity_err = $quantity_err ?? '';
                           class="delivery-review-open-button"
                           data-delivery-id="<?= (int) $task['delivery_id']; ?>"
                           data-route="<?= htmlspecialchars($task['task_name'] ?? 'this delivery', ENT_QUOTES, 'UTF-8'); ?>"
+                          data-proof-url="<?= !empty($task['delivery_proof_image']) ? 'delivery_proof.php?id=' . (int) $task['delivery_id'] : ''; ?>"
                         >Review submission</button>
                         <?php elseif (str_starts_with((string) ($task['task_type'] ?? ''), 'Production')): ?>
                         <button
@@ -458,6 +460,8 @@ $quantity_err = $quantity_err ?? '';
       <span class="task-review-dialog-kicker">LOGISTICS TASK</span>
       <h2 id="deliveryReviewTitle">Review submission</h2>
       <p class="task-review-dialog-description" id="deliveryReviewDescription"></p>
+      <img id="deliveryReviewProof" class="task-review-proof-image" alt="Delivery proof photo" hidden>
+      <p id="deliveryReviewNoProof" class="task-review-dialog-hint" hidden>No delivery proof photo was attached.</p>
       <label class="task-review-note-label" for="deliveryReviewNote">Reason for requesting changes</label>
       <textarea id="deliveryReviewNote" name="review_note" maxlength="1000" rows="4" placeholder="Explain what needs to be changed"></textarea>
       <p class="task-review-dialog-hint">A reason is required only when you request changes.</p>
@@ -507,8 +511,24 @@ $quantity_err = $quantity_err ?? '';
   </dialog>
   <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
   <script>
+    const deliveryReviewProof = document.getElementById('deliveryReviewProof');
+    const deliveryReviewNoProof = document.getElementById('deliveryReviewNoProof');
+
     document.querySelectorAll('.delivery-review-open-button').forEach((button) => {
       button.addEventListener('click', () => {
+        const proofUrl = button.dataset.proofUrl || '';
+        deliveryReviewProof.hidden = !proofUrl;
+        deliveryReviewNoProof.hidden = Boolean(proofUrl);
+        deliveryReviewNoProof.textContent = 'No delivery proof photo was attached.';
+        deliveryReviewProof.removeAttribute('src');
+        if (proofUrl) {
+          deliveryReviewProof.src = proofUrl;
+        }
+        deliveryReviewProof.onerror = () => {
+          deliveryReviewProof.hidden = true;
+          deliveryReviewNoProof.textContent = 'The delivery proof photo could not be loaded.';
+          deliveryReviewNoProof.hidden = false;
+        };
         openTaskReviewDialog('deliveryReviewDialog', 'deliveryReviewNote', {
           deliveryReviewId: button.dataset.deliveryId,
           deliveryReviewDescription: `Choose whether to approve "${button.dataset.route}" or request changes from the driver.`

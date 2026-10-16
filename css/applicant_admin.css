@@ -131,6 +131,15 @@ td small { display: block; margin-top: 5px; }
 .outcome-applicant { color: #465166; font-size: 14px; font-weight: 700; }
 .outcome-description { color: var(--muted); font-size: 12px; line-height: 1.6; }
 .outcome-confirm-card { width: min(100%, 430px); }
+.failed-delete-backdrop { z-index: 20; }
+.failed-delete-confirm-card { width: min(100%, 450px); }
+.failed-delete-confirm-card > .confirm-icon { margin-bottom: 16px; }
+.failed-delete-confirm-card > .modal-kicker { margin-bottom: 7px; color: #b23434; }
+.failed-delete-confirm-card > h2 { margin-bottom: 9px; }
+.failed-delete-confirm-card .modal-subtitle { margin-bottom: 0; font-size: 13px; line-height: 1.65; }
+.failed-delete-confirm-card .modal-subtitle strong { color: #354055; overflow-wrap: anywhere; }
+.failed-delete-confirm-card .modal-actions { margin-top: 25px; }
+.failed-delete-confirm-card button:focus-visible { outline: 3px solid rgba(178,52,52,.2); outline-offset: 2px; }
 .submission-overlay { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 20px; background: rgba(18,27,45,.58); backdrop-filter: blur(3px); }
 .submission-card { display: grid; min-width: min(310px, 100%); justify-items: center; gap: 11px; padding: 28px 32px; border: 1px solid #edf0f5; border-radius: 13px; background: #fff; box-shadow: 0 24px 70px rgba(10,18,35,.25); text-align: center; }
 .submission-card strong { color: #273247; font-size: 15px; }

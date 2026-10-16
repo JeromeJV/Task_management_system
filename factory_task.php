@@ -3,13 +3,15 @@ session_start();
 
 include('config/connection.php');
 include('config/autoLog.php');
-include('config/Production_API.php');
 
 // Authorization sa pag lologin kung tamang role pa ung nag login
 if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'super') {
+    http_response_code(403);
     header("Location: index.php");
     exit();
 }
+
+include('config/Production_API.php');
 
 // Sinusure lg ung mga variable na existing sila
 // ---------- Production variables ---------------------
@@ -41,6 +43,7 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'super') {
     <?php endif; ?>
 
     <form action="<?= htmlspecialchars($_SERVER['PHP_SELF']); ?>" method="post">
+        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['production_legacy_csrf'], ENT_QUOTES, 'UTF-8'); ?>">
         <label>Product Name:</label>
         <input type="text" name="product_name" placeholder="Enter product name" class="form-control <?= (!empty($product_name_err)) ? 'is-invalid' : '' ?>" value="<?= htmlspecialchars($_POST['product_name'] ?? $view_data['product_name'] ?? '') ?>" required>
         <?php if (!empty($product_name_err)): ?><div class="invalid-feedback"><?= htmlspecialchars($product_name_err) ?></div><?php endif; ?>
@@ -77,5 +80,6 @@ if (!isset($_SESSION['email']) || $_SESSION['role'] !== 'super') {
 
     <button><a href="factory_main.php">Back</a></button>
 <script src="js/calendar-picker.js?v=<?= filemtime(__DIR__ . '/js/calendar-picker.js'); ?>"></script>
+    <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

@@ -92,7 +92,7 @@ while ($attendance_row = mysqli_fetch_assoc($attendance_result)) {
 </head>
 <body>
     <div class="hr-shell">
-        <aside class="hr-sidebar" aria-label="HR navigation">
+        <aside class="hr-sidebar" id="hrSidebar" aria-label="HR navigation">
             <a class="hr-brand" href="HR.php" aria-label="TaskTrack HR home">
                 <span class="hr-brand-mark" aria-hidden="true">T</span>
                 <span class="hr-brand-name">TASKTRACK</span>
@@ -130,6 +130,7 @@ while ($attendance_row = mysqli_fetch_assoc($attendance_result)) {
                 <span class="hr-nav-label">Log out</span>
             </a>
         </aside>
+        <?php include __DIR__ . '/config/hr_mobile_navigation.php'; ?>
         <?php include __DIR__ . '/config/notification_bell.php'; ?>
 
         <main class="hr-main">

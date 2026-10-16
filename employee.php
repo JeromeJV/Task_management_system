@@ -1154,5 +1154,6 @@ $accountRoleLabels = [
 </script>
 <script src="js/calendar-picker.js?v=<?= filemtime(__DIR__ . '/js/calendar-picker.js'); ?>"></script>
 <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
+<?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>
