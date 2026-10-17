@@ -33,8 +33,37 @@ function sendTaskTrackEmail(string $recipientEmail, string $subject, string $htm
         $mail->AltBody = $textBody;
         $mail->send();
     } catch (PHPMailer\PHPMailer\Exception $error) {
-        throw new RuntimeException('Gmail could not deliver the email. Check the SMTP settings and try again.');
+        error_log('TaskTrack SMTP delivery failed: ' . $error->getMessage());
+        throw new RuntimeException('The SMTP server could not deliver the email. Check the SMTP settings and try again.');
     }
+}
+
+function sendTaskTrackUserEmail(mysqli $conn, int $userId, string $subject, string $message): void
+{
+    $stmt = $conn->prepare('SELECT name, email FROM users WHERE id = ? LIMIT 1');
+    if (!$stmt) {
+        throw new RuntimeException('Unable to prepare the task email recipient lookup: ' . $conn->error);
+    }
+    $stmt->bind_param('i', $userId);
+    if (!$stmt->execute()) {
+        $error = $stmt->error;
+        $stmt->close();
+        throw new RuntimeException('Unable to load the task email recipient: ' . $error);
+    }
+    $recipient = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    $email = trim((string) ($recipient['email'] ?? ''));
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        throw new RuntimeException('The task email recipient does not have a valid email address.');
+    }
+
+    $name = trim((string) ($recipient['name'] ?? 'TaskTrack user'));
+    $escapedName = htmlspecialchars($name !== '' ? $name : 'TaskTrack user', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $escapedMessage = nl2br(htmlspecialchars($message, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
+    $htmlBody = '<p>Hello ' . $escapedName . ',</p><p>' . $escapedMessage . '</p><p>Sign in to TaskTrack to review the task.</p>';
+    $textBody = "Hello {$name},\n\n{$message}\n\nSign in to TaskTrack to review the task.";
+    sendTaskTrackEmail($email, $subject, $htmlBody, $textBody);
 }
 
 function sendTaskTrackPasswordSetupLink(string $email, string $name, string $role, string $token): void

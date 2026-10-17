@@ -231,7 +231,7 @@
 
         if (wasRequired && select.form) {
             select.form.addEventListener('submit', (event) => {
-                if (event.defaultPrevented || select.value) return;
+                if (event.defaultPrevented || select.form.noValidate || select.value) return;
                 event.preventDefault();
                 event.stopImmediatePropagation();
                 wrapper.classList.add('is-invalid');

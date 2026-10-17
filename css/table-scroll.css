@@ -1,7 +1,8 @@
 .table-scroll {
     max-height: min(65vh, 640px);
     overflow: auto;
-    overscroll-behavior: contain;
+    overscroll-behavior-x: contain;
+    overscroll-behavior-y: auto;
     scrollbar-gutter: stable;
 }
 

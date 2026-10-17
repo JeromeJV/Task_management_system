@@ -1,12 +1,23 @@
 <?php
+ob_start();
 header('Content-Type: application/json; charset=utf-8');
 session_start();
 date_default_timezone_set('Asia/Manila');
 
 function chatbotRespond(string $reply, int $status = 200, array $extra = []): void
 {
+    $unexpectedOutput = ob_get_contents();
+    if (is_string($unexpectedOutput) && trim($unexpectedOutput) !== '') {
+        error_log('Chatbot API discarded unexpected output to preserve its JSON response.');
+    }
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
     http_response_code($status);
-    echo json_encode(array_merge(['reply' => $reply], $extra), JSON_UNESCAPED_UNICODE);
+    echo json_encode(
+        array_merge(['reply' => $reply], $extra),
+        JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
+    );
     exit();
 }
 
@@ -374,7 +385,8 @@ function chatbotRecordDetails(
                        o.completion_review_status, o.completion_review_note, e.username AS employee_name
                 FROM office o
                 LEFT JOIN employee e ON e.employee_id = o.employee_id
-                WHERE o.office_id = ?";
+                WHERE o.office_id = ?
+                  AND LOWER(TRIM(COALESCE(o.status, 'pending'))) <> 'deleted'";
         $types = 'i';
         $params = [(int) $recordId];
         if ($role === 'employee') {
@@ -528,12 +540,13 @@ function chatbotListRecords(
                            o.due_date AS date_value,
                            e.username AS detail_one
                     FROM office o
-                    LEFT JOIN employee e ON e.employee_id = o.employee_id";
+                    LEFT JOIN employee e ON e.employee_id = o.employee_id
+                    WHERE LOWER(TRIM(COALESCE(o.status, 'pending'))) <> 'deleted'";
             if ($role === 'employee') {
                 if ($employeeId === null) {
                     return 'Hindi makita ang employee profile na naka-link sa account mo.';
                 }
-                $sql .= ' WHERE o.employee_id = ?';
+                $sql .= ' AND o.employee_id = ?';
                 $types = 'i';
                 $params = [$employeeId];
                 if ($search !== '') {
@@ -542,7 +555,7 @@ function chatbotListRecords(
                     array_push($params, $searchTerm, $searchTerm, $searchTerm);
                 }
             } elseif ($search !== '') {
-                $sql .= ' WHERE o.title LIKE ? OR o.content LIKE ? OR o.status LIKE ? OR e.username LIKE ?';
+                $sql .= ' AND (o.title LIKE ? OR o.content LIKE ? OR o.status LIKE ? OR e.username LIKE ?)';
                 $types = 'ssss';
                 $params = [$searchTerm, $searchTerm, $searchTerm, $searchTerm];
             }
@@ -864,7 +877,8 @@ function chatbotOfficeTasks(mysqli $conn, ?int $employeeId, bool $summaryOnly = 
                     SUM(CASE WHEN LOWER(TRIM(COALESCE(status, ''))) IN ('completed', 'complete', 'done') THEN 1 ELSE 0 END) AS completed,
                     SUM(CASE WHEN completion_review_status = 'pending_review' THEN 1 ELSE 0 END) AS awaiting_review
              FROM office
-             WHERE employee_id = ?",
+             WHERE employee_id = ?
+               AND LOWER(TRIM(COALESCE(status, 'pending'))) <> 'deleted'",
             'i',
             [$employeeId]
         );
@@ -888,6 +902,7 @@ function chatbotOfficeTasks(mysqli $conn, ?int $employeeId, bool $summaryOnly = 
                 due_date, progress
          FROM office
          WHERE employee_id = ?
+           AND LOWER(TRIM(COALESCE(status, 'pending'))) <> 'deleted'
          ORDER BY due_date IS NULL ASC, due_date ASC, office_id DESC
          LIMIT 10",
         'i',
@@ -1044,7 +1059,9 @@ function chatbotActionItems(mysqli $conn, string $role, ?int $employeeId, ?int $
             "SELECT
                 (SELECT COUNT(*) FROM production_assignments WHERE completion_review_status = 'pending_review') AS production_reviews,
                 (SELECT COUNT(*) FROM delivery WHERE completion_review_status = 'pending_review') AS delivery_reviews,
-                (SELECT COUNT(*) FROM office WHERE completion_review_status = 'pending_review') AS office_reviews"
+                (SELECT COUNT(*) FROM office
+                 WHERE completion_review_status = 'pending_review'
+                   AND LOWER(TRIM(COALESCE(status, 'pending'))) <> 'deleted') AS office_reviews"
         );
         foreach ([
             'Production approvals' => (int) ($reviewCounts['production_reviews'] ?? 0),
@@ -1099,7 +1116,7 @@ function chatbotActionItems(mysqli $conn, string $role, ?int $employeeId, ?int $
                     due_date
              FROM office
              WHERE employee_id = ?
-               AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done')
+               AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done', 'deleted')
                AND (due_date < CURDATE() OR due_date <= DATE_ADD(CURDATE(), INTERVAL 3 DAY)
                     OR completion_review_status = 'rejected')
              ORDER BY due_date ASC LIMIT 5",
@@ -1121,7 +1138,9 @@ function chatbotActionItems(mysqli $conn, string $role, ?int $employeeId, ?int $
         }
         $officeReviews = (int) (chatbotScalar(
             $conn,
-            "SELECT COUNT(*) AS total FROM office WHERE completion_review_status = 'pending_review'"
+            "SELECT COUNT(*) AS total FROM office
+             WHERE completion_review_status = 'pending_review'
+               AND LOWER(TRIM(COALESCE(status, 'pending'))) <> 'deleted'"
         )['total'] ?? 0);
         if ($officeReviews > 0) {
             $items[] = 'Office task submissions waiting for review: ' . $officeReviews;
@@ -1302,7 +1321,9 @@ function chatbotDateReport(mysqli $conn, string $message, string $role, ?int $em
         }
         $sql = "SELECT COUNT(*) AS total,
                        SUM(CASE WHEN LOWER(TRIM(COALESCE(status, ''))) IN ('completed', 'complete', 'done') THEN 1 ELSE 0 END) AS completed
-                FROM office WHERE due_date BETWEEN ? AND ?";
+                FROM office
+                WHERE due_date BETWEEN ? AND ?
+                  AND LOWER(TRIM(COALESCE(status, 'pending'))) <> 'deleted'";
         $officeTypes = 'ss';
         $officeParams = [$start, $end];
         if ($role === 'employee') {
@@ -1504,7 +1525,10 @@ function chatbotPrepareAction(mysqli $conn, array $action): string
     if (($action['type'] ?? '') === 'office_task_update') {
         $task = chatbotScalar(
             $conn,
-            'SELECT title FROM office WHERE office_id = ? AND supervisor_id = ? LIMIT 1',
+            "SELECT title FROM office
+             WHERE office_id = ? AND supervisor_id = ?
+               AND LOWER(TRIM(COALESCE(status, 'pending'))) <> 'deleted'
+             LIMIT 1",
             'ii',
             [(int) $action['office_id'], (int) $_SESSION['id']]
         );
@@ -1772,7 +1796,7 @@ function chatbotCommitAction(mysqli $conn, array $action, int $actorId, string $
             $activeCount = (int) (chatbotScalar(
                 $conn,
                 "SELECT COUNT(*) AS total FROM office WHERE employee_id = ?
-                 AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done')",
+                 AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done', 'deleted')",
                 'i',
                 [$employeeId]
             )['total'] ?? 0);
@@ -1911,7 +1935,7 @@ function chatbotCommitAction(mysqli $conn, array $action, int $actorId, string $
                 $conn,
                 "SELECT employee_id, title FROM office
                  WHERE office_id = ? AND supervisor_id = ?
-                   AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done')
+                   AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done', 'deleted')
                    AND completion_review_status <> 'pending_review'
                  LIMIT 1 FOR UPDATE",
                 'ii',
@@ -1927,7 +1951,7 @@ function chatbotCommitAction(mysqli $conn, array $action, int $actorId, string $
             $stmt = $conn->prepare(
                 "UPDATE office SET title = ?
                  WHERE office_id = ? AND supervisor_id = ?
-                   AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done')
+                   AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done', 'deleted')
                    AND completion_review_status <> 'pending_review'"
             );
             if (!$stmt) {

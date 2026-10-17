@@ -16,35 +16,102 @@ if (!in_array($initialPayrollTab, ['dashboard', 'employees', 'calculator'], true
     $initialPayrollTab = 'dashboard';
 }
 
-// Fetch Metrics
-$total_emp_res = $conn->query("SELECT COUNT(*) as cnt FROM employee");
-$total_employees = $total_emp_res->fetch_assoc()['cnt'] ?? 0;
+$currentPayrollYear = (int) date('Y');
+$availablePayrollYears = [$currentPayrollYear];
+$payrollYearResult = $conn->query('SELECT DISTINCT YEAR(pay_date) AS payroll_year FROM payroll ORDER BY payroll_year DESC');
+if (!$payrollYearResult) {
+    throw new RuntimeException('Unable to load payroll filter years: ' . $conn->error);
+}
+while ($yearRow = $payrollYearResult->fetch_assoc()) {
+    $availablePayrollYears[] = (int) $yearRow['payroll_year'];
+}
+$availablePayrollYears = array_values(array_unique(array_filter(
+    $availablePayrollYears,
+    static fn (int $year): bool => $year >= 2000 && $year <= $currentPayrollYear + 1
+)));
+rsort($availablePayrollYears, SORT_NUMERIC);
 
-$paid_res = $conn->query("SELECT COUNT(*) as cnt, SUM(total_credited) as total FROM payroll WHERE status = 'Paid'");
-$paid_data = $paid_res->fetch_assoc();
-$paid_count = $paid_data['cnt'] ?? 0;
-$total_disbursed = $paid_data['total'] ?? 0;
+$selectedPayrollYear = filter_input(INPUT_GET, 'year', FILTER_VALIDATE_INT);
+if ($selectedPayrollYear === false || $selectedPayrollYear === null || $selectedPayrollYear < 2000 || $selectedPayrollYear > $currentPayrollYear + 1) {
+    $selectedPayrollYear = $currentPayrollYear;
+}
+if (!in_array($selectedPayrollYear, $availablePayrollYears, true)) {
+    $availablePayrollYears[] = $selectedPayrollYear;
+    rsort($availablePayrollYears, SORT_NUMERIC);
+}
 
-$pending_res = $conn->query("SELECT COUNT(*) as cnt, SUM(total_credited) as total FROM payroll WHERE status = 'Pending'");
-$pending_data = $pending_res->fetch_assoc();
-$pending_count = $pending_data['cnt'] ?? 0;
-$total_pending_pay = $pending_data['total'] ?? 0;
+$selectedPayrollMonth = (string) ($_GET['month'] ?? date('n'));
+if (!preg_match('/^(?:all|[1-9]|1[0-2])$/', $selectedPayrollMonth)) {
+    $selectedPayrollMonth = date('n');
+}
+$selectedPayrollCutoff = (string) ($_GET['cutoff'] ?? 'all');
+if (!in_array($selectedPayrollCutoff, ['all', 'Kinsenas', 'Katapusan'], true)) {
+    $selectedPayrollCutoff = 'all';
+}
+
+$payrollDateStart = $selectedPayrollMonth === 'all'
+    ? sprintf('%04d-01-01', $selectedPayrollYear)
+    : sprintf('%04d-%02d-01', $selectedPayrollYear, (int) $selectedPayrollMonth);
+$payrollDateEnd = $selectedPayrollMonth === 'all'
+    ? sprintf('%04d-12-31', $selectedPayrollYear)
+    : (new DateTimeImmutable($payrollDateStart))->modify('last day of this month')->format('Y-m-d');
+$payrollCutoffCondition = match ($selectedPayrollCutoff) {
+    'Kinsenas' => " AND pay_period = 'Kinsenas'",
+    'Katapusan' => " AND pay_period = 'Katapusan'",
+    default => '',
+};
+$payrollFilterLabel = $selectedPayrollMonth === 'all'
+    ? (string) $selectedPayrollYear
+    : DateTimeImmutable::createFromFormat('!Y-n', $selectedPayrollYear . '-' . $selectedPayrollMonth)->format('F Y');
+$payrollCutoffLabel = match ($selectedPayrollCutoff) {
+    'Kinsenas' => ' · 1st–15th',
+    'Katapusan' => ' · 16th–month end',
+    default => '',
+};
+
+$employee_count_stmt = $conn->prepare("
+    SELECT COUNT(DISTINCT employee_id) AS cnt
+    FROM payroll
+    WHERE pay_date BETWEEN ? AND ?{$payrollCutoffCondition}
+");
+if (!$employee_count_stmt) {
+    throw new RuntimeException('Unable to prepare filtered payroll employee count: ' . $conn->error);
+}
+$employee_count_stmt->bind_param('ss', $payrollDateStart, $payrollDateEnd);
+if (!$employee_count_stmt->execute()) {
+    $error = $employee_count_stmt->error;
+    $employee_count_stmt->close();
+    throw new RuntimeException('Unable to load filtered payroll employee count: ' . $error);
+}
+$total_employees = (int) ($employee_count_stmt->get_result()->fetch_assoc()['cnt'] ?? 0);
+$employee_count_stmt->close();
+
+$metrics_stmt = $conn->prepare("
+    SELECT
+        SUM(CASE WHEN status = 'Paid' THEN 1 ELSE 0 END) AS paid_count,
+        SUM(CASE WHEN status = 'Paid' THEN total_credited ELSE 0 END) AS total_disbursed,
+        SUM(CASE WHEN status = 'Pending' THEN 1 ELSE 0 END) AS pending_count,
+        SUM(CASE WHEN status = 'Pending' THEN total_credited ELSE 0 END) AS total_pending_pay
+    FROM payroll
+    WHERE pay_date BETWEEN ? AND ?{$payrollCutoffCondition}
+");
+if (!$metrics_stmt) {
+    throw new RuntimeException('Unable to prepare filtered payroll metrics: ' . $conn->error);
+}
+$metrics_stmt->bind_param('ss', $payrollDateStart, $payrollDateEnd);
+if (!$metrics_stmt->execute()) {
+    $error = $metrics_stmt->error;
+    $metrics_stmt->close();
+    throw new RuntimeException('Unable to load filtered payroll metrics: ' . $error);
+}
+$metrics = $metrics_stmt->get_result()->fetch_assoc() ?: [];
+$metrics_stmt->close();
+$paid_count = (int) ($metrics['paid_count'] ?? 0);
+$total_disbursed = (float) ($metrics['total_disbursed'] ?? 0);
+$pending_count = (int) ($metrics['pending_count'] ?? 0);
+$total_pending_pay = (float) ($metrics['total_pending_pay'] ?? 0);
 
 $total_budget = $total_disbursed + $total_pending_pay;
-
-$chartMonth = $_GET['chart_month'] ?? date('Y-m');
-$chartMonthDate = DateTimeImmutable::createFromFormat('!Y-m', $chartMonth);
-$chartMonthErrors = DateTimeImmutable::getLastErrors();
-if (
-    !$chartMonthDate
-    || $chartMonthDate->format('Y-m') !== $chartMonth
-    || ($chartMonthErrors !== false && ($chartMonthErrors['warning_count'] > 0 || $chartMonthErrors['error_count'] > 0))
-) {
-    http_response_code(400);
-    exit('Invalid chart month.');
-}
-$chartMonthStart = $chartMonthDate->format('Y-m-01');
-$chartMonthEnd = $chartMonthDate->modify('last day of this month')->format('Y-m-d');
 
 $monthly_status_counts = [
     'Paid' => 0,
@@ -53,13 +120,13 @@ $monthly_status_counts = [
 $monthly_status_stmt = $conn->prepare("
     SELECT status, COUNT(*) AS total
     FROM payroll
-    WHERE pay_date BETWEEN ? AND ?
+    WHERE pay_date BETWEEN ? AND ?{$payrollCutoffCondition}
     GROUP BY status
 ");
 if (!$monthly_status_stmt) {
     throw new RuntimeException('Failed to prepare monthly payroll status counts: ' . $conn->error);
 }
-$monthly_status_stmt->bind_param('ss', $chartMonthStart, $chartMonthEnd);
+$monthly_status_stmt->bind_param('ss', $payrollDateStart, $payrollDateEnd);
 if (!$monthly_status_stmt->execute()) {
     $error = $monthly_status_stmt->error;
     $monthly_status_stmt->close();
@@ -80,13 +147,13 @@ $period_payroll_totals = [
 $period_payroll_stmt = $conn->prepare("
     SELECT pay_period, SUM(gross_pay) AS total
     FROM payroll
-    WHERE pay_date BETWEEN ? AND ?
+    WHERE pay_date BETWEEN ? AND ?{$payrollCutoffCondition}
     GROUP BY pay_period
 ");
 if (!$period_payroll_stmt) {
     throw new RuntimeException('Failed to prepare monthly payroll totals: ' . $conn->error);
 }
-$period_payroll_stmt->bind_param('ss', $chartMonthStart, $chartMonthEnd);
+$period_payroll_stmt->bind_param('ss', $payrollDateStart, $payrollDateEnd);
 if (!$period_payroll_stmt->execute()) {
     $error = $period_payroll_stmt->error;
     $period_payroll_stmt->close();
@@ -102,17 +169,30 @@ $period_payroll_stmt->close();
 $monthly_salary_expense = array_sum($period_payroll_totals);
 
 // Fetch Payroll Records with Employee Details
-$payrolls = $conn->query("
+$payrolls = $conn->prepare("
     SELECT p.*, e.employee_id, e.tin_no, e.sss_no, e.hdmf_no, e.position, e.username
     FROM payroll p 
     JOIN employee e ON p.employee_id = e.employee_id 
+    WHERE p.pay_date BETWEEN ? AND ?"
+    . str_replace(['pay_date', 'pay_period'], ['p.pay_date', 'p.pay_period'], $payrollCutoffCondition) . "
     ORDER BY p.payroll_id DESC
 ");
+if (!$payrolls) {
+    throw new RuntimeException('Unable to prepare filtered payroll records: ' . $conn->error);
+}
+$payrolls->bind_param('ss', $payrollDateStart, $payrollDateEnd);
+if (!$payrolls->execute()) {
+    $error = $payrolls->error;
+    $payrolls->close();
+    throw new RuntimeException('Unable to load filtered payroll records: ' . $error);
+}
+$payroll_result = $payrolls->get_result();
 
 $payroll_records = [];
-while ($r = $payrolls->fetch_assoc()) {
+while ($r = $payroll_result->fetch_assoc()) {
     $payroll_records[] = $r;
 }
+$payrolls->close();
 ?>
 <!DOCTYPE html>
 <html lang="tl">
@@ -461,15 +541,44 @@ while ($r = $payrolls->fetch_assoc()) {
         <!-- ================= VIEW 1: DASHBOARD ================= -->
         <div id="view-dashboard" class="space-y-6">
 
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-4 rounded-2xl border border-zinc-200 shadow-2xs">
+            <div>
+              <h2 class="text-sm font-bold text-zinc-900">Dashboard Filters</h2>
+              <p class="text-[11px] text-zinc-500">Filters apply to all dashboard metrics and charts · <?= htmlspecialchars($payrollFilterLabel . $payrollCutoffLabel, ENT_QUOTES, 'UTF-8'); ?></p>
+            </div>
+            <form method="GET" action="payroll.php" class="flex w-full sm:w-auto flex-nowrap items-center gap-2 overflow-x-auto pb-1">
+              <input type="hidden" name="tab" value="dashboard">
+              <label for="dashboardPayrollYear" class="sr-only">Payroll year</label>
+              <select id="dashboardPayrollYear" name="year" onchange="this.form.submit()" class="shrink-0 rounded-lg border border-zinc-200 px-2 py-2 text-xs">
+                <?php foreach ($availablePayrollYears as $year): ?>
+                  <option value="<?= $year; ?>" <?= $selectedPayrollYear === $year ? 'selected' : ''; ?>><?= $year; ?></option>
+                <?php endforeach; ?>
+              </select>
+              <label for="dashboardPayrollMonth" class="sr-only">Payroll month</label>
+              <select id="dashboardPayrollMonth" name="month" onchange="this.form.submit()" class="shrink-0 rounded-lg border border-zinc-200 px-2 py-2 text-xs">
+                <option value="all" <?= $selectedPayrollMonth === 'all' ? 'selected' : ''; ?>>All months (yearly)</option>
+                <?php for ($month = 1; $month <= 12; $month++): ?>
+                  <option value="<?= $month; ?>" <?= (int) $selectedPayrollMonth === $month ? 'selected' : ''; ?>><?= date('F', mktime(0, 0, 0, $month, 1)); ?></option>
+                <?php endfor; ?>
+              </select>
+              <label for="dashboardPayrollCutoff" class="sr-only">Pay cutoff</label>
+              <select id="dashboardPayrollCutoff" name="cutoff" onchange="this.form.submit()" class="shrink-0 rounded-lg border border-zinc-200 px-2 py-2 text-xs">
+                <option value="all" <?= $selectedPayrollCutoff === 'all' ? 'selected' : ''; ?>>All cutoffs</option>
+                <option value="Kinsenas" <?= $selectedPayrollCutoff === 'Kinsenas' ? 'selected' : ''; ?>>1st–15th</option>
+                <option value="Katapusan" <?= $selectedPayrollCutoff === 'Katapusan' ? 'selected' : ''; ?>>16th–month end</option>
+              </select>
+            </form>
+          </div>
+
           <!-- 4 METRIC CARDS -->
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div class="bg-white p-5 rounded-2xl border border-zinc-200 shadow-2xs space-y-2">
               <div class="flex justify-between items-center text-zinc-500 text-xs font-medium">
-                <span>Total Employees</span>
+                <span>Employees with Payroll</span>
                 <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center"><i class="fa-solid fa-users"></i></div>
               </div>
               <div class="text-2xl sm:text-3xl font-extrabold text-zinc-900"><?php echo $total_employees; ?></div>
-              <p class="text-[11px] text-zinc-400">Active Employees</p>
+              <p class="text-[11px] text-zinc-400">In selected period</p>
             </div>
 
             <div class="bg-white p-5 rounded-2xl border border-zinc-200 shadow-2xs space-y-2">
@@ -496,7 +605,7 @@ while ($r = $payrolls->fetch_assoc()) {
                 <div class="w-8 h-8 rounded-lg bg-slate-100 text-slate-800 flex items-center justify-center"><i class="fa-solid fa-wallet"></i></div>
               </div>
               <div class="text-2xl sm:text-3xl font-extrabold text-zinc-900 font-mono">₱<?php echo number_format($total_budget, 2); ?></div>
-              <p class="text-[11px] text-zinc-400">Full Allocated Budget</p>
+              <p class="text-[11px] text-zinc-400">Total for selected period</p>
             </div>
           </div>
 
@@ -510,22 +619,9 @@ while ($r = $payrolls->fetch_assoc()) {
             </div>
 
             <div class="lg:col-span-7 bg-white p-6 rounded-2xl border border-zinc-200 shadow-2xs space-y-4">
-              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-zinc-100 pb-3">
-                <div>
-                  <h3 class="font-bold text-zinc-900 text-base">Monthly Salary Expense</h3>
-                  <p class="text-[11px] text-zinc-500">Gross payroll before deductions</p>
-                </div>
-                <form method="GET" action="payroll.php" class="flex items-center gap-2">
-                  <label for="chart_month" class="text-xs font-semibold text-zinc-600">Month</label>
-                  <input
-                    type="month"
-                    id="chart_month"
-                    name="chart_month"
-                    value="<?php echo htmlspecialchars($chartMonth, ENT_QUOTES, 'UTF-8'); ?>"
-                    onchange="this.form.submit()"
-                    class="calendar-control rounded-lg border border-zinc-200 px-2 py-1.5 text-xs"
-                  >
-                </form>
+              <div class="flex flex-col gap-1 border-b border-zinc-100 pb-3">
+                <h3 class="font-bold text-zinc-900 text-base"><?= $selectedPayrollMonth === 'all' ? 'Yearly' : 'Monthly'; ?> Salary Expense</h3>
+                <p class="text-[11px] text-zinc-500">Gross payroll before deductions · <?= htmlspecialchars($payrollFilterLabel . $payrollCutoffLabel, ENT_QUOTES, 'UTF-8'); ?></p>
               </div>
               <div class="relative flex items-center justify-center h-56">
                 <canvas id="chart-payroll-bar"></canvas>
@@ -540,9 +636,33 @@ while ($r = $payrolls->fetch_assoc()) {
           <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-zinc-200 shadow-2xs">
             <div>
               <h3 class="text-xl font-bold text-zinc-900">Employee Disbursement Masterlist</h3>
-              <p class="text-xs text-zinc-500">Review payroll records and confirm the system status; this is not a payout receipt.</p>
+              <p class="text-xs text-zinc-500">Review payroll records for <?= htmlspecialchars($payrollFilterLabel . $payrollCutoffLabel, ENT_QUOTES, 'UTF-8'); ?>. This is not a payout receipt.</p>
             </div>
-            <input type="text" id="searchInput" onkeyup="filterTable()" placeholder="Search employee..." class="px-3.5 py-2 border border-zinc-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500 outline-none w-full sm:w-64">
+            <div class="flex flex-col gap-2 w-full sm:w-auto">
+              <form method="GET" action="payroll.php" class="flex w-full sm:w-auto flex-nowrap items-center gap-2 overflow-x-auto pb-1">
+                <input type="hidden" name="tab" value="employees">
+                <label for="employeesPayrollYear" class="sr-only">Payroll year</label>
+                <select id="employeesPayrollYear" name="year" onchange="this.form.submit()" class="shrink-0 rounded-lg border border-zinc-200 px-2 py-1.5 text-xs">
+                  <?php foreach ($availablePayrollYears as $year): ?>
+                    <option value="<?= $year; ?>" <?= $selectedPayrollYear === $year ? 'selected' : ''; ?>><?= $year; ?></option>
+                  <?php endforeach; ?>
+                </select>
+                <label for="employeesPayrollMonth" class="sr-only">Payroll month</label>
+                <select id="employeesPayrollMonth" name="month" onchange="this.form.submit()" class="shrink-0 rounded-lg border border-zinc-200 px-2 py-1.5 text-xs">
+                  <option value="all" <?= $selectedPayrollMonth === 'all' ? 'selected' : ''; ?>>All months (yearly)</option>
+                  <?php for ($month = 1; $month <= 12; $month++): ?>
+                    <option value="<?= $month; ?>" <?= (int) $selectedPayrollMonth === $month ? 'selected' : ''; ?>><?= date('F', mktime(0, 0, 0, $month, 1)); ?></option>
+                  <?php endfor; ?>
+                </select>
+                <label for="employeesPayrollCutoff" class="sr-only">Pay cutoff</label>
+                <select id="employeesPayrollCutoff" name="cutoff" onchange="this.form.submit()" class="shrink-0 rounded-lg border border-zinc-200 px-2 py-1.5 text-xs">
+                  <option value="all" <?= $selectedPayrollCutoff === 'all' ? 'selected' : ''; ?>>All cutoffs</option>
+                  <option value="Kinsenas" <?= $selectedPayrollCutoff === 'Kinsenas' ? 'selected' : ''; ?>>1st–15th</option>
+                  <option value="Katapusan" <?= $selectedPayrollCutoff === 'Katapusan' ? 'selected' : ''; ?>>16th–month end</option>
+                </select>
+              </form>
+              <input type="search" id="searchInput" oninput="filterTable()" placeholder="Search employee..." class="px-3.5 py-2 border border-zinc-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500 outline-none w-full">
+            </div>
           </div>
 
           <div class="bg-white rounded-2xl border border-zinc-200 shadow-2xs overflow-hidden">
@@ -1115,7 +1235,7 @@ while ($r = $payrolls->fetch_assoc()) {
         new Chart(ctxBar, {
           type: 'bar',
           data: {
-            labels: ['1st Half (Kinsenas)', '2nd Half (Katapusan)', 'Monthly Salary Expense'],
+            labels: ['1st Half (1st–15th)', '2nd Half (16th–month end)', <?= json_encode($selectedPayrollMonth === 'all' ? 'Yearly Salary Expense' : 'Monthly Salary Expense'); ?>],
             datasets: [{
               label: 'Amount (₱)',
               data: [<?php echo json_encode($period_payroll_totals['Kinsenas']); ?>, <?php echo json_encode($period_payroll_totals['Katapusan']); ?>, <?php echo json_encode($monthly_salary_expense); ?>],
@@ -1128,7 +1248,6 @@ while ($r = $payrolls->fetch_assoc()) {
             scales: {
               y: {
                 beginAtZero: true,
-                max: 1000000,
                 ticks: {
                   callback: value => `₱${Number(value).toLocaleString()}`
                 }

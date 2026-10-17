@@ -85,6 +85,91 @@ $maxActiveTasks = 8;
 $presentAttendanceStatuses = ['present', 'early', 'late', 'overtime', 'undertime', 'half day'];
 ensureTaskNotificationSchema($conn);
 
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['delete_office_task'])) {
+    $postedToken = (string) ($_POST['csrf_token'] ?? '');
+    $employeeId = filter_var($_POST['employee_id'] ?? null, FILTER_VALIDATE_INT);
+    $officeId = filter_var($_POST['office_id'] ?? null, FILTER_VALIDATE_INT);
+
+    if (!hash_equals($_SESSION['office_task_csrf'], $postedToken)) {
+        $errorMessage = 'Your session token expired. Refresh the page and try again.';
+    } elseif (!$employeeId || $employeeId < 1 || !$officeId || $officeId < 1) {
+        $errorMessage = 'Choose a valid employee task to delete.';
+    } else {
+        if (!$conn->begin_transaction()) {
+            throw new RuntimeException('Unable to start task deletion: ' . $conn->error);
+        }
+        $deleteContextStmt = $conn->prepare(
+            "SELECT title
+             FROM office
+             WHERE office_id = ? AND employee_id = ?
+               AND LOWER(TRIM(COALESCE(status, 'pending'))) <> 'deleted'
+             LIMIT 1
+             FOR UPDATE"
+        );
+        if (!$deleteContextStmt) {
+            throw new RuntimeException('Unable to prepare the task deletion lookup: ' . $conn->error);
+        }
+        $deleteContextStmt->bind_param('ii', $officeId, $employeeId);
+        if (!$deleteContextStmt->execute()) {
+            $error = $deleteContextStmt->error;
+            $deleteContextStmt->close();
+            throw new RuntimeException('Unable to load the task for deletion: ' . $error);
+        }
+        $deleteContext = $deleteContextStmt->get_result()->fetch_assoc();
+        $deleteContextStmt->close();
+
+        if (!$deleteContext) {
+            $conn->rollback();
+            $errorMessage = 'This task is unavailable or has already been deleted.';
+        } else {
+            $deleteTaskStmt = $conn->prepare(
+                "UPDATE office
+                 SET status = 'deleted'
+                 WHERE office_id = ? AND employee_id = ?
+                   AND LOWER(TRIM(COALESCE(status, 'pending'))) <> 'deleted'"
+            );
+            if (!$deleteTaskStmt) {
+                throw new RuntimeException('Unable to prepare the task deletion: ' . $conn->error);
+            }
+            $deleteTaskStmt->bind_param('ii', $officeId, $employeeId);
+            if (!$deleteTaskStmt->execute() || $deleteTaskStmt->affected_rows !== 1) {
+                $error = $deleteTaskStmt->error ?: 'The task could not be deleted.';
+                $deleteTaskStmt->close();
+                $conn->rollback();
+                throw new RuntimeException('Unable to delete the task: ' . $error);
+            }
+            $deleteTaskStmt->close();
+            $taskTitle = (string) $deleteContext['title'];
+            recordSystemAudit(
+                $conn,
+                $currentUserId,
+                (string) ($_SESSION['name'] ?? 'TaskTrack user'),
+                'office_task_deleted',
+                'office_task',
+                $officeId,
+                'Deleted task "' . $taskTitle . '" assigned to employee #' . $employeeId . '.'
+            );
+            notifyEmployeeTaskAssignee(
+                $conn,
+                $employeeId,
+                $currentUserId,
+                'office_task_deleted',
+                'Task removed',
+                'The task "' . $taskTitle . '" has been removed by your supervisor.',
+                'office_employee.php',
+                'office',
+                (string) $officeId
+            );
+            if (!$conn->commit()) {
+                throw new RuntimeException('Unable to save the task deletion: ' . $conn->error);
+            }
+            $_SESSION['office_task_flash'] = 'Task deleted. Its history has been retained.';
+            header('Location: employee.php?employee_id=' . $employeeId);
+            exit();
+        }
+    }
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['review_task'])) {
     $postedToken = (string) ($_POST['csrf_token'] ?? '');
     $employeeId = filter_var($_POST['employee_id'] ?? null, FILTER_VALIDATE_INT);
@@ -111,6 +196,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['review_tas
             "SELECT title
              FROM office
              WHERE office_id = ? AND employee_id = ?
+               AND LOWER(TRIM(COALESCE(status, 'pending'))) <> 'deleted'
                AND completion_review_status = 'pending_review'
                AND ? = 1
              LIMIT 1
@@ -142,6 +228,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['review_tas
                      completion_reviewed_by = ?, completion_reviewed_at = CURRENT_TIMESTAMP,
                      progress = IF(? = 1, 100, progress)
                  WHERE office_id = ? AND employee_id = ?
+                   AND LOWER(TRIM(COALESCE(status, \'pending\'))) <> \'deleted\'
                    AND completion_review_status = \'pending_review\'
                    AND ? = 1'
             );
@@ -197,6 +284,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['review_tas
             $_SESSION['office_task_flash'] = $approved
                 ? 'Task approved and marked completed.'
                 : 'Changes requested and sent to the employee.';
+            try {
+                emailEmployeeTaskAssignees(
+                    $conn,
+                    $employeeId,
+                    $approved ? 'Your task was approved' : 'Changes requested for your task',
+                    $approved
+                        ? 'Your task "' . (string) $reviewTask['title'] . '" was approved and marked completed.'
+                        : 'Your task "' . (string) $reviewTask['title'] . '" needs changes: ' . $reviewNote
+                );
+            } catch (RuntimeException $exception) {
+                error_log('Employee task review email could not be sent: ' . $exception->getMessage());
+                $_SESSION['office_task_flash'] .= ' The employee email could not be sent; check SMTP settings and the server log.';
+            }
             if (($_POST['review_return'] ?? '') === 'supervisor.php') {
                 header('Location: supervisor.php#page-dashboard');
             } else {
@@ -332,7 +432,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
                     "SELECT COUNT(*) AS active_count
                      FROM office
                      WHERE employee_id = ?
-                       AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done')
+                       AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done', 'deleted')
                        AND (? = 0 OR office_id <> ?)"
                 );
                 if (!$activeCountStmt) {
@@ -358,7 +458,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
                         "SELECT office_id, employee_id
                          FROM office
                          WHERE office_id = ?
-                           AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done')
+                           AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done', 'deleted')
                            AND completion_review_status <> 'pending_review'
                          LIMIT 1"
                     );
@@ -384,7 +484,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
                              SET employee_id = ?, title = ?, content = ?,
                                  priority_level = ?, due_date = ?
                              WHERE office_id = ?
-                               AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done')
+                               AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done', 'deleted')
                                AND completion_review_status <> 'pending_review'"
                         );
                         if (!$updateStmt) {
@@ -410,7 +510,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
                             "SELECT office_id
                              FROM office
                              WHERE office_id = ? AND employee_id = ?
-                               AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done')
+                               AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done', 'deleted')
                                AND completion_review_status <> 'pending_review'
                              LIMIT 1"
                         );
@@ -548,7 +648,8 @@ $employeeResult = $conn->query(
                 SELECT COUNT(*)
                 FROM office o
                 WHERE o.employee_id = e.employee_id
-                  AND LOWER(TRIM(COALESCE(o.status, 'pending'))) NOT IN ('completed', 'complete', 'done')
+                  AND LOWER(TRIM(COALESCE(o.status, 'pending'))) <> 'deleted'
+                  AND LOWER(TRIM(COALESCE(o.status, 'pending'))) NOT IN ('completed', 'complete', 'done', 'deleted')
             ) AS active_task_count
      FROM users u
      LEFT JOIN employee e
@@ -640,6 +741,7 @@ if ($selectedEmployee) {
                 progress, completion_review_status
          FROM office
          WHERE employee_id = ?
+           AND LOWER(TRIM(COALESCE(status, \'pending\'))) <> \'deleted\'
          ORDER BY due_date IS NULL ASC, due_date ASC, submission_date DESC, office_id DESC'
     );
     if (!$taskStmt) {
@@ -667,6 +769,39 @@ if ($selectedEmployee) {
         }
     }
     $taskStmt->close();
+
+    $historyStmt = $conn->prepare(
+        "SELECT audit.subject_id AS office_id, audit.actor_name, audit.action_type,
+                audit.details, audit.occurred_at
+         FROM system_audit_log audit
+         INNER JOIN office ON office.office_id = audit.subject_id
+         WHERE audit.subject_type = 'office_task'
+           AND office.employee_id = ?
+         ORDER BY audit.occurred_at ASC, audit.audit_id ASC"
+    );
+    if (!$historyStmt) {
+        throw new RuntimeException('Unable to prepare employee task history: ' . $conn->error);
+    }
+    $historyStmt->bind_param('i', $selectedEmployeeId);
+    if (!$historyStmt->execute()) {
+        $error = $historyStmt->error;
+        $historyStmt->close();
+        throw new RuntimeException('Unable to load employee task history: ' . $error);
+    }
+    $historyResult = $historyStmt->get_result();
+    $taskHistory = [];
+    while ($event = $historyResult->fetch_assoc()) {
+        $taskHistory[(int) $event['office_id']][] = $event;
+    }
+    $historyStmt->close();
+
+    foreach ($tasks as &$taskGroup) {
+        foreach ($taskGroup as &$task) {
+            $task['history'] = $taskHistory[(int) ($task['office_id'] ?? 0)] ?? [];
+        }
+        unset($task);
+    }
+    unset($taskGroup);
 }
 
 $formTitle = (string) ($_POST['title'] ?? '');
@@ -690,6 +825,7 @@ $accountRoleLabels = [
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Employee Tasks | TaskTrack</title>
     <link rel="stylesheet" href="css/employee.css?v=<?= filemtime(__DIR__ . '/css/employee.css'); ?>">
+    <link rel="stylesheet" href="css/action-confirmation.css?v=<?= filemtime(__DIR__ . '/css/action-confirmation.css'); ?>">
     <link rel="stylesheet" href="css/task-review-dialog.css?v=<?= filemtime(__DIR__ . '/css/task-review-dialog.css'); ?>">
     <link rel="stylesheet" href="css/calendar-picker.css?v=<?= filemtime(__DIR__ . '/css/calendar-picker.css'); ?>">
     <link rel="stylesheet" href="css/task-form-controls.css?v=<?= filemtime(__DIR__ . '/css/task-form-controls.css'); ?>">
@@ -837,7 +973,7 @@ $accountRoleLabels = [
                                         <p class="task-empty">No <?= strtolower($label); ?> tasks.</p>
                                     <?php else: ?>
                                         <?php foreach ($tasks[$group] as $task): ?>
-                                            <?php $taskIsEditable = !in_array($group, ['completed', 'review'], true); ?>
+                                            <?php $taskIsEditable = !in_array($group, ['completed', 'review', 'deleted'], true); ?>
                                             <?php
                                             $taskCanReview = $group === 'review'
                                                 && $canReviewOfficeTasks;
@@ -847,7 +983,7 @@ $accountRoleLabels = [
                                                 <div class="task-copy">
                                                     <h4><?= $escape($task['title'] ?? 'Untitled task'); ?></h4>
                                                     <p><?= $escape($task['content'] ?? ''); ?></p>
-                                                    <div class="task-meta"><span><?= $escape($task['due_date'] ?: 'No due date'); ?></span><span class="priority-tag priority-<?= $escape(strtolower($task['priority_level'] ?? 'medium')); ?>"><?= $escape(ucfirst($task['priority_level'] ?? 'Medium')); ?></span></div>
+                                                    <div class="task-meta"><span><?= $escape(($task['due_date'] ?? '') ?: 'No due date'); ?></span><span class="priority-tag priority-<?= $escape(strtolower($task['priority_level'] ?? 'medium')); ?>"><?= $escape(ucfirst($task['priority_level'] ?? 'Medium')); ?></span></div>
                                                     <div class="task-actions">
                                                         <button
                                                             class="task-view-button"
@@ -856,10 +992,11 @@ $accountRoleLabels = [
                                                             data-content="<?= $escape($task['content'] ?? ''); ?>"
                                                             data-status="<?= $escape($label); ?>"
                                                             data-priority="<?= $escape(ucfirst($task['priority_level'] ?? 'Medium')); ?>"
-                                                            data-due-date="<?= $escape($task['due_date'] ?: 'No due date'); ?>"
-                                                            data-progress="<?= (int) $task['progress']; ?>"
+                                                            data-due-date="<?= $escape(($task['due_date'] ?? '') ?: 'No due date'); ?>"
+                                                            data-progress="<?= (int) ($task['progress'] ?? 0); ?>"
+                                                            data-history="<?= $escape(json_encode($task['history'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '[]'); ?>"
                                                             data-can-review="<?= $taskCanReview ? '1' : '0'; ?>"
-                                                            data-office-id="<?= $taskCanReview ? (int) $task['office_id'] : ''; ?>"
+                                                            data-office-id="<?= $taskCanReview ? (int) ($task['office_id'] ?? 0) : ''; ?>"
                                                             data-employee-id="<?= $taskCanReview ? (int) $selectedEmployeeId : ''; ?>"
                                                             data-csrf-token="<?= $taskCanReview ? $escape($_SESSION['office_task_csrf']) : ''; ?>"
                                                         >View</button>
@@ -867,12 +1004,20 @@ $accountRoleLabels = [
                                                         <button
                                                             class="task-edit-button"
                                                             type="button"
-                                                            data-office-id="<?= (int) $task['office_id']; ?>"
+                                                            data-office-id="<?= (int) ($task['office_id'] ?? 0); ?>"
                                                             data-title="<?= $escape($task['title'] ?? ''); ?>"
                                                             data-content="<?= $escape($task['content'] ?? ''); ?>"
                                                             data-priority="<?= $escape(strtolower($task['priority_level'] ?? 'medium')); ?>"
                                                             data-due-date="<?= $escape($task['due_date'] ?? ''); ?>"
                                                         >Edit / reassign</button>
+                                                    <?php endif; ?>
+                                                    <?php if ($group !== 'deleted' && !$selectedIsCurrentSupervisor): ?>
+                                                        <form method="post" class="task-delete-form" data-confirm="Delete this employee task? It will be removed from the employee task list, but its history will be kept.">
+                                                            <input type="hidden" name="csrf_token" value="<?= $escape($_SESSION['office_task_csrf']); ?>">
+                                                            <input type="hidden" name="employee_id" value="<?= (int) $selectedEmployeeId; ?>">
+                                                            <input type="hidden" name="office_id" value="<?= (int) ($task['office_id'] ?? 0); ?>">
+                                                            <button type="submit" name="delete_office_task" value="1">Delete</button>
+                                                        </form>
                                                     <?php endif; ?>
                                                     </div>
                                                 </div>
@@ -997,6 +1142,10 @@ $accountRoleLabels = [
                 <div class="task-view-section-heading"><div><span class="task-view-section-kicker">TASK INFORMATION</span><h3>Description</h3></div></div>
                 <p id="viewTaskDescription"></p>
             </section>
+            <section class="task-detail-history" aria-label="Task status history">
+                <div class="task-view-section-heading"><div><span class="task-view-section-kicker">ACTIVITY</span><h3>Task history</h3></div></div>
+                <ol id="viewTaskHistory"></ol>
+            </section>
         </div>
         <footer class="task-view-footer">
             <button class="task-review-open-button" id="viewTaskRequestChangesButton" type="button" hidden>Request changes</button>
@@ -1064,6 +1213,42 @@ $accountRoleLabels = [
         button.addEventListener('click', () => {
             document.getElementById('viewTaskTitle').textContent = button.dataset.title;
             document.getElementById('viewTaskDescription').textContent = button.dataset.content || 'No description provided.';
+            const historyList = document.getElementById('viewTaskHistory');
+            historyList.replaceChildren();
+            const historyEvents = JSON.parse(button.dataset.history || '[]');
+            const eventLabels = {
+                office_task_created: 'Task assigned',
+                office_task_updated: 'Task details updated or reassigned',
+                office_task_progress: 'Employee progress updated',
+                office_task_review_requested: 'Employee submitted the task for review',
+                office_task_approved: 'Supervisor approved the task',
+                office_task_changes_requested: 'Supervisor requested changes',
+                office_task_deleted: 'Task deleted / cancelled'
+            };
+            historyEvents.forEach((event) => {
+                const item = document.createElement('li');
+                const label = document.createElement('strong');
+                label.textContent = eventLabels[event.action_type] || event.action_type.replaceAll('_', ' ');
+                const details = document.createElement('span');
+                details.textContent = `${event.actor_name}: ${event.details}`;
+                const time = document.createElement('time');
+                time.dateTime = event.occurred_at.replace(' ', 'T');
+                time.textContent = new Intl.DateTimeFormat('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true
+                }).format(new Date(event.occurred_at.replace(' ', 'T')));
+                item.append(label, details, time);
+                historyList.appendChild(item);
+            });
+            if (historyEvents.length === 0) {
+                const empty = document.createElement('li');
+                empty.textContent = 'No recorded history for this task yet.';
+                historyList.appendChild(empty);
+            }
             const statusBadge = document.getElementById('viewTaskStatus');
             statusBadge.textContent = button.dataset.status;
             statusBadge.className = `task-detail-badge is-${button.dataset.status.toLowerCase()}`;
@@ -1154,6 +1339,7 @@ $accountRoleLabels = [
 </script>
 <script src="js/calendar-picker.js?v=<?= filemtime(__DIR__ . '/js/calendar-picker.js'); ?>"></script>
 <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
+<script src="js/action-confirmation.js?v=<?= filemtime(__DIR__ . '/js/action-confirmation.js'); ?>"></script>
 <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

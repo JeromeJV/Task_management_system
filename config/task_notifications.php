@@ -137,3 +137,28 @@ function notifyEmployeeTaskAssignee(
         );
     }
 }
+
+function emailEmployeeTaskAssignees(
+    mysqli $conn,
+    int $employeeId,
+    string $subject,
+    string $message
+): void {
+    require_once __DIR__ . '/mailer.php';
+    $userIds = getTaskNotificationUserIdsForEmployee($conn, $employeeId);
+    if ($userIds === []) {
+        throw new RuntimeException('No linked employee account is available for task email delivery.');
+    }
+    $deliveryFailed = false;
+    foreach ($userIds as $userId) {
+        try {
+            sendTaskTrackUserEmail($conn, $userId, $subject, $message);
+        } catch (RuntimeException $exception) {
+            error_log('Task email delivery failed for linked employee account ' . $userId . ': ' . $exception->getMessage());
+            $deliveryFailed = true;
+        }
+    }
+    if ($deliveryFailed) {
+        throw new RuntimeException('One or more linked employee accounts could not receive the task email.');
+    }
+}

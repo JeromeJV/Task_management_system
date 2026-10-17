@@ -960,6 +960,7 @@ $tasktrackActive = $section === 'dashboard' ? 'dashboard' : $section;
     <title><?= $escape($sectionTitles[$section]); ?> | TaskTrack Admin</title>
     <link rel="stylesheet" href="css/tasktrack_sidebar.css?v=<?= filemtime(__DIR__ . '/css/tasktrack_sidebar.css'); ?>">
     <link rel="stylesheet" href="css/admin.css?v=<?= filemtime(__DIR__ . '/css/admin.css'); ?>">
+    <link rel="stylesheet" href="css/action-confirmation.css?v=<?= filemtime(__DIR__ . '/css/action-confirmation.css'); ?>">
     <link rel="stylesheet" href="css/role-form-controls.css?v=<?= filemtime(__DIR__ . '/css/role-form-controls.css'); ?>">
     <link rel="stylesheet" href="css/select-control.css?v=<?= filemtime(__DIR__ . '/css/select-control.css'); ?>">
 </head>
@@ -1156,7 +1157,7 @@ $tasktrackActive = $section === 'dashboard' ? 'dashboard' : $section;
                             <button type="submit" class="admin-secondary-button" data-profile-picture-submit hidden>Save photo</button>
                         </form>
                         <?php if (!empty($account['profile_picture'])): ?>
-                            <form method="post" class="admin-profile-picture-remove" onsubmit="return confirm('Remove this profile picture?');">
+                            <form method="post" class="admin-profile-picture-remove" data-confirm="Remove this profile picture?">
                                 <input type="hidden" name="csrf_token" value="<?= $escape($_SESSION['admin_csrf']); ?>">
                                 <input type="hidden" name="action" value="remove_profile_picture">
                                 <input type="hidden" name="user_id" value="<?= (int) $account['id']; ?>">
@@ -1200,7 +1201,7 @@ $tasktrackActive = $section === 'dashboard' ? 'dashboard' : $section;
                         <?php if ((int) $account['id'] === $currentAdminId): ?>
                             <span class="admin-status is-active">Active</span>
                         <?php else: ?>
-                            <form method="post" class="admin-inline-form" <?= (int) $account['is_active'] === 1 ? 'onsubmit="return confirm(\'Disable this account? It will be logged out and unable to sign in.\');"' : ''; ?>>
+                            <form method="post" class="admin-inline-form" <?= (int) $account['is_active'] === 1 ? 'data-confirm="Disable this account? It will be logged out and unable to sign in."' : ''; ?>>
                                 <input type="hidden" name="csrf_token" value="<?= $escape($_SESSION['admin_csrf']); ?>">
                                 <input type="hidden" name="action" value="toggle_account">
                                 <input type="hidden" name="user_id" value="<?= (int) $account['id']; ?>">
@@ -1340,6 +1341,7 @@ $tasktrackActive = $section === 'dashboard' ? 'dashboard' : $section;
 </dialog>
 <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
 <script src="js/admin-profile-picture.js?v=<?= filemtime(__DIR__ . '/js/admin-profile-picture.js'); ?>"></script>
+<script src="js/action-confirmation.js?v=<?= filemtime(__DIR__ . '/js/action-confirmation.js'); ?>"></script>
 <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

@@ -13,6 +13,15 @@
     let isOpen = false;
     let shownNotifications = [];
 
+    async function readResponse(response) {
+        const body = await response.text();
+        try {
+            return JSON.parse(body);
+        } catch (error) {
+            throw new Error('The notifications service returned an invalid response. Refresh the page or contact your administrator.');
+        }
+    }
+
     function displayDate(value) {
         const date = new Date(value.replace(' ', 'T'));
         if (Number.isNaN(date.getTime())) return '';
@@ -74,7 +83,7 @@
         loadPromise = (async () => {
             try {
                 const response = await fetch(`${endpoint}?action=list`, { credentials: 'same-origin', cache: 'no-store' });
-                const data = await response.json();
+                const data = await readResponse(response);
                 if (!response.ok) throw new Error(data.error || data.message || 'Unable to load notifications.');
                 render(data);
             } catch (error) {
@@ -100,7 +109,7 @@
             headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
             body
         });
-        const data = await response.json();
+        const data = await readResponse(response);
         if (!response.ok) throw new Error(data.error || data.message || 'Unable to update notifications.');
         await load();
     }
@@ -143,4 +152,8 @@
 
     load();
     window.setInterval(load, 30000);
+    window.addEventListener('focus', load);
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') load();
+    });
 })();

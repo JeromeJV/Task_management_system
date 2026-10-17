@@ -46,8 +46,10 @@ function editProduction(idx) {
   document.getElementById('productionModal').classList.add('active');
 }
 
-function removeProduction(idx) {
-  if (!confirm('Remove ' + productionData[idx].name + ' from production?')) return;
+async function removeProduction(idx) {
+  const item = productionData[idx];
+  if (!item || typeof window.showActionConfirmation !== 'function') return;
+  if (!await window.showActionConfirmation('Remove ' + item.name + ' from production?', 'Remove')) return;
   productionData.splice(idx, 1);
   renderProductionTable();
 }

@@ -448,6 +448,7 @@ $escape = static fn($value): string => htmlspecialchars((string) $value, ENT_QUO
             .leave-reason{max-width:none}
         }
     </style>
+    <link rel="stylesheet" href="css/action-confirmation.css?v=<?= filemtime(__DIR__ . '/css/action-confirmation.css'); ?>">
 </head>
 <body>
     <div class="hr-shell">
@@ -553,7 +554,7 @@ $escape = static fn($value): string => htmlspecialchars((string) $value, ENT_QUO
                                             <td class="leave-reason" data-label="Reason"><?= $escape($leave['reason']); ?></td>
                                             <td data-label="Recorded by"><?= $escape($leave['recorder'] ?: 'HR'); ?><br><small><?= $escape($leave['recorded_at']); ?></small></td>
                                             <td>
-                                                <form method="post" onsubmit="return confirm('Cancel this leave record and restore attendance from the employee punches?');">
+                                                <form method="post" data-confirm="Cancel this leave record and restore attendance from the employee punches?">
                                                     <input type="hidden" name="csrf_token" value="<?= $escape($_SESSION['leave_csrf']); ?>">
                                                     <input type="hidden" name="leave_id" value="<?= (int) $leave['leave_id']; ?>">
                                                     <button class="leave-cancel" type="submit" name="cancel_leave" value="1">Cancel</button>
@@ -572,5 +573,6 @@ $escape = static fn($value): string => htmlspecialchars((string) $value, ENT_QUO
         </div>
         <script src="js/calendar-picker.js?v=<?= filemtime(__DIR__ . '/js/calendar-picker.js'); ?>"></script>
         <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
+        <script src="js/action-confirmation.js?v=<?= filemtime(__DIR__ . '/js/action-confirmation.js'); ?>"></script>
 </body>
 </html>

@@ -256,6 +256,7 @@ $stage_progress = static function (array $row): array {
 
     <title>Production Management - TASKTRACK</title>
   <link rel="stylesheet" href="css/Factory_main1.css?v=<?= filemtime(__DIR__ . '/css/Factory_main1.css'); ?>">
+  <link rel="stylesheet" href="css/action-confirmation.css?v=<?= filemtime(__DIR__ . '/css/action-confirmation.css'); ?>">
   <link rel="stylesheet" href="css/task-review-dialog.css?v=<?= filemtime(__DIR__ . '/css/task-review-dialog.css'); ?>">
   <link rel="stylesheet" href="css/table-scroll.css?v=<?= filemtime(__DIR__ . '/css/table-scroll.css'); ?>">
     <link rel="stylesheet" href="css/calendar-picker.css?v=<?= filemtime(__DIR__ . '/css/calendar-picker.css'); ?>">
@@ -1123,9 +1124,7 @@ $stage_progress = static function (array $row): array {
                                                     name="del"
                                                     value="Delete"
                                                     class="remove-btn"
-                                                    onclick="return confirm(
-                                                        'Are you sure you want to delete this record?'
-                                                    );"
+                                                    data-confirm="Are you sure you want to delete this record?"
                                                 >
 
                                             </form>
@@ -1283,9 +1282,7 @@ $stage_progress = static function (array $row): array {
                                                     name="del"
                                                     value="Delete"
                                                     class="remove-btn"
-                                                    onclick="return confirm(
-                                                        'Are you sure you want to delete this record?'
-                                                    );"
+                                                    data-confirm="Are you sure you want to delete this record?"
                                                 >
 
                                             </form>
@@ -1878,7 +1875,17 @@ async function openProductionActivity(productionId, productName) {
                 || `${activity.actor_name} performed this production action: ${activity.event_type.replaceAll('_', ' ')}.`;
             const time = document.createElement('time');
             time.dateTime = activity.occurred_at.replace(' ', 'T');
-            time.textContent = activity.occurred_at;
+            const occurredAt = new Date(activity.occurred_at.replace(' ', 'T'));
+            time.textContent = Number.isNaN(occurredAt.getTime())
+                ? activity.occurred_at
+                : new Intl.DateTimeFormat('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true
+                }).format(occurredAt);
             entry.append(summary, time);
             item.append(marker, entry);
             list.appendChild(item);
@@ -2302,6 +2309,7 @@ document.getElementById('dismissProductionResult').addEventListener('click', () 
 <script src="js/assignment-dropdown.js?v=<?= filemtime(__DIR__ . '/js/assignment-dropdown.js'); ?>"></script>
 <script src="js/calendar-picker.js?v=<?= filemtime(__DIR__ . '/js/calendar-picker.js'); ?>"></script>
 <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
+<script src="js/action-confirmation.js?v=<?= filemtime(__DIR__ . '/js/action-confirmation.js'); ?>"></script>
 <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

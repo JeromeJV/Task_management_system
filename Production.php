@@ -633,6 +633,7 @@ $active_tab = $_GET['tab'] ?? 'main';
         }
     </style>
     <link rel="stylesheet" href="css/role-form-controls.css?v=<?= filemtime(__DIR__ . '/css/role-form-controls.css'); ?>">
+    <link rel="stylesheet" href="css/action-confirmation.css?v=<?= filemtime(__DIR__ . '/css/action-confirmation.css'); ?>">
 </head>
 <body>
 <?php include __DIR__ . '/config/notification_bell.php'; ?>
@@ -679,7 +680,6 @@ $active_tab = $_GET['tab'] ?? 'main';
                         <div class="card-title">ITEM LIST</div>
                         <div class="card-subtitle">Review the selected production task before continuing.</div>
                     </div>
-                    <span class="step-badge">Step 1 of 4</span>
                 </div>
 
                 <?php if (!empty($pending_records)): ?>
@@ -899,7 +899,7 @@ $active_tab = $_GET['tab'] ?? 'main';
                                         <form action="factory_task.php" method="post" style="display:inline;">
                                             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['production_legacy_csrf'], ENT_QUOTES, 'UTF-8'); ?>">
                                             <input type="hidden" name="idno" value="<?= htmlspecialchars($row['production_id'] ?? ''); ?>">
-                                            <button type="submit" name="del" class="btn-delete" onclick="return confirm('Are you sure you want to delete this record?');">Delete</button>
+                                            <button type="submit" name="del" class="btn-delete" data-confirm="Are you sure you want to delete this production record?">Delete</button>
                                         </form>
                                     </td>
                                 </tr>
@@ -1118,5 +1118,6 @@ function filterHistoryTable() {
 </script>
 
 <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
+<script src="js/action-confirmation.js?v=<?= filemtime(__DIR__ . '/js/action-confirmation.js'); ?>"></script>
 </body>
 </html>

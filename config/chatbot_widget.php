@@ -500,6 +500,15 @@ $chatbotPlaceholder = match ($chatbotRole) {
         const send = document.getElementById('ttChatbotSend');
         const csrfToken = document.getElementById('ttChatbot').dataset.csrf;
 
+        async function readAssistantResponse(response) {
+            const body = await response.text();
+            try {
+                return JSON.parse(body);
+            } catch (error) {
+                throw new Error('The assistant returned an invalid response. Please try again; if the problem continues, contact your administrator.');
+            }
+        }
+
         function addMessage(text, sender, confirmation) {
             const message = document.createElement('div');
             message.className = 'tt-chatbot-message ' + sender;
@@ -545,7 +554,7 @@ $chatbotPlaceholder = match ($chatbotRole) {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(Object.assign({ csrf: csrfToken }, payload))
                 });
-                const result = await response.json();
+                const result = await readAssistantResponse(response);
                 if (!response.ok) {
                     throw new Error(result.reply || 'Hindi makontak ang assistant. Pakisubukan ulit.');
                 }
@@ -754,7 +763,7 @@ $chatbotPlaceholder = match ($chatbotRole) {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message: message, csrf: csrfToken })
                 });
-                const result = await response.json();
+                const result = await readAssistantResponse(response);
                 if (!response.ok) {
                     throw new Error(result.reply || 'Hindi makontak ang assistant. Pakisubukan ulit.');
                 }

@@ -862,6 +862,7 @@ textarea {
 
 .chart-panel {
     width: 100%;
+    min-width: 0;
     margin-bottom: 20px;
     padding: 22px 24px 18px;
     border: 1px solid #E7ECE9;
@@ -1549,7 +1550,7 @@ textarea {
     }
 
     .charts-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .employee-layout {
@@ -1672,6 +1673,30 @@ textarea {
     .active-task-panel,
     .chart-panel {
         padding: 16px;
+    }
+
+    .dashboard-panel-heading {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .dashboard-panel-heading > :first-child {
+        min-width: 0;
+    }
+
+    .pie-month-filter {
+        flex-wrap: wrap;
+        white-space: normal;
+    }
+
+    .active-task-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .active-task-heading-badges {
+        width: 100%;
+        justify-content: flex-start;
     }
 
     .dashboard-panel-heading p,

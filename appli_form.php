@@ -1,7 +1,6 @@
 <?php
 include 'config/connection.php';
 include 'config/application_API.php';
-session_start();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -54,7 +53,7 @@ session_start();
     </div>
 
     <div class="form-container">
-        <form action="" method="post" enctype="multipart/form-data" class="application-form" id="applicationForm">
+        <form action="" method="post" enctype="multipart/form-data" class="application-form" id="applicationForm" novalidate>
             
             <?php if (!empty($message)): ?>
                 <div class="alert alert-danger" role="alert"><?= htmlspecialchars($message) ?></div>

@@ -87,6 +87,7 @@ while ($attendance_row = mysqli_fetch_assoc($attendance_result)) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HR Management Dashboard - TASKTRACK</title>
     <link rel="stylesheet" href="css/HR.css?v=<?= filemtime(__DIR__ . '/css/HR.css'); ?>">
+    <link rel="stylesheet" href="css/action-confirmation.css?v=<?= filemtime(__DIR__ . '/css/action-confirmation.css'); ?>">
     <link rel="stylesheet" href="css/role-form-controls.css?v=<?= filemtime(__DIR__ . '/css/role-form-controls.css'); ?>">
     <link rel="stylesheet" href="css/select-control.css?v=<?= filemtime(__DIR__ . '/css/select-control.css'); ?>">
 </head>
@@ -272,7 +273,7 @@ while ($attendance_row = mysqli_fetch_assoc($attendance_result)) {
                                         class="hr-action-button is-delete"
                                         name="del"
                                         value="Delete"
-                                        onclick="return confirm('Are you sure you want to delete this record?');"
+                                        data-confirm="Are you sure you want to delete this employee record?"
                                     >Delete</button>
                                 </form>
                             </article>
@@ -480,6 +481,7 @@ while ($attendance_row = mysqli_fetch_assoc($attendance_result)) {
         attendanceFilter.addEventListener('change', filterEmployees);
     </script>
     <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
+    <script src="js/action-confirmation.js?v=<?= filemtime(__DIR__ . '/js/action-confirmation.js'); ?>"></script>
     <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

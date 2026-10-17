@@ -7,9 +7,7 @@ require_once __DIR__ . '/connection.php';
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
-require_once 'config/PHPMailer/Exception.php';
-require_once 'config/PHPMailer/PHPMailer.php';
-require_once 'config/PHPMailer/SMTP.php';
+require_once __DIR__ . '/mailer.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();

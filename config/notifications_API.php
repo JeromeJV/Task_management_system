@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+ob_start();
+
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
 }
@@ -11,11 +13,23 @@ require_once __DIR__ . '/task_notifications.php';
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
+function notificationRespond(array $payload, int $status = 200): void
+{
+    $unexpectedOutput = ob_get_contents();
+    if (is_string($unexpectedOutput) && trim($unexpectedOutput) !== '') {
+        error_log('Notifications API discarded unexpected output to preserve its JSON response.');
+    }
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    http_response_code($status);
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+    exit();
+}
+
 $userId = (int) ($_SESSION['id'] ?? 0);
 if ($userId < 1 || !isset($_SESSION['role'])) {
-    http_response_code(401);
-    echo json_encode(['error' => 'Sign in to view notifications.']);
-    exit();
+    notificationRespond(['error' => 'Sign in to view notifications.'], 401);
 }
 requireActiveAccount($conn, true);
 ensureTaskNotificationSchema($conn);
@@ -57,22 +71,17 @@ if ($action === 'list' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
     }
     $unreadCount = (int) ($countStmt->get_result()->fetch_assoc()['unread_count'] ?? 0);
     $countStmt->close();
-    echo json_encode(['notifications' => $notifications, 'unreadCount' => $unreadCount]);
-    exit();
+    notificationRespond(['notifications' => $notifications, 'unreadCount' => $unreadCount]);
 }
 
 if ($action === 'read' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $postedToken = (string) ($_POST['csrf_token'] ?? '');
     if (empty($_SESSION['notification_csrf']) || !hash_equals((string) $_SESSION['notification_csrf'], $postedToken)) {
-        http_response_code(403);
-        echo json_encode(['error' => 'Your session token expired. Refresh the page and try again.']);
-        exit();
+        notificationRespond(['error' => 'Your session token expired. Refresh the page and try again.'], 403);
     }
     $notificationId = filter_var($_POST['notification_id'] ?? null, FILTER_VALIDATE_INT);
     if (!$notificationId || $notificationId < 1) {
-        http_response_code(400);
-        echo json_encode(['error' => 'A valid notification is required.']);
-        exit();
+        notificationRespond(['error' => 'A valid notification is required.'], 400);
     }
     $stmt = $conn->prepare(
         'UPDATE task_notifications SET is_read = 1, read_at = CURRENT_TIMESTAMP
@@ -88,16 +97,13 @@ if ($action === 'read' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         throw new RuntimeException('Unable to mark notification as read: ' . $error);
     }
     $stmt->close();
-    echo json_encode(['success' => true]);
-    exit();
+    notificationRespond(['success' => true]);
 }
 
 if ($action === 'read_all' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
     $postedToken = (string) ($_POST['csrf_token'] ?? '');
     if (empty($_SESSION['notification_csrf']) || !hash_equals((string) $_SESSION['notification_csrf'], $postedToken)) {
-        http_response_code(403);
-        echo json_encode(['error' => 'Your session token expired. Refresh the page and try again.']);
-        exit();
+        notificationRespond(['error' => 'Your session token expired. Refresh the page and try again.'], 403);
     }
     $stmt = $conn->prepare(
         'UPDATE task_notifications SET is_read = 1, read_at = CURRENT_TIMESTAMP
@@ -113,9 +119,7 @@ if ($action === 'read_all' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') 
         throw new RuntimeException('Unable to mark notifications as read: ' . $error);
     }
     $stmt->close();
-    echo json_encode(['success' => true]);
-    exit();
+    notificationRespond(['success' => true]);
 }
 
-http_response_code(400);
-echo json_encode(['error' => 'Unsupported notification action.']);
+notificationRespond(['error' => 'Unsupported notification action.'], 400);

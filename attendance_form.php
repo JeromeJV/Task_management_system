@@ -10,10 +10,11 @@ if (empty($_SESSION['attendance_csrf'])) {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Real-Time Auto Track Attendance</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 30px; display: flex; flex-direction: column; align-items: center; background-color: #f8f9fa; }
-        .clock-card { width: 450px; padding: 25px; border: 1px solid #ddd; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); text-align: center; background: white; }
+        .clock-card { box-sizing: border-box; width: min(100%, 500px); padding: 25px; border: 1px solid #ddd; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); text-align: center; background: white; }
         #digital-clock { font-size: 32px; font-weight: bold; color: #2c3e50; margin: 15px 0; background: #eef2f7; padding: 10px; border-radius: 6px; }
         .form-group { margin-bottom: 15px; text-align: left; }
         label { font-weight: bold; display: block; margin-bottom: 5px; }
@@ -28,6 +29,11 @@ if (empty($_SESSION['attendance_csrf'])) {
         button:hover { opacity: 0.9; }
         #alert-msg { margin-top: 15px; font-weight: bold; }
         .btn-back { margin-top: 20px; padding: 8px 16px; background-color: #6c757d; border-radius: 4px; text-decoration: none; color: white; display: inline-block; }
+        @media (max-width: 480px) {
+            body { margin: 20px 16px; }
+            .clock-card { padding: 20px 16px; }
+            #digital-clock { font-size: clamp(25px, 8vw, 32px); }
+        }
     </style>
 </head>
 <body>

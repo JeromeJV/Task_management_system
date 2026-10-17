@@ -42,7 +42,7 @@ Use the mail provider's recommended SMTP credentials (for example, a dedicated a
 
 Database connection failures are written to the PHP error log; the application response does not include connection credentials.
 
-Applicant status emails require the SMTP username and password in the Apache process environment. Do not put credentials in PHP source or commit them. If an SMTP credential was ever present in source control or shared outside the server, revoke/rotate it with the mail provider and configure the replacement only in the server environment.
+Applicant status emails, password setup/reset emails, and office-task review emails require the SMTP username and password in the Apache process environment. A task completion submission emails its assigned supervisor; a review decision emails the linked employee account. In-app notifications remain available if SMTP delivery fails, and the user who triggered the event is shown a delivery warning. Do not put credentials in PHP source or commit them. If an SMTP credential was ever present in source control or shared outside the server, revoke/rotate it with the mail provider and configure the replacement only in the server environment.
 
 ## Database installation and migrations
 

@@ -6,6 +6,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 }
 require_once __DIR__ . '/config/connection.php';
 require_once __DIR__ . '/config/autoLog.php';
+require_once __DIR__ . '/config/system_audit.php';
 require_once __DIR__ . '/config/task_notifications.php';
 date_default_timezone_set('Asia/Manila');
 
@@ -100,6 +101,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $employee !== null) {
                 "SELECT supervisor_id, progress, title, completion_review_status
                  FROM office
                  WHERE office_id = ? AND employee_id = ?
+                   AND LOWER(TRIM(COALESCE(status, 'pending'))) <> 'deleted'
                    AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done')
                    AND completion_review_status <> 'pending_review'
                  LIMIT 1"
@@ -129,6 +131,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $employee !== null) {
                      completion_review_note = NULL, completion_reviewed_by = NULL,
                      completion_reviewed_at = NULL
                  WHERE office_id = ? AND employee_id = ?
+                   AND LOWER(TRIM(COALESCE(status, 'pending'))) <> 'deleted'
                    AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done')
                    AND completion_review_status <> 'pending_review'"
             );
@@ -151,6 +154,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $employee !== null) {
                     "SELECT office_id
                      FROM office
                      WHERE office_id = ? AND employee_id = ?
+                       AND LOWER(TRIM(COALESCE(status, 'pending'))) <> 'deleted'
                        AND LOWER(TRIM(COALESCE(status, 'pending'))) NOT IN ('completed', 'complete', 'done')
                        AND completion_review_status <> 'pending_review'
                      LIMIT 1"
@@ -189,12 +193,43 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && $employee !== null) {
                             (string) $taskId
                         );
                     }
+                    if ($action === 'mark_complete' || $previousProgress !== $progress) {
+                        recordSystemAudit(
+                            $conn,
+                            $userId,
+                            (string) ($_SESSION['name'] ?? 'Employee'),
+                            $action === 'mark_complete' ? 'office_task_review_requested' : 'office_task_progress',
+                            'office_task',
+                            $taskId,
+                            $action === 'mark_complete'
+                                ? 'Submitted task "' . $taskTitle . '" for supervisor review.'
+                                : 'Updated task "' . $taskTitle . '" progress from ' . $previousProgress . '% to ' . $progress . '%.'
+                        );
+                    }
                     if (!$conn->commit()) {
                         throw new RuntimeException('Unable to save the task update: ' . $conn->error);
                     }
                     $_SESSION['office_employee_flash'] = $action === 'mark_complete'
                         ? 'Task submitted for supervisor review.'
                         : 'Task progress updated.';
+                    if ($action === 'mark_complete' && $supervisorId > 0) {
+                        try {
+                            require_once __DIR__ . '/config/mailer.php';
+                            sendTaskTrackUserEmail(
+                                $conn,
+                                $supervisorId,
+                                'Task submitted for supervisor review',
+                                ((string) ($_SESSION['name'] ?? 'The assigned employee'))
+                                    . ' submitted "' . $taskTitle . '" for supervisor review.'
+                            );
+                        } catch (RuntimeException $exception) {
+                            error_log('Supervisor task email could not be sent: ' . $exception->getMessage());
+                            $_SESSION['office_employee_flash'] .= ' The supervisor email could not be sent; check SMTP settings and the server log.';
+                        }
+                    } elseif ($action === 'mark_complete') {
+                        error_log('Supervisor task notification could not be sent: task has no assigned supervisor account.');
+                        $_SESSION['office_employee_flash'] .= ' The task has no assigned supervisor account to notify.';
+                    }
                     header('Location: office_employee.php?status=' . rawurlencode($statusFilter)
                         . '&period=' . rawurlencode($periodFilter) . '&task_id=' . $taskId);
                     exit();
@@ -222,6 +257,7 @@ if ($employee !== null) {
          LEFT JOIN users assigned_user ON assigned_user.id = office.supervisor_id
          LEFT JOIN users reviewed_user ON reviewed_user.id = office.completion_reviewed_by
          WHERE office.employee_id = ?
+           AND LOWER(TRIM(COALESCE(office.status, \'pending\'))) <> \'deleted\'
          ORDER BY office.due_date IS NULL ASC, office.due_date ASC, office.submission_date DESC, office.office_id DESC'
     );
     if (!$taskStmt) {

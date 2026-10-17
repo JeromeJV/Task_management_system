@@ -1,0 +1,82 @@
+.action-confirmation {
+    position: fixed;
+    inset: 50% auto auto 50%;
+    transform: translate(-50%, -50%);
+    width: min(420px, calc(100% - 32px));
+    max-width: 420px;
+    padding: 0;
+    border: 1px solid #e2e8e4;
+    border-radius: 18px;
+    background: #fff;
+    color: #1e2923;
+    box-shadow: 0 24px 70px rgba(10, 18, 35, .25);
+}
+
+.action-confirmation::backdrop {
+    background: rgba(15, 23, 42, .56);
+    backdrop-filter: blur(3px);
+}
+
+.action-confirmation-card {
+    display: grid;
+    gap: 13px;
+    padding: 24px;
+}
+
+.action-confirmation-kicker {
+    color: #1f6e4a;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .12em;
+}
+
+.action-confirmation-card h2 {
+    margin: 0;
+    color: #1e2923;
+    font-size: 20px;
+}
+
+.action-confirmation-message {
+    margin: 0;
+    color: #647067;
+    font-size: 14px;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+}
+
+.action-confirmation-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 9px;
+    margin-top: 7px;
+}
+
+.action-confirmation-actions button {
+    min-height: 38px;
+    padding: 8px 14px;
+    border: 1px solid #dce3de;
+    border-radius: 8px;
+    background: #fff;
+    color: #526158;
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.action-confirmation-actions .action-confirmation-accept {
+    border-color: #a13b32;
+    background: #a13b32;
+    color: #fff;
+}
+
+.action-confirmation-actions button:focus-visible {
+    outline: 3px solid rgba(57, 132, 92, .25);
+    outline-offset: 2px;
+}
+
+@media (max-width: 480px) {
+    .action-confirmation-card {
+        padding: 21px 18px;
+    }
+}

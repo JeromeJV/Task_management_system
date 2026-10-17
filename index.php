@@ -13,6 +13,7 @@ include 'config/loginBE.php';
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Separate CSS File -->
     <link rel="stylesheet" href="css/login.css?v=20261007-centered-nav">
+    <link rel="stylesheet" href="css/password-visibility.css?v=<?= filemtime(__DIR__ . '/css/password-visibility.css'); ?>">
     <style>
         .login-overlay {
             position: fixed;
@@ -173,9 +174,12 @@ include 'config/loginBE.php';
 
                     <div class="form-group">
                         <label for="password">Password</label>
-                        <input type="password" name="password" id="password" 
-                               placeholder="Enter Your Password" 
-                               class="<?php echo (!empty($password_err)) ? 'is-invalid' : ''; ?>" required>
+                        <div class="password-input-wrap">
+                            <input type="password" name="password" id="password"
+                                   placeholder="Enter Your Password"
+                                   class="<?php echo (!empty($password_err)) ? 'is-invalid' : ''; ?>" required>
+                            <button class="password-visibility-toggle" type="button" data-password-toggle aria-controls="password" aria-pressed="false" aria-label="Show password">Show</button>
+                        </div>
                         <?php if (!empty($password_err)): ?>
                             <div class="invalid-feedback"><?php echo $password_err; ?></div>
                         <?php endif; ?>
@@ -337,5 +341,6 @@ include 'config/loginBE.php';
             }
         });
     </script>
+    <script src="js/password-visibility.js?v=<?= filemtime(__DIR__ . '/js/password-visibility.js'); ?>"></script>
 </body>
 </html>

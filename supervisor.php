@@ -150,6 +150,7 @@ $office_reviews_query = $conn->prepare(
      FROM office o
      LEFT JOIN employee e ON e.employee_id = o.employee_id
      WHERE o.completion_review_status = 'pending_review'
+       AND LOWER(TRIM(COALESCE(o.status, 'pending'))) <> 'deleted'
      ORDER BY o.due_date ASC, o.office_id DESC"
 );
 if (!$office_reviews_query) {

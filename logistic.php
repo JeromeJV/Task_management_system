@@ -1446,6 +1446,7 @@ foreach ($history_records as $hrec) {
         }
     </style>
     <link rel="stylesheet" href="css/role-form-controls.css?v=<?= filemtime(__DIR__ . '/css/role-form-controls.css'); ?>">
+    <link rel="stylesheet" href="css/action-confirmation.css?v=<?= filemtime(__DIR__ . '/css/action-confirmation.css'); ?>">
 </head>
 <body>
 <?php include __DIR__ . '/config/notification_bell.php'; ?>
@@ -1660,7 +1661,7 @@ foreach ($history_records as $hrec) {
                                                 onclick="openDetailModal(this, true)">View Details</button>
                                         <button type="button" class="delivery-activity-btn" data-activity-id="<?= $del_id; ?>" data-activity-product="<?= $prod_name; ?>">Activity</button>
                                         
-                                        <form action="delivery_main.php" method="post" onsubmit="return confirm('Are you sure you want to delete this history record?');">
+                                        <form action="delivery_main.php" method="post" data-confirm="Are you sure you want to delete this delivery history record?">
                                             <input type="hidden" name="idno" value="<?= $del_id; ?>">
                                             <button type="submit" name="del" class="btn-delete">Delete</button>
                                         </form>
@@ -2286,7 +2287,17 @@ foreach ($history_records as $hrec) {
                 summary.textContent = eventMessages[activity.event_type] || `${activity.actor_name} recorded an update for this delivery.`;
                 const time = document.createElement('time');
                 time.dateTime = activity.occurred_at.replace(' ', 'T');
-                time.textContent = activity.occurred_at;
+                const occurredAt = new Date(activity.occurred_at.replace(' ', 'T'));
+                time.textContent = Number.isNaN(occurredAt.getTime())
+                    ? activity.occurred_at
+                    : new Intl.DateTimeFormat('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true
+                    }).format(occurredAt);
                 entry.append(summary, time);
                 item.append(marker, entry);
                 list.appendChild(item);
@@ -2323,6 +2334,7 @@ foreach ($history_records as $hrec) {
 <!-- try -->
 <script src="js/calendar-picker.js?v=<?= filemtime(__DIR__ . '/js/calendar-picker.js'); ?>"></script>
 <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
+<script src="js/action-confirmation.js?v=<?= filemtime(__DIR__ . '/js/action-confirmation.js'); ?>"></script>
 <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>
