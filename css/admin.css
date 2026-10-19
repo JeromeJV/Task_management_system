@@ -39,6 +39,8 @@ th { color: #738077; font-size: 10px; letter-spacing: .08em; text-transform: upp
 tbody tr:last-child td { border-bottom: 0; }
 .admin-account-create { max-width: 1440px; margin: 0 auto 20px; }
 .admin-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 14px; }
+.admin-account-create .admin-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.admin-account-create .admin-form > .admin-muted { grid-column: 1 / -1; margin: 0; }
 .admin-form label { display: flex; flex-direction: column; gap: 7px; color: #49564e; font-size: 12px; font-weight: 700; }
 .admin-form small { color: #7a867e; font-size: 11px; font-weight: 400; }
 .admin-form input, .admin-form select, .admin-inline-form input, .admin-inline-form select { min-width: 0; height: 39px; padding: 0 10px; border: 1px solid #d9e1dc; border-radius: 7px; background: #fff; color: #202b24; font: inherit; font-size: 12px; }
@@ -61,7 +63,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .admin-profile-picture-picker { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; }
 .admin-profile-picture-picker:focus-within .admin-profile-picture-preview { outline: 3px solid rgba(31, 117, 76, .24); outline-offset: 2px; }
 .admin-profile-picture-picker input[type="file"] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; clip-path: inset(50%); }
-.admin-profile-picture-preview { position: relative; display: grid; width: 42px; height: 42px; place-items: center; overflow: hidden; border: 1px solid #d9ebe0; border-radius: 50%; background: #e9f5ee; color: #176b49; font-size: 15px; font-weight: 750; transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+.admin-profile-picture-preview { position: relative; display: grid; width: 48px; height: 48px; place-items: center; overflow: hidden; border: 1px solid #d9ebe0; border-radius: 50%; background: #e9f5ee; color: #176b49; font-size: 17px; font-weight: 750; transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
 .admin-profile-picture-preview img { width: 100%; height: 100%; object-fit: cover; }
 .admin-profile-picture-picker:hover .admin-profile-picture-preview { transform: translateY(-1px); border-color: #7caf91; box-shadow: 0 3px 9px rgba(31, 117, 76, .18); }
 .admin-profile-picture-picker-icon { position: absolute; right: -1px; bottom: -1px; display: grid; width: 17px; height: 17px; place-items: center; border: 2px solid #fff; border-radius: 50%; background: #1f754c; color: #fff; font-size: 14px; line-height: 1; }
@@ -160,6 +162,7 @@ tbody tr:last-child td { border-bottom: 0; }
 }
 @media (max-width: 560px) {
     .admin-form, .admin-report-grid { grid-template-columns: 1fr; }
+    .admin-account-create .admin-form { grid-template-columns: 1fr; }
     .admin-form > button { grid-column: auto; }
     .admin-report-filter { align-items: stretch; flex-direction: column; }
     .admin-report-filter label, .admin-report-filter input { width: 100%; }

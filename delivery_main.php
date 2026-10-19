@@ -28,6 +28,8 @@ unset($_SESSION['delivery_success']);
 $active_delivery_section = isset($_GET['report_month']) || isset($_GET['report_year']) ? 'reports' : 'pending';
 $delivery_assignment_result = null;
 $delivery_assignment_feedback = '';
+$restore_delivery_view_after_assignment = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
+    && in_array($action, ['insert', 'update'], true);
 if ($action === 'insert' && $message !== '') {
     $delivery_assignment_result = 'success';
     $delivery_assignment_feedback = $message;
@@ -664,6 +666,7 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
         .delivery-deadline-badge.is-overdue { background: #fde8e7; color: #a3312a; }
         .delivery-deadline-badge.is-due-soon { background: #fff1c7; color: #8a6200; }
         .status-pill.status-overdue { background: #fde8e7; color: #a3312a; }
+        .status-pill.status-changes_requested { background: #fff0f0; color: #a3312a; }
         .delivery-filter-empty,
         .delivery-report-note {
             margin: 10px 0 16px;
@@ -1175,6 +1178,7 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
                         <select id="deliveryStatusFilter">
                             <option value="">All statuses</option>
                             <option value="overdue">Overdue</option>
+                            <option value="changes_requested">Changes requested</option>
                             <?php foreach (array_unique(array_map(
                                 static fn($record) => strtolower((string) ($record['status'] ?? 'pending')),
                                 array_merge($pending_records, $history_records)
@@ -1283,6 +1287,7 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
                                         }
                                         $delivery_is_overdue = $delivery_days_until_due !== null && $delivery_days_until_due < 0;
                                         $delivery_row_status = strtolower((string) ($row['status'] ?? 'pending'));
+                                        $delivery_is_changes_requested = ($row['completion_review_status'] ?? '') === 'rejected';
                                         $delivery_is_cancelled = in_array($delivery_row_status, ['cancelled', 'canceled'], true);
                                         $delivery_is_overdue = $delivery_is_overdue && !$delivery_is_cancelled;
                                         $delivery_is_due_soon = $delivery_days_until_due !== null && $delivery_days_until_due >= 0 && $delivery_days_until_due <= 3;
@@ -1294,7 +1299,8 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
                                         ?>
                                         <tr
                                             class="delivery-task-row <?= $delivery_is_overdue ? 'is-overdue' : ($delivery_is_due_soon ? 'is-due-soon' : ''); ?>"
-                                            data-status="<?= $delivery_is_overdue ? 'overdue' : htmlspecialchars($delivery_row_status, ENT_QUOTES); ?>"
+                                            data-delivery-id="<?= (int) ($row['delivery_id'] ?? 0); ?>"
+                                            data-status="<?= $delivery_is_changes_requested ? 'changes_requested' : ($delivery_is_overdue ? 'overdue' : htmlspecialchars($delivery_row_status, ENT_QUOTES)); ?>"
                                             data-raw-status="<?= htmlspecialchars($delivery_row_status, ENT_QUOTES); ?>"
                                             data-driver="<?= htmlspecialchars(strtolower($delivery_driver_name), ENT_QUOTES); ?>"
                                             data-due-date="<?= htmlspecialchars($delivery_due_date, ENT_QUOTES); ?>"
@@ -1353,8 +1359,10 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
 
                                             <td>
 
-                                                <span class="status-pill status-<?= htmlspecialchars($delivery_is_overdue ? 'overdue' : $delivery_row_status, ENT_QUOTES); ?>">
-                                                    <?= htmlspecialchars(ucfirst($row['status'] ?: 'Pending')); ?>
+                                                <span class="status-pill status-<?= $delivery_is_changes_requested ? 'changes_requested' : htmlspecialchars($delivery_is_overdue ? 'overdue' : $delivery_row_status, ENT_QUOTES); ?>">
+                                                    <?= $delivery_is_changes_requested
+                                                        ? 'Changes requested'
+                                                        : htmlspecialchars(ucfirst($row['status'] ?: 'Pending')); ?>
                                                 </span>
 
                                             </td>
@@ -1385,6 +1393,11 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
                                                         type="hidden"
                                                         name="idno"
                                                         value="<?= htmlspecialchars($row['delivery_id']); ?>"
+                                                    >
+                                                    <input
+                                                        type="hidden"
+                                                        name="task_review_csrf"
+                                                        value="<?= htmlspecialchars($_SESSION['task_review_csrf'], ENT_QUOTES, 'UTF-8'); ?>"
                                                     >
 
                                                     <button
@@ -1558,6 +1571,11 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
                                                         type="hidden"
                                                         name="idno"
                                                         value="<?= htmlspecialchars($row['delivery_id']); ?>"
+                                                    >
+                                                    <input
+                                                        type="hidden"
+                                                        name="task_review_csrf"
+                                                        value="<?= htmlspecialchars($_SESSION['task_review_csrf'], ENT_QUOTES, 'UTF-8'); ?>"
                                                     >
 
                                                     <input
@@ -1965,7 +1983,7 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
 <dialog class="task-review-dialog" id="deliveryReviewDialog" aria-labelledby="deliveryReviewTitle">
     <form method="post" action="delivery_main.php" class="task-review-dialog-card">
         <input type="hidden" name="task_review_csrf" value="<?= htmlspecialchars($_SESSION['task_review_csrf'], ENT_QUOTES, 'UTF-8'); ?>">
-        <input type="hidden" name="review_return" value="delivery_main.php">
+        <input type="hidden" name="review_return" value="delivery_main.php?restore_delivery_view=1">
         <input type="hidden" name="delivery_id" id="deliveryReviewId">
         <span class="task-review-dialog-kicker">LOGISTICS TASK</span>
         <h2 id="deliveryReviewTitle">Review delivery submission</h2>
@@ -1993,7 +2011,9 @@ $absent_delivery_count = count($delivery_drivers) - $present_delivery_count;
     aria-hidden="<?= $delivery_assignment_result === null ? 'true' : 'false'; ?>"
 >
     <div class="assignment-loading-card">
-        <h2><?= $delivery_assignment_result === 'success' ? 'Delivery assigned!' : ($delivery_assignment_result === 'error' ? 'Assignment not completed' : 'Assigning Deliveries'); ?></h2>
+        <h2><?= $delivery_assignment_result === 'success'
+            ? 'Delivery assigned!'
+            : ($delivery_assignment_result === 'error' ? 'Assignment not completed' : 'Assigning Deliveries'); ?></h2>
         <p><?= $delivery_assignment_result !== null
             ? htmlspecialchars($delivery_assignment_feedback, ENT_QUOTES, 'UTF-8')
             : 'Please wait while the delivery tasks are being saved.'; ?></p>
@@ -2099,7 +2119,7 @@ function showDeliverySection(section) {
     });
 }
 
-function filterDeliveryRows() {
+function filterDeliveryRows(preservedDeliveryId = '') {
     const search = document.getElementById('deliverySearch').value.trim().toLowerCase();
     const driver = document.getElementById('deliveryDriverFilter').value;
     const status = document.getElementById('deliveryStatusFilter').value;
@@ -2112,6 +2132,7 @@ function filterDeliveryRows() {
             let visibleCount = 0;
             rows.forEach((row) => {
                 const matches =
+                    (preservedDeliveryId && row.dataset.deliveryId === String(preservedDeliveryId)) ||
                     (!search || row.textContent.toLowerCase().includes(search)) &&
                     (!driver || row.dataset.driver === driver) &&
                     (!status || row.dataset.status === status || row.dataset.rawStatus === status) &&
@@ -2632,6 +2653,92 @@ document.getElementById('resetDeliveryFilters').addEventListener('click', () => 
     filterDeliveryRows();
 });
 
+const deliveryViewStateKey = 'deliveryMainViewState';
+const deliveryFilterIds = [
+    'deliverySearch',
+    'deliveryDriverFilter',
+    'deliveryStatusFilter',
+    'deliveryDueFrom',
+    'deliveryDueTo'
+];
+
+function saveDeliveryViewState(updatedDeliveryId = '') {
+    const state = {
+        filters: Object.fromEntries(deliveryFilterIds.map((id) => [
+            id,
+            document.getElementById(id).value
+        ])),
+        activeSection: document.querySelector('.delivery-tab.active')?.id || 'pendingTab',
+        updatedDeliveryId,
+        windowScrollX: window.scrollX,
+        windowScrollY: window.scrollY,
+        tableScroll: Array.from(document.querySelectorAll('.table-scroll'), (table) => ({
+            top: table.scrollTop,
+            left: table.scrollLeft
+        }))
+    };
+
+    sessionStorage.setItem(deliveryViewStateKey, JSON.stringify(state));
+}
+
+const restoreDeliveryViewFromRedirect =
+    new URLSearchParams(window.location.search).get('restore_delivery_view') === '1';
+const preserveUpdatedDelivery =
+    <?= $action === 'update' && $message !== '' ? 'true' : 'false'; ?>
+    || restoreDeliveryViewFromRedirect;
+const shouldRestoreDeliveryView =
+    <?= $restore_delivery_view_after_assignment ? 'true' : 'false'; ?>
+    || restoreDeliveryViewFromRedirect;
+const keepDeliveryViewStateForReload =
+    <?= $delivery_assignment_result === 'success' ? 'true' : 'false'; ?>;
+
+if (shouldRestoreDeliveryView) {
+    const savedDeliveryViewState = sessionStorage.getItem(deliveryViewStateKey);
+    if (savedDeliveryViewState !== null) {
+        const state = JSON.parse(savedDeliveryViewState);
+        deliveryFilterIds.forEach((id) => {
+            if (typeof state.filters?.[id] === 'string') {
+                document.getElementById(id).value = state.filters[id];
+            }
+        });
+        filterDeliveryRows(preserveUpdatedDelivery ? state.updatedDeliveryId || '' : '');
+
+        const activeSections = {
+            pendingTab: 'pending',
+            historyTab: 'history',
+            deliveryReportsTab: 'reports'
+        };
+        if (activeSections[state.activeSection]) {
+            showDeliverySection(activeSections[state.activeSection]);
+        }
+
+        requestAnimationFrame(() => {
+            if (Number.isFinite(state.windowScrollX) && Number.isFinite(state.windowScrollY)) {
+                document.documentElement.style.scrollBehavior = 'auto';
+                window.scrollTo(state.windowScrollX, state.windowScrollY);
+                document.documentElement.style.removeProperty('scroll-behavior');
+            }
+            document.querySelectorAll('.table-scroll').forEach((table, index) => {
+                const savedScroll = state.tableScroll?.[index];
+                if (savedScroll && Number.isFinite(savedScroll.top) && Number.isFinite(savedScroll.left)) {
+                    table.scrollTop = savedScroll.top;
+                    table.scrollLeft = savedScroll.left;
+                }
+            });
+
+            if (!keepDeliveryViewStateForReload) {
+                sessionStorage.removeItem(deliveryViewStateKey);
+            }
+
+            if (restoreDeliveryViewFromRedirect) {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('restore_delivery_view');
+                history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+            }
+        });
+    }
+}
+
 async function openDeliveryActivity(deliveryId, productName) {
     const modal = document.getElementById('deliveryActivityModal');
     const content = document.getElementById('deliveryActivityContent');
@@ -2855,9 +2962,29 @@ window.onclick = function(event) {
 };
 
 
-document.querySelectorAll("#deliveryModal .assignment-form").forEach((form) => {
+document.querySelectorAll('.task-review-dialog-card').forEach((form) => {
+    form.addEventListener('submit', saveDeliveryViewState);
+});
+
+document.querySelectorAll('form').forEach((form) => {
+    if (form.querySelector('input[name="del"]')) {
+        form.addEventListener('submit', saveDeliveryViewState);
+    }
+});
+
+document.querySelectorAll(".assignment-form").forEach((form) => {
     form.addEventListener("submit", (event) => {
         if (event.defaultPrevented) {
+            return;
+        }
+        const action = form.querySelector('input[name="action"]')?.value;
+        if (action === 'insert' || action === 'update') {
+            const updatedDeliveryId = action === 'update'
+                ? form.querySelector('input[name="delivery_id"]')?.value || ''
+                : '';
+            saveDeliveryViewState(updatedDeliveryId);
+        }
+        if (action !== 'insert') {
             return;
         }
         const loadingOverlay = document.getElementById("assignmentLoading");
@@ -2869,7 +2996,7 @@ document.querySelectorAll("#deliveryModal .assignment-form").forEach((form) => {
 
 <?php if ($delivery_assignment_result === 'success'): ?>
 window.setTimeout(() => {
-    window.location.replace('delivery_main.php');
+    window.location.replace('delivery_main.php?restore_delivery_view=1');
 }, 2500);
 <?php elseif ($delivery_assignment_result === 'error'): ?>
 document.getElementById('dismissAssignmentResult').addEventListener('click', () => {

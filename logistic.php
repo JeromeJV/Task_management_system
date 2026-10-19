@@ -300,6 +300,10 @@ foreach ($history_records as $hrec) {
             color: #b4232f;
         }
 
+        .status-badge.changes-requested {
+            text-transform: none;
+        }
+
         .shipment-card.is-awaiting-approval {
             border-top-color: #dc3545;
         }
@@ -346,13 +350,47 @@ foreach ($history_records as $hrec) {
         }
 
         .feedback-button {
-            padding: 7px 10px;
+            grid-column: 1 / -1;
+            display: flex;
+            min-height: 44px;
+            align-items: center;
+            justify-content: center;
+            gap: 9px;
+            padding: 9px 14px;
             border: 1px solid #fecaca;
-            border-radius: 6px;
-            background: #fff7f7;
-            color: #b4232f;
+            border-radius: 9px;
+            background: linear-gradient(135deg, #fff7f7, #fff1f2);
+            color: #a61b29;
             cursor: pointer;
             font-weight: 600;
+            font-size: 0.84rem;
+            transition: background .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+        }
+
+        .feedback-button::before {
+            display: inline-grid;
+            width: 21px;
+            height: 21px;
+            flex: 0 0 21px;
+            place-items: center;
+            border-radius: 50%;
+            background: #fee2e2;
+            color: #b4232f;
+            content: "!";
+            font-size: 0.78rem;
+            font-weight: 800;
+        }
+
+        .feedback-button:hover {
+            transform: translateY(-1px);
+            border-color: #fda4af;
+            background: #ffe9eb;
+            box-shadow: 0 4px 12px rgba(185, 28, 46, .1);
+        }
+
+        .feedback-button:focus-visible {
+            outline: 3px solid rgba(190, 24, 43, .2);
+            outline-offset: 2px;
         }
 
         .feedback-message {
@@ -475,6 +513,35 @@ foreach ($history_records as $hrec) {
         .modal-title {
             font-size: 1.1rem;
             font-weight: 700;
+        }
+
+        .close-btn {
+            display: grid;
+            width: 30px;
+            height: 30px;
+            flex: 0 0 30px;
+            place-items: center;
+            padding: 0;
+            border: 1px solid #e2e8f0;
+            border-radius: 50%;
+            background: #f8fafc;
+            color: #64748b;
+            cursor: pointer;
+            font: inherit;
+            font-size: 19px;
+            line-height: 1;
+            transition: background .18s ease, border-color .18s ease, color .18s ease;
+        }
+
+        .close-btn:hover {
+            border-color: #fecaca;
+            background: #fff1f2;
+            color: #b4232f;
+        }
+
+        .close-btn:focus-visible {
+            outline: 3px solid rgba(190, 24, 43, .2);
+            outline-offset: 2px;
         }
 
         .modal-grid {
@@ -842,6 +909,20 @@ foreach ($history_records as $hrec) {
             margin-bottom: 1.5rem;
             color: #94a3b8;
             font-size: 0.95rem;
+        }
+
+        .delivery-sequence-cancel {
+            margin-top: 18px;
+            padding: 9px 16px;
+            border: 1px solid #64748b;
+            border-radius: 7px;
+            background: #334155;
+            color: #f8fafc;
+            font: inherit;
+            cursor: pointer;
+        }
+        .delivery-sequence-cancel:hover {
+            background: #475569;
         }
 
         .delivery-sequence-stage {
@@ -1561,8 +1642,8 @@ foreach ($history_records as $hrec) {
                         
                         <div class="card-header">
                             <span class="shipment-id">#SHP-IN-<?= $del_id; ?></span>
-                            <span class="status-badge <?= in_array(strtolower($status_label), ['awaiting approval', 'changes requested'], true) ? 'awaiting-approval' : (strtolower($status_label) === 'delivered' ? 'delivered' : 'in-transit'); ?>">
-                                <?= $status_label === 'Pending' ? 'IN TRANSIT' : (strtolower($status_label) === 'awaiting approval' ? 'REQUEST SENT · WAITING FOR APPROVAL' : strtoupper($status_label)); ?>
+                            <span class="status-badge <?= strtolower($status_label) === 'changes requested' ? 'awaiting-approval changes-requested' : (strtolower($status_label) === 'awaiting approval' ? 'awaiting-approval' : (strtolower($status_label) === 'delivered' ? 'delivered' : 'in-transit')); ?>">
+                                <?= $status_label === 'Pending' ? 'IN TRANSIT' : (strtolower($status_label) === 'awaiting approval' ? 'REQUEST SENT · WAITING FOR APPROVAL' : (strtolower($status_label) === 'changes requested' ? 'Changes requested' : strtoupper($status_label))); ?>
                             </span>
                         </div>
 
@@ -1902,6 +1983,7 @@ foreach ($history_records as $hrec) {
                 </g>
             </svg>
         </div>
+        <button type="button" class="delivery-sequence-cancel" id="cancelDeliverySubmission">Cancel submission</button>
     </div>
 </div>
 
@@ -2107,7 +2189,29 @@ foreach ($history_records as $hrec) {
         return true;
     }
 
-    // INAYOS NA CONFIRM / SUBMIT FUNCTION
+    let deliverySubmissionTimers = [];
+
+    function cancelDeliverySubmission() {
+        deliverySubmissionTimers.forEach(window.clearTimeout);
+        deliverySubmissionTimers = [];
+
+        const form = document.getElementById('deliveryForm');
+        form.dataset.deliverySubmitting = 'false';
+        document.getElementById('markDeliveredInput')?.remove();
+
+        const sequence = document.getElementById('deliverySequence');
+        sequence.classList.remove('active', 'unloading', 'driving');
+        sequence.setAttribute('aria-hidden', 'true');
+        document.getElementById('deliverySequenceStatus').textContent = 'Truck arrived...';
+        document.getElementById('detailModal').style.display = 'flex';
+
+        const confirmButton = document.querySelector('#confirmModal .btn-confirm-delivery');
+        confirmButton.disabled = false;
+        confirmButton.textContent = 'Confirm Delivery';
+    }
+
+    document.getElementById('cancelDeliverySubmission').addEventListener('click', cancelDeliverySubmission);
+
     function submitDelivery() {
         const form = document.getElementById('deliveryForm');
         if (form.dataset.deliverySubmitting === 'true') {
@@ -2154,22 +2258,20 @@ foreach ($history_records as $hrec) {
         sequence.classList.add('active', 'unloading');
         sequence.setAttribute('aria-hidden', 'false');
 
-        window.requestAnimationFrame(() => {
-            window.setTimeout(() => {
-                truckBox1.style.opacity = '0';
-                truckBox2.style.opacity = '0';
-                droppedBox1.style.opacity = '1';
-                droppedBox2.style.opacity = '1';
-                status.textContent = 'Delivered! Departure in progress...';
-                sequence.classList.remove('unloading');
-                sequence.classList.add('driving');
-            }, 1500);
+        deliverySubmissionTimers.push(window.setTimeout(() => {
+            truckBox1.style.opacity = '0';
+            truckBox2.style.opacity = '0';
+            droppedBox1.style.opacity = '1';
+            droppedBox2.style.opacity = '1';
+            status.textContent = 'Delivered! Departure in progress...';
+            sequence.classList.remove('unloading');
+            sequence.classList.add('driving');
+        }, 1500));
 
-            window.setTimeout(() => {
-                status.textContent = 'Order completed successfully!';
-                HTMLFormElement.prototype.submit.call(form);
-            }, 2800);
-        });
+        deliverySubmissionTimers.push(window.setTimeout(() => {
+            status.textContent = 'Order completed successfully!';
+            HTMLFormElement.prototype.submit.call(form);
+        }, 2800));
     }
 
     // Filter Logic para sa Active Cards

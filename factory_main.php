@@ -56,6 +56,8 @@ $message = $message ?? '';
 $production_update_error = (string) ($errors['update'] ?? '');
 $production_assignment_result = null;
 $production_assignment_feedback = '';
+$restore_production_view_after_assignment = ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
+    && in_array($_POST['action'] ?? '', ['insert', 'reassign'], true);
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && ($_POST['action'] ?? '') === 'insert') {
     if ($message !== '') {
         $production_assignment_result = 'success';
@@ -227,6 +229,9 @@ $report_stmt->close();
 $stage_progress = static function (array $row): array {
     $work_type = (string) ($row['assigned_work_type'] ?? 'Production');
     $status = (string) ($row['assigned_work_status'] ?? 'Pending');
+    if (($row['completion_review_status'] ?? '') === 'rejected') {
+        return ['key' => 'changes_requested', 'label' => 'Changes requested'];
+    }
     if ($status === 'Done') {
         return ['key' => 'completed', 'label' => 'Completed'];
     }
@@ -875,6 +880,7 @@ $stage_progress = static function (array $row): array {
                         <option value="">All statuses</option>
                         <option value="in_progress">In progress</option>
                         <option value="review">Waiting for approval</option>
+                        <option value="changes_requested">Changes requested</option>
                         <option value="ready">Waiting for Packaging</option>
                         <option value="waiting">Waiting for Cooking</option>
                         <option value="unassigned">Unassigned</option>
@@ -1803,6 +1809,91 @@ document.getElementById('resetProductionFilters').addEventListener('click', () =
     applyProductionFilters();
 });
 
+const productionViewStateKey = 'factoryMainProductionViewState';
+const productionFilterIds = [
+    'productionSearch',
+    'productionStageFilter',
+    'productionStatusFilter',
+    'productionDueFrom',
+    'productionDueTo'
+];
+
+function saveProductionViewState() {
+    const main = document.querySelector('.main');
+    const state = {
+        filters: Object.fromEntries(productionFilterIds.map((id) => [
+            id,
+            document.getElementById(id).value
+        ])),
+        windowScrollX: window.scrollX,
+        windowScrollY: window.scrollY,
+        mainScrollTop: main.scrollTop,
+        tableScroll: Array.from(document.querySelectorAll('.table-scroll'), (table) => ({
+            top: table.scrollTop,
+            left: table.scrollLeft
+        }))
+    };
+
+    sessionStorage.setItem(productionViewStateKey, JSON.stringify(state));
+}
+
+document.querySelectorAll('form').forEach((form) => {
+    const action = form.querySelector('input[name="action"]')?.value;
+    if (action === 'insert' || action === 'reassign') {
+        form.addEventListener('submit', saveProductionViewState);
+    }
+});
+
+const restoreProductionViewFromRedirect =
+    new URLSearchParams(window.location.search).get('restore_production_view') === '1';
+const shouldRestoreProductionView =
+    <?= $restore_production_view_after_assignment ? 'true' : 'false'; ?>
+    || restoreProductionViewFromRedirect;
+const keepProductionViewStateForReload =
+    <?= $production_assignment_result === 'success' ? 'true' : 'false'; ?>;
+
+if (shouldRestoreProductionView) {
+    const savedProductionViewState = sessionStorage.getItem(productionViewStateKey);
+    if (savedProductionViewState !== null) {
+        const state = JSON.parse(savedProductionViewState);
+        productionFilterIds.forEach((id) => {
+            if (typeof state.filters?.[id] === 'string') {
+                document.getElementById(id).value = state.filters[id];
+            }
+        });
+        applyProductionFilters();
+
+        requestAnimationFrame(() => {
+            const main = document.querySelector('.main');
+            if (Number.isFinite(state.windowScrollX) && Number.isFinite(state.windowScrollY)) {
+                document.documentElement.style.scrollBehavior = 'auto';
+                window.scrollTo(state.windowScrollX, state.windowScrollY);
+                document.documentElement.style.removeProperty('scroll-behavior');
+            }
+            if (Number.isFinite(state.mainScrollTop)) {
+                main.scrollTop = state.mainScrollTop;
+            }
+            document.querySelectorAll('.table-scroll').forEach((table, index) => {
+                const savedScroll = state.tableScroll?.[index];
+                if (savedScroll && Number.isFinite(savedScroll.top) && Number.isFinite(savedScroll.left)) {
+                    table.scrollTop = savedScroll.top;
+                    table.scrollLeft = savedScroll.left;
+                }
+            });
+
+            if (!keepProductionViewStateForReload) {
+                sessionStorage.removeItem(productionViewStateKey);
+            }
+
+            if (restoreProductionViewFromRedirect) {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('restore_production_view');
+                history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+            }
+        });
+    }
+}
+
 async function openProductionActivity(productionId, productName) {
     const modal = document.getElementById('productionActivityModal');
     const content = document.getElementById('productionActivityContent');
@@ -2250,7 +2341,7 @@ window.onclick = function (event) {
 
 <?php if ($production_assignment_result === 'success'): ?>
 window.setTimeout(() => {
-    window.location.replace('factory_main.php');
+    window.location.replace('factory_main.php?restore_production_view=1');
 }, 2500);
 <?php elseif ($production_assignment_result === 'error'): ?>
 document.getElementById('dismissProductionResult').addEventListener('click', () => {
@@ -2266,6 +2357,7 @@ document.getElementById('dismissProductionResult').addEventListener('click', () 
 <dialog class="task-review-dialog" id="productionReviewDialog" aria-labelledby="productionReviewTitle">
     <form action="factory_main.php" method="post" class="task-review-dialog-card">
         <input type="hidden" name="task_review_csrf" value="<?= htmlspecialchars($_SESSION['task_review_csrf'], ENT_QUOTES, 'UTF-8'); ?>">
+        <input type="hidden" name="review_return" value="factory_main.php?restore_production_view=1">
         <input type="hidden" name="production_id" id="productionReviewId">
         <input type="hidden" name="work_type" id="productionReviewWorkType">
         <span class="task-review-dialog-kicker">PRODUCTION TASK</span>
@@ -2284,6 +2376,7 @@ document.getElementById('dismissProductionResult').addEventListener('click', () 
 <script>
     const productionReviewDialog = document.getElementById('productionReviewDialog');
     const productionReviewNote = document.getElementById('productionReviewNote');
+    productionReviewDialog.querySelector('form').addEventListener('submit', saveProductionViewState);
     document.querySelectorAll('.production-review-open-button').forEach((button) => {
         button.addEventListener('click', () => {
             document.getElementById('productionReviewId').value = button.dataset.productionId;

@@ -53,6 +53,14 @@ $selectedStage = $selected_status ?? 'all';
 if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], true)) {
     $selectedStage = 'Training';
 }
+$statusFilterValue = $_GET['status_filter'] ?? '';
+if (!is_string($statusFilterValue) || !in_array($statusFilterValue, ['', 'scheduled', 'pending', 'passed', 'failed', 'hired'], true)) {
+    $statusFilterValue = '';
+}
+$searchValue = $_GET['search'] ?? '';
+if (!is_string($searchValue) || strlen($searchValue) > 200) {
+    $searchValue = '';
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -69,10 +77,7 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
 <body>
 <div class="hr-shell">
     <aside class="hr-sidebar" id="hrSidebar" aria-label="HR navigation">
-        <a class="hr-brand" href="HR.php" aria-label="TaskTrack HR home">
-            <span class="hr-brand-mark" aria-hidden="true">T</span>
-            <span class="hr-brand-name">TASKTRACK</span>
-        </a>
+        <?php include __DIR__ . '/config/hr_sidebar_brand.php'; ?>
         <nav class="hr-nav">
             <a class="hr-nav-link" href="HR.php">
                 <span class="hr-nav-icon" aria-hidden="true">▦</span>
@@ -162,12 +167,14 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
             <div class="filter-bar">
                 <label class="search-box">
                     <span aria-hidden="true">⌕</span>
-                    <input id="scheduleSearch" type="search" placeholder="Search name, email, or position..." autocomplete="off">
+                    <input id="scheduleSearch" type="search" placeholder="Search name, email, or position..." autocomplete="off" value="<?= $escape($searchValue) ?>">
                 </label>
                 <form class="stage-filter-form" method="get" action="interview_sched.php">
+                    <input type="hidden" name="status_filter" id="stageStatusFilter">
+                    <input type="hidden" name="search" id="stageSearch">
                     <label class="status-filter">
                         <span>Interview stage</span>
-                        <select name="interview_status" id="stageFilter" onchange="this.form.submit()">
+                        <select name="interview_status" id="stageFilter">
                             <option value="all" <?= $selectedStage === 'all' ? 'selected' : '' ?>>All stages</option>
                             <option value="Initial_Interview" <?= in_array($selectedStage, ['Initial_Interview', 'Initial Interview'], true) ? 'selected' : '' ?>>Initial Interview</option>
                             <option value="Training" <?= in_array($selectedStage, ['Training', 'Training_Interview', 'Technical_Interview', 'Technical Interview'], true) ? 'selected' : '' ?>>Training</option>
@@ -178,12 +185,12 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
                 <label class="status-filter">
                     <span>Status</span>
                     <select id="statusFilter">
-                        <option value="">All statuses</option>
-                        <option value="scheduled">Scheduled</option>
-                        <option value="pending">Pending</option>
-                        <option value="passed">Passed</option>
-                        <option value="failed">Failed</option>
-                        <option value="hired">Hired</option>
+                        <option value="" <?= $statusFilterValue === '' ? 'selected' : '' ?>>All statuses</option>
+                        <option value="scheduled" <?= $statusFilterValue === 'scheduled' ? 'selected' : '' ?>>Scheduled</option>
+                        <option value="pending" <?= $statusFilterValue === 'pending' ? 'selected' : '' ?>>Pending</option>
+                        <option value="passed" <?= $statusFilterValue === 'passed' ? 'selected' : '' ?>>Passed</option>
+                        <option value="failed" <?= $statusFilterValue === 'failed' ? 'selected' : '' ?>>Failed</option>
+                        <option value="hired" <?= $statusFilterValue === 'hired' ? 'selected' : '' ?>>Hired</option>
                     </select>
                 </label>
                 <a class="reset-button" href="interview_sched.php">Reset filters</a>
@@ -469,6 +476,24 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
         return stage === 'technical interview' ? 'training' : stage;
     };
 
+    const preserveInterviewView = (form) => {
+        const values = {
+            return_stage: document.getElementById('stageFilter').value,
+            return_status_filter: statusFilter.value,
+            return_search: search.value.trim()
+        };
+        Object.entries(values).forEach(([name, value]) => {
+            let input = form.querySelector(`input[name="${name}"]`);
+            if (!input) {
+                input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = name;
+                form.appendChild(input);
+            }
+            input.value = value;
+        });
+    };
+
     const filterRows = () => {
         const term = search.value.trim().toLowerCase();
         const selectedStatus = statusFilter.value;
@@ -485,8 +510,14 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
 
     search.addEventListener('input', filterRows);
     statusFilter.addEventListener('change', filterRows);
+    document.getElementById('stageFilter').addEventListener('change', () => {
+        document.getElementById('stageStatusFilter').value = statusFilter.value;
+        document.getElementById('stageSearch').value = search.value.trim();
+        document.querySelector('.stage-filter-form').requestSubmit();
+    });
     document.querySelectorAll('.outcome-form').forEach((form) => {
         form.addEventListener('submit', (event) => {
+            preserveInterviewView(form);
             if (form.hasAttribute('data-delete-failed-form')) {
                 if (form.dataset.confirmed !== 'true') {
                     event.preventDefault();
@@ -533,6 +564,7 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
     });
     const scheduleForm = document.getElementById('interviewScheduleForm');
     scheduleForm.addEventListener('submit', (event) => {
+        preserveInterviewView(scheduleForm);
         const date = document.getElementById('scheduleDate');
         const hour = document.getElementById('scheduleHour');
         const minute = document.getElementById('scheduleMinute');
@@ -743,6 +775,7 @@ if (in_array($selectedStage, ['Technical_Interview', 'Technical Interview'], tru
             closeFailedDeleteConfirm();
         }
     });
+    filterRows();
 })();
 </script>
 <script src="js/calendar-picker.js?v=<?= filemtime(__DIR__ . '/js/calendar-picker.js'); ?>"></script>

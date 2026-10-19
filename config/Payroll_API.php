@@ -215,9 +215,7 @@ if ($method === 'POST' && $action === 'create_payroll') {
     $status        = 'Pending';
     $dailyRateInput = $_POST['daily_rate'] ?? '755';
     $daily_rate = is_scalar($dailyRateInput) && is_numeric($dailyRateInput) ? (float) $dailyRateInput : NAN;
-    $moneyFields = [
-        'daily_allowance', 'reimbursement', 'sss', 'pagibig', 'philhealth', 'calamity_loan', 'hmo'
-    ];
+    $moneyFields = ['reimbursement', 'sss', 'pagibig', 'philhealth', 'calamity_loan', 'hmo'];
     $moneyValues = [];
     $invalidAmount = !is_finite($daily_rate) || $daily_rate < 0 || $daily_rate > 99999999.99;
     foreach ($moneyFields as $field) {
@@ -361,7 +359,7 @@ if ($method === 'POST' && $action === 'create_payroll') {
     // Earnings
     $regular_pay     = round($attendanceSummary['days_worked'] * $daily_rate, 2);
     $paid_leaves     = $attendanceSummary['paid_leaves'];
-    $daily_allowance = $moneyValues['daily_allowance'];
+    $daily_allowance = 0.0;
     $reimbursement   = $moneyValues['reimbursement'];
 
     // Deductions
@@ -373,7 +371,7 @@ if ($method === 'POST' && $action === 'create_payroll') {
     $hmo            = $moneyValues['hmo'];
 
     // Automatic Computations
-    $gross_pay       = $regular_pay + $paid_leaves + $daily_allowance;
+    $gross_pay       = $regular_pay + $paid_leaves;
     $total_deductions = $late_deduction + $sss + $pagibig + $philhealth + $calamity_loan + $hmo;
     $total_credited   = ($gross_pay - $total_deductions) + $reimbursement;
     if (!is_finite($total_credited) || $total_credited < 0) {
@@ -506,7 +504,7 @@ if ($method === 'POST' && $action === 'edit_paid') {
     $payrollId = filter_input(INPUT_POST, 'payroll_id', FILTER_VALIDATE_INT) ?: 0;
     $reason = trim((string) ($_POST['reason'] ?? ''));
     $fields = [
-        'regular_pay', 'paid_leaves', 'daily_allowance', 'reimbursement',
+        'regular_pay', 'paid_leaves', 'reimbursement',
         'late_deduction', 'sss', 'pagibig', 'philhealth', 'calamity_loan', 'hmo'
     ];
     $amounts = [];
@@ -544,7 +542,7 @@ if ($method === 'POST' && $action === 'edit_paid') {
             exit();
         }
 
-        $grossPay = round($amounts['regular_pay'] + $amounts['paid_leaves'] + $amounts['daily_allowance'], 2);
+        $grossPay = round($amounts['regular_pay'] + $amounts['paid_leaves'], 2);
         $totalDeductions = round(
             $amounts['late_deduction'] + $amounts['sss'] + $amounts['pagibig']
             + $amounts['philhealth'] + $amounts['calamity_loan'] + $amounts['hmo'],
@@ -557,7 +555,7 @@ if ($method === 'POST' && $action === 'edit_paid') {
 
         $update = $conn->prepare(
             'UPDATE payroll
-             SET regular_pay = ?, paid_leaves = ?, daily_allowance = ?, reimbursement = ?, gross_pay = ?,
+             SET regular_pay = ?, paid_leaves = ?, daily_allowance = 0, reimbursement = ?, gross_pay = ?,
                  late_deduction = ?, sss = ?, pagibig = ?, philhealth = ?, calamity_loan = ?, hmo = ?,
                  total_deductions = ?, total_credited = ?
              WHERE payroll_id = ? AND status = \'Paid\''
@@ -566,10 +564,9 @@ if ($method === 'POST' && $action === 'edit_paid') {
             throw new RuntimeException('Unable to prepare paid payroll correction: ' . $conn->error);
         }
         $update->bind_param(
-            'dddddddddddddi',
+            'ddddddddddddi',
             $amounts['regular_pay'],
             $amounts['paid_leaves'],
-            $amounts['daily_allowance'],
             $amounts['reimbursement'],
             $grossPay,
             $amounts['late_deduction'],
@@ -591,10 +588,11 @@ if ($method === 'POST' && $action === 'edit_paid') {
         foreach ($fields as $field) {
             $oldValues[$field] = (float) $oldRecord[$field];
         }
+        $oldValues['daily_allowance'] = (float) $oldRecord['daily_allowance'];
         $oldValues['gross_pay'] = (float) $oldRecord['gross_pay'];
         $oldValues['total_deductions'] = (float) $oldRecord['total_deductions'];
         $oldValues['total_credited'] = (float) $oldRecord['total_credited'];
-        $newValues = $amounts + [
+        $newValues = ['daily_allowance' => 0.0] + $amounts + [
             'gross_pay' => $grossPay,
             'total_deductions' => $totalDeductions,
             'total_credited' => $totalCredited

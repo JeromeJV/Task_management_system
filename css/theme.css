@@ -539,6 +539,64 @@ html[data-theme="dark"] .calendar-picker__trigger.is-placeholder {
     color: #aab7b1 !important;
 }
 
+html[data-theme="dark"] body :is(.tasktrack-sidebar, .hr-sidebar, .payroll-sidebar, .app-sidebar) {
+    border-color: #276749 !important;
+    background-color: #14532d !important;
+    color: #dcfce7 !important;
+}
+
+html[data-theme="dark"] body :is(
+    .tasktrack-account-details strong,
+    .tasktrack-account-details span,
+    .tasktrack-nav-link,
+    .tasktrack-icon-cell,
+    .tasktrack-logout,
+    .hr-brand-name,
+    .hr-nav-link,
+    .hr-nav-icon,
+    .hr-logout,
+    .payroll-sidebar .nav-item,
+    .payroll-sidebar > div:last-child > a,
+    .app-sidebar .brand-name,
+    .app-sidebar .app-nav a,
+    .app-sidebar .logout-link
+) {
+    color: #dcfce7 !important;
+}
+
+html[data-theme="dark"] body :is(
+    .tasktrack-nav-link:hover,
+    .tasktrack-nav-link.is-active,
+    .tasktrack-logout:hover,
+    .hr-nav-link:hover,
+    .hr-nav-link.is-active,
+    .payroll-sidebar .nav-item.active,
+    .app-sidebar .app-nav a:hover,
+    .app-sidebar .app-nav a.active
+) {
+    border-left-color: #86efac !important;
+    background-color: #dcfce7 !important;
+    color: #14532d !important;
+}
+
+html[data-theme="dark"] body :is(.tasktrack-nav-link, .hr-nav-link, .payroll-sidebar .nav-item, .app-sidebar .app-nav a):is(:hover, .is-active, .active) :is(.tasktrack-icon-cell, .hr-nav-icon) {
+    color: #14532d !important;
+}
+
+html[data-theme="dark"] body .tasktrack-sidebar .tasktrack-account-details span,
+html[data-theme="dark"] body .payroll-sidebar > div:first-child > div:first-child p {
+    color: #c1d9c7 !important;
+}
+
+html[data-theme="dark"] body .payroll-sidebar > div:first-child > div:first-child > div:first-child {
+    background-color: #166534 !important;
+}
+
+html[data-theme="dark"] body .app-sidebar .brand-mark {
+    background-color: #166534 !important;
+    color: #fff !important;
+}
+
 html[data-theme="dark"] .calendar-picker__title {
     color: #e1e8e4 !important;
 }

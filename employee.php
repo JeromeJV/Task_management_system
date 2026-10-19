@@ -734,11 +734,11 @@ $canAssignTask = $selectedEmployee !== null
     && $selectedIsPresent
     && $selectedActiveTaskCount < $maxActiveTasks;
 
-$tasks = ['review' => [], 'completed' => [], 'pending' => [], 'overdue' => []];
+$tasks = ['review' => [], 'changes_requested' => [], 'completed' => [], 'pending' => [], 'overdue' => []];
 if ($selectedEmployee) {
     $taskStmt = $conn->prepare(
         'SELECT office_id, supervisor_id, data_type, title, content, status, priority_level, due_date,
-                progress, completion_review_status
+                progress, completion_review_status, completion_review_note
          FROM office
          WHERE employee_id = ?
            AND LOWER(TRIM(COALESCE(status, \'pending\'))) <> \'deleted\'
@@ -757,11 +757,13 @@ if ($selectedEmployee) {
     while ($task = $taskResult->fetch_assoc()) {
         $normalizedStatus = strtolower(trim((string) ($task['status'] ?? 'pending')));
         $task['progress'] = max(0, min(100, (int) ($task['progress'] ?? 0)));
-        if (in_array($normalizedStatus, ['completed', 'complete', 'done'], true)) {
-            $task['progress'] = 100;
-            $tasks['completed'][] = $task;
+        if (($task['completion_review_status'] ?? '') === 'rejected') {
+            $tasks['changes_requested'][] = $task;
         } elseif (($task['completion_review_status'] ?? '') === 'pending_review') {
             $tasks['review'][] = $task;
+        } elseif (in_array($normalizedStatus, ['completed', 'complete', 'done'], true)) {
+            $task['progress'] = 100;
+            $tasks['completed'][] = $task;
         } elseif (!empty($task['due_date']) && $task['due_date'] < date('Y-m-d')) {
             $tasks['overdue'][] = $task;
         } else {
@@ -960,6 +962,7 @@ $accountRoleLabels = [
                         <?php
                         $columnLabels = [
                             'review' => ['Awaiting review', 'is-review'],
+                            'changes_requested' => ['Changes requested', 'is-changes-requested'],
                             'completed' => ['Completed', 'is-completed'],
                             'pending' => ['Pending', 'is-pending'],
                             'overdue' => ['Overdue', 'is-overdue'],
@@ -983,6 +986,9 @@ $accountRoleLabels = [
                                                 <div class="task-copy">
                                                     <h4><?= $escape($task['title'] ?? 'Untitled task'); ?></h4>
                                                     <p><?= $escape($task['content'] ?? ''); ?></p>
+                                                    <?php if ($group === 'changes_requested' && trim((string) ($task['completion_review_note'] ?? '')) !== ''): ?>
+                                                        <small class="task-change-note"><?= $escape($task['completion_review_note']); ?></small>
+                                                    <?php endif; ?>
                                                     <div class="task-meta"><span><?= $escape(($task['due_date'] ?? '') ?: 'No due date'); ?></span><span class="priority-tag priority-<?= $escape(strtolower($task['priority_level'] ?? 'medium')); ?>"><?= $escape(ucfirst($task['priority_level'] ?? 'Medium')); ?></span></div>
                                                     <div class="task-actions">
                                                         <button

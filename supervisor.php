@@ -55,10 +55,14 @@ $production_tasks_query = mysqli_query($conn, "
            p.production_id,
            pa.work_type,
            pa.assigned_by,
+           pa.completion_review_status,
            e.username AS assigned_to,
            p.due_date AS due_date,
-           CASE WHEN pa.completion_review_status = 'pending_review'
-                THEN 'Awaiting Approval' ELSE 'In Progress' END AS task_status,
+           CASE
+               WHEN pa.completion_review_status = 'pending_review' THEN 'Awaiting Approval'
+               WHEN pa.completion_review_status = 'rejected' THEN 'Changes requested'
+               ELSE 'In Progress'
+           END AS task_status,
            CONCAT('Production - ', pa.work_type) AS task_type
     FROM production p
     INNER JOIN production_assignments pa
@@ -121,10 +125,12 @@ $logistics_tasks_query = mysqli_query($conn, "
            d.delivery_id,
            d.delivery_proof_image,
            d.assigned_by,
+           d.completion_review_status,
            u.name AS assigned_to,
            d.delivery_date AS due_date,
-           CASE WHEN d.completion_review_status = 'pending_review'
-                THEN 'Awaiting Approval'
+           CASE
+                WHEN d.completion_review_status = 'pending_review' THEN 'Awaiting Approval'
+                WHEN d.completion_review_status = 'rejected' THEN 'Changes requested'
                 ELSE COALESCE(NULLIF(d.status, ''), 'Pending')
            END AS task_status,
            'Logistics' AS task_type
@@ -142,14 +148,16 @@ while ($task = mysqli_fetch_assoc($logistics_tasks_query)) {
     $active_tasks[] = $task;
 }
 
-// Include all employee task submissions waiting for supervisor review.
+// Include employee tasks awaiting approval or returned with requested changes.
 $office_reviews_query = $conn->prepare(
     "SELECT o.office_id, o.employee_id, o.title AS task_name, e.username AS assigned_to,
             o.due_date, o.supervisor_id AS assigned_by,
-            'Awaiting Approval' AS task_status, 'Employee' AS task_type
+            CASE WHEN o.completion_review_status = 'pending_review'
+                 THEN 'Awaiting Approval' ELSE 'Changes requested' END AS task_status,
+            'Employee' AS task_type
      FROM office o
      LEFT JOIN employee e ON e.employee_id = o.employee_id
-     WHERE o.completion_review_status = 'pending_review'
+     WHERE o.completion_review_status IN ('pending_review', 'rejected')
        AND LOWER(TRIM(COALESCE(o.status, 'pending'))) <> 'deleted'
      ORDER BY o.due_date ASC, o.office_id DESC"
 );
@@ -170,6 +178,11 @@ usort($active_tasks, static function ($first, $second) {
     $second_is_review = ($second['task_status'] ?? '') === 'Awaiting Approval';
     if ($first_is_review !== $second_is_review) {
         return $first_is_review ? -1 : 1;
+    }
+    $first_changes_requested = ($first['task_status'] ?? '') === 'Changes requested';
+    $second_changes_requested = ($second['task_status'] ?? '') === 'Changes requested';
+    if ($first_changes_requested !== $second_changes_requested) {
+        return $first_changes_requested ? -1 : 1;
     }
 
     return strcmp((string) $first['due_date'], (string) $second['due_date']);
@@ -207,7 +220,7 @@ $quantity_err = $quantity_err ?? '';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Supervisor Form</title>
-    <link rel="stylesheet" href="css/supervisor.css?v=20261014-review-queue">
+    <link rel="stylesheet" href="css/supervisor.css?v=20261019-feedback-font">
     <link rel="stylesheet" href="css/task-review-dialog.css?v=<?= filemtime(__DIR__ . '/css/task-review-dialog.css'); ?>">
     <link rel="stylesheet" href="css/tasktrack_sidebar.css?v=<?= filemtime(__DIR__ . '/css/tasktrack_sidebar.css'); ?>">
     <link rel="stylesheet" href="css/table-scroll.css?v=<?= filemtime(__DIR__ . '/css/table-scroll.css'); ?>">
@@ -303,7 +316,7 @@ $quantity_err = $quantity_err ?? '';
           <div class="active-task-heading">
             <div>
               <h3>TASKS &amp; REVIEW REQUESTS</h3>
-              <p>Employee, Production, and Logistics submissions waiting for your review appear first.</p>
+              <p>Submissions waiting for review and tasks with requested changes are highlighted.</p>
             </div>
             <div class="active-task-heading-badges">
               <span class="active-task-review-count"><?= $awaiting_approval_count; ?> waiting for approval</span>
@@ -317,6 +330,7 @@ $quantity_err = $quantity_err ?? '';
               <select id="supervisorTaskStatusFilter">
                 <option value="all">All statuses</option>
                 <option value="awaiting_approval">Waiting for approval</option>
+                <option value="changes_requested">Changes requested</option>
                 <option value="in_progress">In progress</option>
                 <option value="pending">Pending</option>
                 <option value="waiting">Other waiting tasks</option>
@@ -348,6 +362,7 @@ $quantity_err = $quantity_err ?? '';
                   $task_status = (string) ($task['task_status'] ?? 'Pending');
                   $filter_status = match ($task_status) {
                       'Awaiting Approval' => 'awaiting_approval',
+                      'Changes requested' => 'changes_requested',
                       'In Progress' => 'in_progress',
                       'Pending' => 'pending',
                       default => 'waiting',
@@ -360,7 +375,7 @@ $quantity_err = $quantity_err ?? '';
                   };
                 ?>
                 <article
-                  class="active-task-card <?= $task_type_class; ?> <?= $filter_status === 'awaiting_approval' ? 'is-awaiting-approval' : ''; ?>"
+                  class="active-task-card <?= $task_type_class; ?> <?= $filter_status === 'awaiting_approval' ? 'is-awaiting-approval' : ($filter_status === 'changes_requested' ? 'is-changes-requested' : ''); ?>"
                   data-task-status="<?= htmlspecialchars($filter_status, ENT_QUOTES, 'UTF-8'); ?>"
                   data-task-type="<?= htmlspecialchars($filter_type, ENT_QUOTES, 'UTF-8'); ?>"
                 >
@@ -440,7 +455,9 @@ $quantity_err = $quantity_err ?? '';
                   <td><?= htmlspecialchars($task['task_name'] ?? 'N/A'); ?></td>
                   <td><?= htmlspecialchars($task['task_type'] ?? 'N/A'); ?></td>
                   <td><?= htmlspecialchars($task['due_date'] ?? 'N/A'); ?></td>
-                  <td><?= htmlspecialchars($task['task_status'] ?? 'Pending'); ?></td>
+                  <td>
+                    <?= htmlspecialchars($task['task_status'] ?? 'Pending'); ?>
+                  </td>
                 </tr>
               <?php endforeach; ?>
             <?php else: ?>

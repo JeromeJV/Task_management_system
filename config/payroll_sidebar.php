@@ -2,6 +2,29 @@
 $payrollSidebarOnTasks = $payrollSidebarOnTasks ?? false;
 $payrollSidebarActive = $payrollSidebarActive ?? 'dashboard';
 $payrollName = explode('@', (string) ($_SESSION['email'] ?? 'Payroll Manager'))[0];
+$payrollProfilePicture = null;
+if (isset($conn, $_SESSION['id']) && $conn instanceof mysqli) {
+    $payrollProfilePictureStmt = $conn->prepare('SELECT profile_picture FROM users WHERE id = ? LIMIT 1');
+    if (!$payrollProfilePictureStmt) {
+        throw new RuntimeException('Unable to prepare the payroll sidebar profile picture lookup: ' . $conn->error);
+    }
+    $payrollUserId = (int) $_SESSION['id'];
+    $payrollProfilePictureStmt->bind_param('i', $payrollUserId);
+    if (!$payrollProfilePictureStmt->execute()) {
+        $error = $payrollProfilePictureStmt->error;
+        $payrollProfilePictureStmt->close();
+        throw new RuntimeException('Unable to load the payroll sidebar profile picture: ' . $error);
+    }
+    $payrollProfilePicture = $payrollProfilePictureStmt->get_result()->fetch_assoc()['profile_picture'] ?? null;
+    $payrollProfilePictureStmt->close();
+    if (
+        !is_string($payrollProfilePicture)
+        || !preg_match('/^[a-f0-9]{32}\.(jpg|png|webp)$/', $payrollProfilePicture)
+    ) {
+        $payrollProfilePicture = null;
+    }
+}
+$payrollInitial = mb_strtoupper(mb_substr(trim($payrollName), 0, 1));
 
 $payrollSidebarItems = [
     'dashboard' => ['Dashboard', 'fa-house', 'dashboard'],
@@ -12,7 +35,13 @@ $payrollSidebarItems = [
 <aside class="payroll-sidebar bg-white border-r border-zinc-200 flex flex-col justify-between h-screen sticky top-0 z-30 select-none" id="payrollSidebar">
     <div class="flex flex-col w-full">
         <div class="p-5 border-b border-zinc-200 flex items-center gap-3">
-            <div class="w-10 h-10 bg-zinc-300 rounded-xs shrink-0"></div>
+            <div class="payroll-sidebar-avatar w-10 h-10 rounded-xs shrink-0">
+                <?php if ($payrollProfilePicture !== null): ?>
+                    <img src="uploads/profile-pictures/<?= htmlspecialchars($payrollProfilePicture, ENT_QUOTES, 'UTF-8'); ?>" alt="">
+                <?php else: ?>
+                    <?= htmlspecialchars($payrollInitial !== '' ? $payrollInitial : 'U', ENT_QUOTES, 'UTF-8'); ?>
+                <?php endif; ?>
+            </div>
             <div class="overflow-hidden leading-tight">
                 <h4 class="font-bold text-sm text-zinc-900 truncate"><?= htmlspecialchars($payrollName, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?></h4>
                 <p class="text-[11px] text-zinc-400 capitalize truncate">Payroll Manager</p>

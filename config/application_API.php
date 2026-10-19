@@ -14,6 +14,29 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 }
 
 $internalApplicantMode = !empty($application_list_mode) || !empty($interview_schedule_mode);
+$interviewScheduleReturnUrl = 'interview_sched.php';
+if (!empty($interview_schedule_mode)) {
+    $returnStage = $_POST['return_stage'] ?? $_GET['interview_status'] ?? 'all';
+    if (!is_string($returnStage) || !in_array($returnStage, ['all', 'Initial_Interview', 'Training', 'Final_Interview'], true)) {
+        $returnStage = 'all';
+    }
+    $returnStatus = $_POST['return_status_filter'] ?? $_GET['status_filter'] ?? '';
+    if (!is_string($returnStatus) || !in_array($returnStatus, ['', 'scheduled', 'pending', 'passed', 'failed', 'hired'], true)) {
+        $returnStatus = '';
+    }
+    $returnSearch = $_POST['return_search'] ?? $_GET['search'] ?? '';
+    if (!is_string($returnSearch) || strlen($returnSearch) > 200) {
+        $returnSearch = '';
+    }
+    $returnQuery = [
+        'interview_status' => $returnStage,
+        'status_filter' => $returnStatus,
+    ];
+    if ($returnSearch !== '') {
+        $returnQuery['search'] = $returnSearch;
+    }
+    $interviewScheduleReturnUrl .= '?' . http_build_query($returnQuery);
+}
 $internalApplicantAction = false;
 foreach (['reject_applicant', 'delete_failed_applicant', 'del', 'upd', 'update_submit', 'save_interview'] as $internalAction) {
     if (isset($_POST[$internalAction])) {
@@ -326,7 +349,7 @@ if (isset($_POST['reject_applicant']) && !empty($_POST['reject_applicant_id'])) 
     $applicant_id = filter_var($_POST['applicant_id'] ?? null, FILTER_VALIDATE_INT);
     if ($applicant_id === false || $applicant_id === null || $applicant_id < 1) {
         $_SESSION['interview_schedule_error'] = 'Invalid applicant selected for deletion.';
-        header('Location: interview_sched.php');
+        header('Location: ' . $interviewScheduleReturnUrl);
         exit();
     }
 
@@ -345,12 +368,12 @@ if (isset($_POST['reject_applicant']) && !empty($_POST['reject_applicant_id'])) 
 
     if (!$applicant) {
         $_SESSION['interview_schedule_error'] = 'Applicant not found; no record was deleted.';
-        header('Location: interview_sched.php');
+        header('Location: ' . $interviewScheduleReturnUrl);
         exit();
     }
     if (strtolower(trim((string) ($applicant['status'] ?? ''))) !== 'failed') {
         $_SESSION['interview_schedule_error'] = 'Only applicants with a Failed result can be deleted here.';
-        header('Location: interview_sched.php');
+        header('Location: ' . $interviewScheduleReturnUrl);
         exit();
     }
 
@@ -369,7 +392,7 @@ if (isset($_POST['reject_applicant']) && !empty($_POST['reject_applicant_id'])) 
 
     if (!$deleted) {
         $_SESSION['interview_schedule_error'] = 'Applicant status changed before deletion; no record was deleted.';
-        header('Location: interview_sched.php');
+        header('Location: ' . $interviewScheduleReturnUrl);
         exit();
     }
 
@@ -410,7 +433,7 @@ if (isset($_POST['reject_applicant']) && !empty($_POST['reject_applicant_id'])) 
     $_SESSION['interview_schedule_message'] = $resumeRemoved
         ? 'Failed applicant and application record deleted.'
         : 'Failed applicant was deleted, but its resume file could not be removed. Check the server log.';
-    header('Location: interview_sched.php');
+    header('Location: ' . $interviewScheduleReturnUrl);
     exit();
 
 } elseif (isset($_POST['del']) && !empty($passid)) {
@@ -532,7 +555,7 @@ if (isset($_POST['save_interview'])) {
 
     $is_application_list = !empty($application_list_mode);
     $is_interview_schedule = !empty($interview_schedule_mode);
-    $fail_schedule = static function ($error) use ($is_application_list, $is_interview_schedule) {
+    $fail_schedule = static function ($error) use ($is_application_list, $is_interview_schedule, $interviewScheduleReturnUrl) {
         if ($is_application_list) {
             $_SESSION['applicant_error'] = $error;
             header("Location: application_form.php");
@@ -540,7 +563,7 @@ if (isset($_POST['save_interview'])) {
         }
         if ($is_interview_schedule) {
             $_SESSION['interview_schedule_error'] = $error;
-            header("Location: interview_sched.php");
+            header('Location: ' . $interviewScheduleReturnUrl);
             exit();
         }
         echo htmlspecialchars($error, ENT_QUOTES, 'UTF-8');
@@ -684,7 +707,8 @@ if (isset($_POST['save_interview'])) {
                 ON DUPLICATE KEY UPDATE
                 position = VALUES(position),
                 contact_number = VALUES(contact_number),
-                address = VALUES(address)");
+                address = VALUES(address),
+                email = VALUES(email)");
             if (!$emp_stmt) {
                 $conn->rollback();
                 $fail_schedule("Unable to prepare employee transfer: " . $conn->error);
@@ -744,7 +768,7 @@ if (isset($_POST['save_interview'])) {
         if ($progression_message !== '') {
             $_SESSION['interview_schedule_message'] = $progression_message
                 . ($notification_sent ? ' An email update was sent to the applicant.' : ' The status was saved, but the email update could not be sent; check the mail settings and server log.');
-            header("Location: interview_sched.php");
+            header('Location: ' . $interviewScheduleReturnUrl);
             exit();
         }
         if (!empty($application_list_mode)) {
@@ -784,7 +808,7 @@ if (isset($_POST['save_interview'])) {
                     ? ' An email update was sent to the applicant.'
                     : ' The status was saved, but the email update could not be sent; check the mail settings and server log.';
             }
-            header("Location: interview_sched.php");
+            header('Location: ' . $interviewScheduleReturnUrl);
             exit();
         }
         echo "<script>alert('Interview schedule updated! If status is Hired/Passed, applicant was transferred to Employee records.'); window.location.href = 'interview_sched.php';</script>";

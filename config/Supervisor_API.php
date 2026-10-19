@@ -165,9 +165,114 @@ if ($module === 'delivery') {
             }
         }
         $reviewReturn = (string) ($_POST['review_return'] ?? '');
-        header('Location: ' . ($reviewReturn === 'delivery_main.php'
-            ? 'delivery_main.php'
-            : 'supervisor.php#page-dashboard'));
+        if ($reviewReturn === 'delivery_main.php?restore_delivery_view=1') {
+            header('Location: delivery_main.php?restore_delivery_view=1');
+        } elseif ($reviewReturn === 'delivery_main.php') {
+            header('Location: delivery_main.php');
+        } else {
+            header('Location: supervisor.php#page-dashboard');
+        }
+        exit();
+    }
+
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST' && isset($_POST['del'])) {
+        if ($current_role !== 'super') {
+            http_response_code(403);
+            exit('Only a supervisor can delete delivery records.');
+        }
+
+        $posted_token = (string) ($_POST['task_review_csrf'] ?? '');
+        $delivery_id = filter_var($_POST['idno'] ?? null, FILTER_VALIDATE_INT);
+        if (!hash_equals((string) $_SESSION['task_review_csrf'], $posted_token)) {
+            $_SESSION['delivery_error'] = 'Your session token expired. Refresh the page and try again.';
+        } elseif (!$delivery_id || $delivery_id < 1) {
+            $_SESSION['delivery_error'] = 'Choose a valid delivery record to delete.';
+        } else {
+            if (!$conn->begin_transaction()) {
+                throw new RuntimeException('Unable to start the delivery deletion: ' . $conn->error);
+            }
+
+            $delivery_stmt = $conn->prepare(
+                "SELECT delivery_proof_image
+                 FROM delivery
+                 WHERE delivery_id = ? AND (assigned_by = ? OR assigned_by IS NULL)
+                 LIMIT 1 FOR UPDATE"
+            );
+            if (!$delivery_stmt) {
+                $conn->rollback();
+                throw new RuntimeException('Unable to prepare the delivery deletion lookup: ' . $conn->error);
+            }
+            $delivery_stmt->bind_param('ii', $delivery_id, $current_user_id);
+            if (!$delivery_stmt->execute()) {
+                $error = $delivery_stmt->error;
+                $delivery_stmt->close();
+                $conn->rollback();
+                throw new RuntimeException('Unable to load the delivery for deletion: ' . $error);
+            }
+            $delivery_to_delete = $delivery_stmt->get_result()->fetch_assoc();
+            $delivery_stmt->close();
+
+            if (!$delivery_to_delete) {
+                $conn->rollback();
+                $_SESSION['delivery_error'] = 'This delivery was not found or you do not have permission to delete it.';
+            } else {
+                $activity_stmt = $conn->prepare('DELETE FROM delivery_activity WHERE delivery_id = ?');
+                if (!$activity_stmt) {
+                    $conn->rollback();
+                    throw new RuntimeException('Unable to prepare delivery activity cleanup: ' . $conn->error);
+                }
+                $activity_stmt->bind_param('i', $delivery_id);
+                if (!$activity_stmt->execute()) {
+                    $error = $activity_stmt->error;
+                    $activity_stmt->close();
+                    $conn->rollback();
+                    throw new RuntimeException('Unable to remove delivery activity history: ' . $error);
+                }
+                $activity_stmt->close();
+
+                $delete_stmt = $conn->prepare(
+                    'DELETE FROM delivery
+                     WHERE delivery_id = ? AND (assigned_by = ? OR assigned_by IS NULL)'
+                );
+                if (!$delete_stmt) {
+                    $conn->rollback();
+                    throw new RuntimeException('Unable to prepare delivery deletion: ' . $conn->error);
+                }
+                $delete_stmt->bind_param('ii', $delivery_id, $current_user_id);
+                if (!$delete_stmt->execute() || $delete_stmt->affected_rows !== 1) {
+                    $error = $delete_stmt->error ?: 'The delivery could not be deleted.';
+                    $delete_stmt->close();
+                    $conn->rollback();
+                    throw new RuntimeException('Unable to delete the delivery: ' . $error);
+                }
+                $delete_stmt->close();
+
+                if (!$conn->commit()) {
+                    $conn->rollback();
+                    throw new RuntimeException('Unable to commit the delivery deletion: ' . $conn->error);
+                }
+
+                $proof_filename = (string) ($delivery_to_delete['delivery_proof_image'] ?? '');
+                if (preg_match('/^[a-f0-9]{32}\.(jpg|png|webp)$/', $proof_filename)) {
+                    $proof_directory = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'delivery-proofs';
+                    $resolved_directory = realpath($proof_directory);
+                    $proof_path = realpath($proof_directory . DIRECTORY_SEPARATOR . $proof_filename);
+                    if (
+                        $resolved_directory !== false
+                        && $proof_path !== false
+                        && str_starts_with($proof_path, $resolved_directory . DIRECTORY_SEPARATOR)
+                        && is_file($proof_path)
+                        && !unlink($proof_path)
+                    ) {
+                        error_log('Unable to remove delivery proof after deleting delivery #' . $delivery_id . '.');
+                    }
+                }
+
+                $_SESSION['delivery_success'] = 'Delivery record deleted successfully.';
+            }
+        }
+
+        header('Location: delivery_main.php?restore_delivery_view=1');
         exit();
     }
 
@@ -899,6 +1004,7 @@ if ($module === 'delivery') {
                         LEFT JOIN users assigner ON d.assigned_by = assigner.id
                         LEFT JOIN users reviewer ON d.completion_reviewed_by = reviewer.id
                         WHERE d.status != 'Delivered' OR d.status IS NULL
+                           OR d.completion_review_status = 'rejected'
                         GROUP BY d.delivery_id
                         ORDER BY d.delivery_id DESC";
         $stmt_pending = $conn->prepare($sql_pending);
@@ -915,7 +1021,7 @@ if ($module === 'delivery') {
                         LEFT JOIN users u ON d.driver_id = u.id
                         LEFT JOIN users assigner ON d.assigned_by = assigner.id
                         LEFT JOIN users reviewer ON d.completion_reviewed_by = reviewer.id
-                        WHERE (d.status != 'Delivered' OR d.status IS NULL)
+                        WHERE (d.status != 'Delivered' OR d.status IS NULL OR d.completion_review_status = 'rejected')
                           AND d.driver_id = ?
                         GROUP BY d.delivery_id
                         ORDER BY d.delivery_id DESC";
@@ -1241,7 +1347,12 @@ elseif ($module === 'factory') {
                     : 'Production changes requested and sent to the employee.';
             }
         }
-        header('Location: factory_main.php');
+        $reviewReturn = (string) ($_POST['review_return'] ?? '');
+        header('Location: ' . (
+            $reviewReturn === 'factory_main.php?restore_production_view=1'
+                ? 'factory_main.php?restore_production_view=1'
+                : 'factory_main.php'
+        ));
         exit();
     }
 
@@ -1937,21 +2048,26 @@ elseif ($module === 'factory') {
             $role_stage_filter = $current_work_type === null
                 ? ''
                 : " AND pa.work_type = '" . $current_work_type . "'";
-            $stage_visibility_filter = " AND pa.work_status = 'Pending'
-                                        AND (pa.work_type = 'Cooking'
-                                             OR NOT EXISTS (
-                                                 SELECT 1
-                                                 FROM production_assignments legacy_cooking
-                                                 WHERE legacy_cooking.production_id = pa.production_id
-                                                   AND legacy_cooking.work_type = 'Cooking'
-                                             )
-                                             OR EXISTS (
-                                            SELECT 1
-                                            FROM production_assignments cooking
-                                            WHERE cooking.production_id = pa.production_id
-                                              AND cooking.work_type = 'Cooking'
-                                              AND cooking.work_status = 'Done'
-                                        ))";
+            $stage_visibility_filter = " AND (
+                                            pa.completion_review_status = 'rejected'
+                                            OR (
+                                                pa.work_status = 'Pending'
+                                                AND (pa.work_type = 'Cooking'
+                                                     OR NOT EXISTS (
+                                                         SELECT 1
+                                                         FROM production_assignments legacy_cooking
+                                                         WHERE legacy_cooking.production_id = pa.production_id
+                                                           AND legacy_cooking.work_type = 'Cooking'
+                                                     )
+                                                     OR EXISTS (
+                                                        SELECT 1
+                                                        FROM production_assignments cooking
+                                                        WHERE cooking.production_id = pa.production_id
+                                                          AND cooking.work_type = 'Cooking'
+                                                          AND cooking.work_status = 'Done'
+                                                     ))
+                                            )
+                                        )";
             $pending_assignment_source = "INNER JOIN production_assignments pa
                                             ON pa.production_id = CAST(p.production_id AS CHAR)
                                            AND pa.work_type IN ('Cooking', 'Packaging')
@@ -1991,10 +2107,12 @@ elseif ($module === 'factory') {
         }
         $assigned_status_expression = $is_production_worker
             ? "CASE
+                   WHEN pa.completion_review_status = 'rejected' THEN 'Changes requested'
                    WHEN pa.completion_review_status = 'pending_review' THEN 'Awaiting Approval'
                    ELSE COALESCE(pa.work_status, 'Pending')
                END"
             : "CASE
+                   WHEN pa.completion_review_status = 'rejected' THEN 'Changes requested'
                    WHEN pa.completion_review_status = 'pending_review' THEN 'Awaiting Approval'
                    WHEN stages.work_type = 'Packaging'
                      AND pa.employee_id IS NULL
@@ -2042,7 +2160,8 @@ elseif ($module === 'factory') {
                                $assigned_status_expression AS assigned_work_status
                         FROM production p
                         $pending_assignment_source
-                        WHERE (p.product_status != 'product done' OR p.product_status IS NULL)"
+                        WHERE ((p.product_status != 'product done' OR p.product_status IS NULL)
+                               OR pa.completion_review_status = 'rejected')"
                         . $pending_stage_visibility_filter . "
                         ORDER BY p.production_id DESC, assigned_work_type";
 

@@ -273,13 +273,13 @@ if ($employee !== null) {
     while ($task = $taskResult->fetch_assoc()) {
         $task['progress'] = max(0, min(100, (int) ($task['progress'] ?? 0)));
         $normalizedStatus = strtolower(trim((string) ($task['status'] ?? 'pending')));
-        if (in_array($normalizedStatus, ['completed', 'complete', 'done'], true)) {
-            $task['display_status'] = 'completed';
-            $task['progress'] = 100;
+        if (($task['completion_review_status'] ?? '') === 'rejected') {
+            $task['display_status'] = 'changes_requested';
         } elseif (($task['completion_review_status'] ?? '') === 'pending_review') {
             $task['display_status'] = 'review';
-        } elseif (($task['completion_review_status'] ?? '') === 'rejected') {
-            $task['display_status'] = 'changes_requested';
+        } elseif (in_array($normalizedStatus, ['completed', 'complete', 'done'], true)) {
+            $task['display_status'] = 'completed';
+            $task['progress'] = 100;
         } elseif (!empty($task['due_date']) && $task['due_date'] < $today) {
             $task['display_status'] = 'overdue';
         } else {
@@ -354,10 +354,17 @@ $visibleTasks = array_values(array_filter($tasks, static function (array $task) 
     if ($statusFilter !== 'all' && $task['display_status'] !== $statusFilter) {
         return false;
     }
-    if ($periodFilter === 'week' && !empty($task['due_date']) && ($task['due_date'] < $weekStart || $task['due_date'] > $weekEnd)) {
+    if (
+        $task['display_status'] !== 'changes_requested'
+        && $periodFilter === 'week'
+        && !empty($task['due_date'])
+        && ($task['due_date'] < $weekStart || $task['due_date'] > $weekEnd)
+    ) {
         return false;
     }
-    return $periodFilter === 'all' || !empty($task['due_date']);
+    return $periodFilter === 'all'
+        || $task['display_status'] === 'changes_requested'
+        || !empty($task['due_date']);
 }));
 $historyTasks = array_values(array_filter(
     $visibleTasks,
@@ -406,6 +413,7 @@ if ($initials === '') {
     <?php endif; ?>
     <link rel="stylesheet" href="css/tasktrack_sidebar.css?v=<?= filemtime(__DIR__ . '/css/tasktrack_sidebar.css'); ?>">
     <link rel="stylesheet" href="css/office_employee.css?v=<?= filemtime(__DIR__ . '/css/office_employee.css'); ?>">
+    <link rel="stylesheet" href="css/task-review-dialog.css?v=<?= filemtime(__DIR__ . '/css/task-review-dialog.css'); ?>">
     <link rel="stylesheet" href="css/role-form-controls.css?v=<?= filemtime(__DIR__ . '/css/role-form-controls.css'); ?>">
     <?php if ($accountRole === 'HR'): ?>
     <style>
@@ -427,10 +435,7 @@ if ($initials === '') {
 <?php if ($accountRole === 'HR'): ?>
 <div class="hr-shell">
     <aside class="hr-sidebar" id="hrSidebar" aria-label="HR navigation">
-        <a class="hr-brand" href="HR.php" aria-label="TaskTrack HR home">
-            <span class="hr-brand-mark" aria-hidden="true">T</span>
-            <span class="hr-brand-name">TASKTRACK</span>
-        </a>
+        <?php include __DIR__ . '/config/hr_sidebar_brand.php'; ?>
         <nav class="hr-nav">
             <a class="hr-nav-link" href="HR.php">
                 <span class="hr-nav-icon" aria-hidden="true">▦</span>
@@ -472,6 +477,9 @@ if ($initials === '') {
     <?php $payrollSidebarOnTasks = true; $payrollSidebarActive = 'tasks'; include __DIR__ . '/config/payroll_sidebar.php'; ?>
     <?php include __DIR__ . '/config/notification_bell.php'; ?>
     <div class="employee-main payroll-tasks-main">
+<?php elseif ($accountRole === 'employee'): ?>
+<?php include __DIR__ . '/config/notification_bell.php'; ?>
+<div class="employee-main employee-main--no-sidebar">
 <?php else: ?>
 <?php $tasktrackActive = 'my-tasks'; include __DIR__ . '/config/tasktrack_sidebar.php'; ?>
 <div class="employee-main">
@@ -581,7 +589,7 @@ if ($initials === '') {
                             $status = $task['display_status'];
                             $statusLabel = match ($status) {
                                 'review' => 'Request sent · waiting for approval',
-                                'changes_requested' => 'Changes requested · resubmit',
+                                'changes_requested' => 'Changes requested',
                                 default => ucfirst($status),
                             };
                             $priority = strtolower(trim((string) ($task['priority_level'] ?? 'medium')));
@@ -687,7 +695,7 @@ if ($initials === '') {
         <div class="dialog-badges">
             <span class="status-pill is-<?= $escape($selectedTask['display_status']); ?>"><i></i><?= $escape(match ($selectedTask['display_status']) {
                 'review' => 'Request sent · waiting for approval',
-                'changes_requested' => 'Changes requested · resubmit',
+                'changes_requested' => 'Changes requested',
                 default => ucfirst($selectedTask['display_status']),
             }); ?></span>
             <span class="priority-badge"><?= $escape(ucfirst($selectedTask['priority_level'] ?? 'medium')); ?> priority</span>
@@ -749,8 +757,23 @@ if ($initials === '') {
         </div>
     </form>
 </dialog>
+<dialog class="task-review-dialog" id="taskSubmitConfirmation" aria-labelledby="taskSubmitConfirmationTitle">
+    <div class="task-review-dialog-card">
+        <span class="task-review-dialog-kicker">EMPLOYEE TASK</span>
+        <h2 id="taskSubmitConfirmationTitle">Submit task for review?</h2>
+        <p class="task-review-dialog-description">Only submit when the task is finished and ready for your supervisor to review.</p>
+        <div class="task-review-dialog-actions">
+            <button class="task-review-cancel-button" type="button" id="cancelTaskSubmission">Cancel</button>
+            <button class="task-approve-button" type="button" id="confirmTaskSubmission">Submit for review</button>
+        </div>
+    </div>
+</dialog>
 <script>
     const taskDialog = document.getElementById('taskDialog');
+    const taskForm = taskDialog.querySelector('form');
+    const taskSubmitConfirmation = document.getElementById('taskSubmitConfirmation');
+    let pendingTaskSubmitter = null;
+    let confirmTaskSubmit = false;
     const progressInput = document.getElementById('progressInput');
     const progressOutput = document.getElementById('progressOutput');
     if (progressInput && progressOutput) {
@@ -761,6 +784,30 @@ if ($initials === '') {
     });
     taskDialog.addEventListener('click', (event) => {
         if (event.target === taskDialog) taskDialog.close();
+    });
+    taskForm.addEventListener('submit', (event) => {
+        if (event.submitter?.name !== 'task_action' || event.submitter.value !== 'mark_complete') return;
+        if (confirmTaskSubmit) {
+            confirmTaskSubmit = false;
+            return;
+        }
+
+        event.preventDefault();
+        pendingTaskSubmitter = event.submitter;
+        taskSubmitConfirmation.showModal();
+    });
+    document.getElementById('cancelTaskSubmission').addEventListener('click', () => {
+        pendingTaskSubmitter = null;
+        taskSubmitConfirmation.close();
+    });
+    document.getElementById('confirmTaskSubmission').addEventListener('click', () => {
+        const submitter = pendingTaskSubmitter;
+        pendingTaskSubmitter = null;
+        taskSubmitConfirmation.close();
+        if (submitter) {
+            confirmTaskSubmit = true;
+            taskForm.requestSubmit(submitter);
+        }
     });
     taskDialog.showModal();
 </script>

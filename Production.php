@@ -315,6 +315,33 @@ $active_tab = $_GET['tab'] ?? 'main';
             font-weight: 600;
             word-break: break-word;
         }
+        .production-review-feedback {
+            margin: 12px 0;
+            padding: 11px 12px;
+            border: 1px solid #fecaca;
+            border-left: 3px solid #dc5a5a;
+            border-radius: 8px;
+            background: #fff7f7;
+            color: #7f3030;
+        }
+        .production-review-feedback[hidden] {
+            display: none;
+        }
+        .production-review-feedback strong {
+            display: block;
+            margin-bottom: 5px;
+            color: #a3312a;
+            font-size: 11px;
+        }
+        .production-review-feedback p {
+            max-height: 105px;
+            margin: 0;
+            overflow-y: auto;
+            overflow-wrap: anywhere;
+            white-space: pre-wrap;
+            font-size: 11px;
+            line-height: 1.5;
+        }
         .btn-continue {
             width: 100%;
             background-color: #8bb396;
@@ -580,6 +607,19 @@ $active_tab = $_GET['tab'] ?? 'main';
             letter-spacing: 0.5px;
             transition: opacity 0.3s ease;
         }
+        .tea-submit-cancel {
+            margin-top: 20px;
+            padding: 9px 16px;
+            border: 1px solid #64748b;
+            border-radius: 7px;
+            background: #334155;
+            color: #f8fafc;
+            font: inherit;
+            cursor: pointer;
+        }
+        .tea-submit-cancel:hover {
+            background: #475569;
+        }
         @media (prefers-reduced-motion: reduce) {
             .tea-loading-screen *,
             .tea-loading-screen *::after {
@@ -713,9 +753,9 @@ $active_tab = $_GET['tab'] ?? 'main';
                             $first_item = reset($pending_records);
                             foreach ($pending_records as $index => $row): 
                                 $row_status = (string) ($row['assigned_work_status'] ?? 'Pending');
-                                $is_done = $row_status === 'Done';
-                                $is_review_pending = $row_status === 'Awaiting Approval';
                                 $is_changes_requested = ($row['completion_review_status'] ?? '') === 'rejected';
+                                $is_done = $row_status === 'Done' && !$is_changes_requested;
+                                $is_review_pending = $row_status === 'Awaiting Approval';
                                 $assigned_by_name = trim((string) ($row['assigned_by_name'] ?? ''));
                                 $reviewed_by_name = trim((string) ($row['completion_reviewed_by_name'] ?? ''));
                             ?>
@@ -727,7 +767,7 @@ $active_tab = $_GET['tab'] ?? 'main';
                                     data-target="<?= htmlspecialchars($row['target_pcs']); ?>"
                                     data-due="<?= htmlspecialchars($row['due_date']); ?>"
                                     data-work-type="<?= htmlspecialchars($row['assigned_work_type'] ?? ''); ?>"
-                                    data-status="<?= $is_done ? 'done' : ($is_review_pending ? 'review' : ($is_changes_requested ? 'changes_requested' : 'pending')); ?>"
+                                    data-status="<?= $is_changes_requested ? 'changes_requested' : ($is_done ? 'done' : ($is_review_pending ? 'review' : 'pending')); ?>"
                                     data-review-note="<?= htmlspecialchars((string) ($row['completion_review_note'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
                                     data-assigned-by="<?= htmlspecialchars($assigned_by_name !== '' ? $assigned_by_name : 'Not recorded', ENT_QUOTES, 'UTF-8'); ?>"
                                     data-reviewed-by="<?= htmlspecialchars($reviewed_by_name, ENT_QUOTES, 'UTF-8'); ?>"
@@ -737,7 +777,7 @@ $active_tab = $_GET['tab'] ?? 'main';
                                             <div class="item-icon">GT</div>
                                             <div>
                                                 <strong><?= htmlspecialchars($row['product_name'] ?? 'N/A'); ?></strong><br>
-                                                <small style="color:#aaa; font-size:10px;"><?= $is_done ? 'Completed' : ($is_review_pending ? 'Awaiting supervisor approval' : ($is_changes_requested ? 'Supervisor requested changes' : 'In Progress')); ?></small>
+                                                <small style="color:#aaa; font-size:10px;"><?= $is_done ? 'Completed' : ($is_review_pending ? 'Awaiting supervisor approval' : ($is_changes_requested ? 'Changes requested' : 'In Progress')); ?></small>
                                             </div>
                                         </div>
                                     </td>
@@ -752,7 +792,7 @@ $active_tab = $_GET['tab'] ?? 'main';
                                         <?php elseif ($is_review_pending): ?>
                                             <span class="badge badge-review">Request sent · Waiting for approval</span>
                                         <?php elseif ($is_changes_requested): ?>
-                                            <span class="badge badge-changes-requested">Changes requested · resubmit</span>
+                                            <span class="badge badge-changes-requested">Changes requested</span>
                                         <?php else: ?>
                                             <span class="badge badge-pending">In Progress</span>
                                         <?php endif; ?>
@@ -810,7 +850,13 @@ $active_tab = $_GET['tab'] ?? 'main';
                             <span id="detailBoxDue"><?= htmlspecialchars($first_item['due_date']); ?></span>
                         </div>
                     </div>
-                    <p id="reviewFeedback" role="status" style="display:none; margin: 12px 0; padding: 10px; border: 1px solid #fecaca; border-radius: 8px; color: #b4232f; background: #fff0f0;"></p>
+                    <section id="reviewFeedback" class="production-review-feedback" role="status"
+                        <?= !empty($first_item['completion_review_note']) && ($first_item['completion_review_status'] ?? '') === 'rejected' ? '' : 'hidden'; ?>>
+                        <strong>Supervisor feedback</strong>
+                        <p id="reviewFeedbackText"><?= !empty($first_item['completion_review_note']) && ($first_item['completion_review_status'] ?? '') === 'rejected'
+                            ? htmlspecialchars((string) $first_item['completion_review_note'], ENT_QUOTES, 'UTF-8')
+                            : ''; ?></p>
+                    </section>
                     <p id="assignmentReviewDetails" style="margin: 10px 0; color: #64748b; font-size: 12px;">
                         Assigned by: <?= htmlspecialchars(trim((string) ($first_item['assigned_by_name'] ?? '')) ?: 'Not recorded', ENT_QUOTES, 'UTF-8'); ?>
                         <?php if (!empty($first_item['completion_reviewed_by_name'])): ?>
@@ -820,7 +866,9 @@ $active_tab = $_GET['tab'] ?? 'main';
                     </p>
 
                     <div id="actionContainer">
-                        <?php if (($first_item['assigned_work_status'] ?? 'Pending') === 'Awaiting Approval'): ?>
+                        <?php if (($first_item['completion_review_status'] ?? '') === 'rejected'): ?>
+                            <button type="button" class="btn-continue" onclick="openModal()">Resubmit <?= htmlspecialchars($first_item['assigned_work_type'] ?? 'Stage'); ?> for approval</button>
+                        <?php elseif (($first_item['assigned_work_status'] ?? 'Pending') === 'Awaiting Approval'): ?>
                             <button type="button" class="btn-continue" style="background:#ccc; cursor:not-allowed;" disabled>Awaiting supervisor approval</button>
                         <?php elseif (($first_item['assigned_work_status'] ?? 'Pending') !== 'Done'): ?>
                             <button type="button" class="btn-continue" onclick="openModal()">Submit <?= htmlspecialchars($first_item['assigned_work_type'] ?? 'Stage'); ?> for approval</button>
@@ -935,6 +983,7 @@ $active_tab = $_GET['tab'] ?? 'main';
             <div class="tea-box-tape"></div>
         </div>
         <div id="teaLoadingText" class="tea-loading-text">Preparing production package...</div>
+        <button type="button" class="tea-submit-cancel" id="cancelProductionSubmission">Cancel submission</button>
     </div>
     <div class="tea-success-overlay" aria-hidden="true">
         <div class="tea-check-circle">✓</div>
@@ -981,8 +1030,8 @@ function selectTask(rowElement) {
     // i-Update ang hidden ID sa Modal
     document.getElementById('modalInputId').value = id;
     const reviewFeedback = document.getElementById('reviewFeedback');
-    reviewFeedback.textContent = reviewNote ? 'Supervisor feedback: ' + reviewNote : '';
-    reviewFeedback.style.display = reviewNote ? 'block' : 'none';
+    document.getElementById('reviewFeedbackText').textContent = reviewNote;
+    reviewFeedback.hidden = !reviewNote;
     const assignmentReviewDetails = document.getElementById('assignmentReviewDetails');
     assignmentReviewDetails.textContent = 'Assigned by: ' + assignedBy
         + (reviewedBy ? ' · ' + (status === 'done' ? 'Approved by: ' : 'Changes requested by: ') + reviewedBy : '')
@@ -1034,7 +1083,19 @@ function closeModal() {
 }
 
 const productionCompletionForm = document.getElementById('productionCompletionForm');
+let productionSubmissionTimers = [];
 if (productionCompletionForm) {
+    document.getElementById('cancelProductionSubmission').addEventListener('click', function () {
+        productionSubmissionTimers.forEach(window.clearTimeout);
+        productionSubmissionTimers = [];
+
+        const loader = document.getElementById('teaLoadingPage');
+        loader.className = 'tea-loading-screen';
+        loader.setAttribute('aria-hidden', 'true');
+        productionCompletionForm.dataset.submitting = 'false';
+        productionCompletionForm.dataset.readyToSubmit = 'false';
+    });
+
     productionCompletionForm.addEventListener('submit', function (event) {
         if (productionCompletionForm.dataset.submitting === 'true') {
             if (productionCompletionForm.dataset.readyToSubmit === 'true') {
@@ -1056,26 +1117,26 @@ if (productionCompletionForm) {
         statusText.textContent = 'Preparing production package...';
         statusText.style.opacity = '1';
 
-        window.setTimeout(function () {
+        productionSubmissionTimers.push(window.setTimeout(function () {
             loader.classList.add('step-close');
             statusText.textContent = 'Closing tea box flaps...';
-        }, 900);
+        }, 900));
 
-        window.setTimeout(function () {
+        productionSubmissionTimers.push(window.setTimeout(function () {
             loader.classList.add('step-tape');
             statusText.textContent = 'Taping tea package securely...';
-        }, 1400);
+        }, 1400));
 
-        window.setTimeout(function () {
+        productionSubmissionTimers.push(window.setTimeout(function () {
             loader.classList.add('step-zoom');
             statusText.style.opacity = '0';
-        }, 1900);
+        }, 1900));
 
-        window.setTimeout(function () {
+        productionSubmissionTimers.push(window.setTimeout(function () {
             loader.classList.add('step-success');
-        }, 2300);
+        }, 2300));
 
-        window.setTimeout(function () {
+        productionSubmissionTimers.push(window.setTimeout(function () {
             loader.classList.remove('active');
             loader.setAttribute('aria-hidden', 'true');
             productionCompletionForm.dataset.readyToSubmit = 'true';
@@ -1085,7 +1146,7 @@ if (productionCompletionForm) {
                 return;
             }
             productionCompletionForm.requestSubmit();
-        }, 3500);
+        }, 3500));
     });
 }
 

@@ -404,8 +404,8 @@ a {
 
 .list-avatar {
     display: grid;
-    width: 29px;
-    height: 29px;
+    width: 34px;
+    height: 34px;
     place-items: center;
     overflow: hidden;
     border-radius: 50%;
@@ -487,8 +487,8 @@ a {
 
 .profile-avatar {
     display: grid;
-    width: 72px;
-    height: 72px;
+    width: 78px;
+    height: 78px;
     place-items: center;
     overflow: hidden;
     border-radius: 50%;
@@ -640,16 +640,16 @@ a {
 
 .task-columns {
     display: grid;
-    min-height: 310px;
-    flex: 1;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
     align-items: stretch;
+    align-content: start;
     gap: 16px;
 }
 
 .task-column {
     display: flex;
     min-width: 0;
+    min-height: 230px;
     max-height: min(62vh, 590px);
     flex-direction: column;
     overflow: hidden;
@@ -664,6 +664,10 @@ a {
 
 .task-column.is-review {
     border-color: #c8d8ff;
+}
+
+.task-column.is-changes-requested {
+    border-color: #efc1c1;
 }
 
 .task-column.is-pending {
@@ -729,6 +733,18 @@ a {
 
 .is-review .task-marker {
     background: #8eafff;
+}
+
+.is-changes-requested .task-marker {
+    background: #ef8d8d;
+}
+
+.task-change-note {
+    display: block;
+    margin-top: 6px;
+    color: #a3312a;
+    font-size: 10px;
+    line-height: 1.4;
 }
 
 .is-pending .task-marker {
@@ -1403,8 +1419,8 @@ a {
     }
 
     .profile-avatar {
-        width: 60px;
-        height: 60px;
+        width: 64px;
+        height: 64px;
     }
 
     .profile-facts {
@@ -1485,8 +1501,8 @@ a {
     }
 
     .profile-avatar {
-        width: 52px;
-        height: 52px;
+        width: 56px;
+        height: 56px;
         font-size: 21px;
     }
 

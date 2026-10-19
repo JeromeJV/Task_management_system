@@ -4,6 +4,7 @@ Ang TaskTrack ay web-based na sistema para pamahalaan ang mga empleyado, attenda
 
 ## Mga pangunahing bahagi
 
+- **Database ERD** — tingnan ang [visual ERD PDF](docs/ERD.pdf) para sa compact na diagram at ang [ERD documentation](docs/ERD.md) para sa kumpletong listahan ng columns at relasyon.
 - **Dashboard at reports** — buod ng mga account at operasyon para sa administrator. Sa **Admin Dashboard** at **Admin → Reports**, maaaring pumili ng araw, kasalukuyang linggo (Lunes hanggang ngayon), huling 7 araw, kasalukuyang buwan/taon, o custom na petsa. Sakop ng napiling date range ang lahat ng dated operational totals, status breakdowns, at graphs sa dashboard: attendance date, payroll pay date, task submission date, production assignment/update timestamp, at delivery completion date (scheduled date kung hindi pa kumpleto). Ang employee profile at system account totals, pati accounts by role, ay kasalukuyang snapshot dahil walang maaasahang historical creation timestamp ang mga ito. May sariling pie chart para sa attendance statuses at bar chart para sa task/production/delivery totals ang Dashboard; hiwalay ang detalyadong report graphs at CSV export.
 - **Mga account at access** — paggawa at pamamahala ng user accounts, pagtatalaga ng role, pag-enable o pag-disable ng account, pag-link ng account sa employee profile, at pamamahala ng profile picture.
 - **Employee tasks** — paggawa at pagtatalaga ng office tasks, pag-update ng progress, at pagpapasa ng natapos na trabaho para sa review.

@@ -87,7 +87,7 @@ $query = $isDailyRoster
               AND today_attendance.attendance_date = ?
         )
         LEFT JOIN users u ON u.employee_id = e.employee_id
-        WHERE 1=1
+        WHERE (e.hire_date IS NULL OR e.hire_date <= ?)
     "
     : "
         SELECT a.attendance_id, a.employee_id, a.attendance_date,
@@ -101,8 +101,8 @@ $query = $isDailyRoster
         WHERE 1=1
     ";
 
-$params = $isDailyRoster ? [$selectedDate, $selectedDate] : [];
-$types = $isDailyRoster ? 'ss' : '';
+$params = $isDailyRoster ? [$selectedDate, $selectedDate, $selectedDate] : [];
+$types = $isDailyRoster ? 'sss' : '';
 if (in_array($period, ['weekly', 'monthly'], true)) {
     $query .= ' AND a.attendance_date BETWEEN ? AND ?';
     $params[] = $rangeStart;
@@ -387,10 +387,7 @@ function formatTime($timeStr) {
 <body>
     <div class="hr-shell">
         <aside class="hr-sidebar" id="hrSidebar" aria-label="HR navigation">
-            <a class="hr-brand" href="HR.php" aria-label="TaskTrack HR home">
-                <span class="hr-brand-mark" aria-hidden="true">T</span>
-                <span class="hr-brand-name">TASKTRACK</span>
-            </a>
+            <?php include __DIR__ . '/config/hr_sidebar_brand.php'; ?>
             <nav class="hr-nav">
                 <a class="hr-nav-link" href="HR.php">
                     <span class="hr-nav-icon" aria-hidden="true">▦</span>

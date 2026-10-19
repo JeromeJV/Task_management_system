@@ -1051,6 +1051,7 @@ textarea {
 
 .active-task-card {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
     gap: 18px;
@@ -1081,6 +1082,18 @@ textarea {
     border-color: #F2D79A;
     border-left-color: #D99A20;
     background: linear-gradient(100deg, #FFFCF3 0%, #FFF 100%);
+}
+
+.active-task-card.is-changes-requested {
+    border-color: #F2C5C5;
+    border-left-color: #D64B4B;
+    background: linear-gradient(100deg, #FFF5F5 0%, #FFF 100%);
+}
+
+.active-task-card.is-changes-requested .active-task-status {
+    border-color: #F2C5C5;
+    background: #FFF0F0;
+    color: #A83232;
 }
 
 .active-task-card[hidden] {

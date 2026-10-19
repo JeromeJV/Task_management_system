@@ -768,7 +768,7 @@ $payrolls->close();
 
               <hr class="my-2 border-emerald-200">
 
-              <div class="grid grid-cols-3 gap-3">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label class="block text-[11px] text-zinc-600 font-semibold">Regular Pay (₱)</label>
                   <input type="number" step="0.01" id="regular_pay" name="regular_pay" value="000.00" class="w-full px-2.5 py-1.5 border rounded-lg text-xs font-mono bg-emerald-100 font-bold" readonly>
@@ -777,10 +777,6 @@ $payrolls->close();
                   <label class="block text-[11px] text-zinc-600">Paid SIL Leave (₱)</label>
                   <input type="number" step="0.01" id="paid_leaves_display" placeholder="0.00" readonly class="w-full px-2.5 py-1.5 border rounded-lg text-xs font-mono bg-zinc-100">
                   <p class="text-[10px] text-zinc-500 col-span-2">Calculated automatically from HR-recorded paid SIL. Unpaid LWOP is not included in pay.</p>
-                </div>
-                <div>
-                  <label class="block text-[11px] text-zinc-600">Daily Allowance (₱)</label>
-                  <input type="number" step="0.01" name="daily_allowance" value="1300.00" class="w-full px-2.5 py-1.5 border rounded-lg text-xs font-mono">
                 </div>
               </div>
 
@@ -1188,7 +1184,6 @@ $payrolls->close();
             <tr class="bold"><td>EARNINGS</td><td class="right">AMOUNT</td></tr>
             <tr><td>Regular Pay (${daysWorked} days)</td><td class="right">₱${parseFloat(data.regular_pay || 0).toFixed(2)}</td></tr>
             <tr><td>Paid Leaves</td><td class="right">₱${parseFloat(data.paid_leaves || 0).toFixed(2)}</td></tr>
-            <tr><td>Daily Allowance</td><td class="right">₱${parseFloat(data.daily_allowance || 0).toFixed(2)}</td></tr>
             <tr class="bold"><td>GROSS PAY</td><td class="right">₱${parseFloat(data.gross_pay || 0).toFixed(2)}</td></tr>
           </table>
           <br>

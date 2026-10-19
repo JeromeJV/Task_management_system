@@ -453,10 +453,7 @@ $escape = static fn($value): string => htmlspecialchars((string) $value, ENT_QUO
 <body>
     <div class="hr-shell">
         <aside class="hr-sidebar" id="hrSidebar" aria-label="HR navigation">
-            <a class="hr-brand" href="HR.php" aria-label="TaskTrack HR home">
-                <span class="hr-brand-mark" aria-hidden="true">T</span>
-                <span class="hr-brand-name">TASKTRACK</span>
-            </a>
+            <?php include __DIR__ . '/config/hr_sidebar_brand.php'; ?>
             <nav class="hr-nav">
                 <a class="hr-nav-link" href="HR.php">
                     <span class="hr-nav-icon" aria-hidden="true">▦</span>

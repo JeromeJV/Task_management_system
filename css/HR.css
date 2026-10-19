@@ -41,8 +41,8 @@ a {
     flex-direction: column;
     align-items: stretch;
     overflow: hidden;
-    border-right: 1px solid #E1E5E2;
-    background: #FFFFFF;
+    border-right: 1px solid #276749;
+    background: #14532D;
     transition: width 180ms ease, box-shadow 180ms ease;
 }
 
@@ -52,27 +52,39 @@ a {
     box-shadow: 8px 0 24px rgba(31, 41, 55, 0.09);
 }
 
+.hr-sidebar:hover .hr-brand,
+.hr-sidebar:focus-within .hr-brand {
+    justify-content: center;
+}
+
 .hr-brand {
     display: flex;
     min-height: 72px;
     align-items: center;
     gap: 12px;
     padding: 0 16px;
-    border-bottom: 1px solid #EEF0EF;
+    border-bottom: 1px solid rgba(220, 252, 231, 0.22);
     white-space: nowrap;
 }
 
 .hr-brand-mark {
     display: grid;
-    width: 38px;
-    height: 38px;
-    flex: 0 0 38px;
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
     place-items: center;
     border-radius: 10px;
-    background: #1F6E4A;
+    background: #166534;
     color: #FFFFFF;
     font-size: 18px;
     font-weight: 800;
+}
+
+.hr-brand-mark img {
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+    object-fit: cover;
 }
 
 .hr-brand-name,
@@ -92,7 +104,7 @@ a {
 }
 
 .hr-brand-name {
-    color: #17251D;
+    color: #F0FDF4;
     font-size: 14px;
     font-weight: 800;
     letter-spacing: 0.04em;
@@ -113,19 +125,19 @@ a {
     gap: 15px;
     padding: 0 13px;
     border-radius: 10px;
-    color: #647168;
+    color: #DCFCE7;
     white-space: nowrap;
     transition: background 150ms ease, color 150ms ease;
 }
 
 .hr-nav-link:hover,
 .hr-nav-link.is-active {
-    background: #EAF4ED;
-    color: #1F6E4A;
+    background: #DCFCE7;
+    color: #14532D;
 }
 
 .hr-nav-link.is-active {
-    box-shadow: inset 3px 0 #1F6E4A;
+    box-shadow: inset 3px 0 #86EFAC;
 }
 
 .hr-nav-icon {
@@ -500,9 +512,9 @@ a {
 
 .hr-employee-avatar {
     display: grid;
-    width: 48px;
-    height: 48px;
-    flex: 0 0 48px;
+    width: 54px;
+    height: 54px;
+    flex: 0 0 54px;
     place-items: center;
     border-radius: 50%;
     background: #E5F1E9;
@@ -992,9 +1004,9 @@ a {
     }
 
     .hr-brand-mark {
-        width: 38px;
-        height: 38px;
-        flex-basis: 38px;
+        width: 44px;
+        height: 44px;
+        flex-basis: 44px;
     }
 
     .hr-brand-name {
@@ -1148,9 +1160,9 @@ a {
     }
 
     .hr-employee-avatar {
-        width: 40px;
-        height: 40px;
-        flex-basis: 40px;
+        width: 46px;
+        height: 46px;
+        flex-basis: 46px;
     }
 
     .hr-employee-card h3 {

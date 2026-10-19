@@ -38,7 +38,6 @@ if (!$record || $record['status'] !== 'Paid') {
 $amountFields = [
     'regular_pay' => 'Regular pay',
     'paid_leaves' => 'Paid leaves',
-    'daily_allowance' => 'Daily allowance',
     'reimbursement' => 'Reimbursement',
     'late_deduction' => 'Late deduction',
     'sss' => 'SSS',

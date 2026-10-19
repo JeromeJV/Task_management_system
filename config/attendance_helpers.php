@@ -69,7 +69,8 @@ function finalizeDailyAttendance(mysqli $conn, string $currentDate, string $curr
             ?,
             'Absent'
         FROM employee e
-        WHERE NOT EXISTS (
+        WHERE (e.hire_date IS NULL OR e.hire_date <= ?)
+          AND NOT EXISTS (
             SELECT 1
             FROM attendance a
             WHERE a.employee_id = e.employee_id
@@ -89,7 +90,7 @@ function finalizeDailyAttendance(mysqli $conn, string $currentDate, string $curr
         throw new RuntimeException('Failed to prepare automatic absent update: ' . $conn->error);
     }
 
-    $absentStatement->bind_param('ssss', $currentDate, $currentDate, $currentDate, $currentDate);
+    $absentStatement->bind_param('sssss', $currentDate, $currentDate, $currentDate, $currentDate, $currentDate);
     if (!$absentStatement->execute()) {
         $error = $absentStatement->error;
         $absentStatement->close();

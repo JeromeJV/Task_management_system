@@ -46,6 +46,8 @@ $roles = [
     'packaging' => 'Packaging',
     'employee' => 'Employee',
 ];
+$creatableRoles = $roles;
+unset($creatableRoles['pro']);
 $section = (string) ($_GET['section'] ?? 'dashboard');
 if (!in_array($section, ['dashboard', 'accounts', 'audit', 'reports'], true)) {
     $section = 'dashboard';
@@ -304,9 +306,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         } elseif ($action === 'create_account') {
             $employeeId = filter_var($_POST['employee_id'] ?? null, FILTER_VALIDATE_INT);
             $role = (string) ($_POST['role'] ?? '');
-            if (!$employeeId || $employeeId < 1) {
+            $initialPassword = $_POST['initial_password'] ?? '';
+            $confirmInitialPassword = $_POST['confirm_initial_password'] ?? '';
+            if (!is_string($initialPassword) || !is_string($confirmInitialPassword)) {
+                $errorMessage = 'Enter a valid initial password.';
+            } elseif (
+                ($initialPassword !== '' || $confirmInitialPassword !== '')
+                && ($initialPassword === '' || strlen($initialPassword) < 8 || $initialPassword !== $confirmInitialPassword)
+            ) {
+                $errorMessage = 'Enter matching passwords that are at least 8 characters long, or leave both password fields blank to send a setup link.';
+            } elseif (!$employeeId || $employeeId < 1) {
                 $errorMessage = 'Choose a valid employee profile.';
-            } elseif (!isset($roles[$role])) {
+            } elseif (!isset($creatableRoles[$role])) {
                 $errorMessage = 'Choose a valid account role.';
             } else {
                 $employeeStmt = $conn->prepare(
@@ -324,8 +335,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                 $employee = $employeeStmt->get_result()->fetch_assoc();
                 $employeeStmt->close();
 
-                if (!$employee || trim((string) $employee['email']) === '') {
-                    $errorMessage = 'That employee profile has no email address for an account.';
+                $employeeEmail = trim((string) ($employee['email'] ?? ''));
+                if (!$employee || !filter_var($employeeEmail, FILTER_VALIDATE_EMAIL) || strlen($employeeEmail) > 255) {
+                    $errorMessage = 'That employee profile needs a valid email address before a system account can be created.';
                 } else {
                     if (!$conn->begin_transaction()) {
                         throw new RuntimeException('Unable to start account creation: ' . $conn->error);
@@ -334,7 +346,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                     if (!$existingStmt) {
                         throw new RuntimeException('Unable to prepare the duplicate account check: ' . $conn->error);
                     }
-                    $employeeEmail = (string) $employee['email'];
                     $existingStmt->bind_param('s', $employeeEmail);
                     if (!$existingStmt->execute()) {
                         $error = $existingStmt->error;
@@ -349,57 +360,240 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
                         $errorMessage = 'An account already exists for this employee email.';
                     } else {
                         $name = (string) $employee['username'];
-                        $temporaryPassword = bin2hex(random_bytes(32));
-                        $hashedPassword = password_hash($temporaryPassword, PASSWORD_DEFAULT);
+                        $adminSetPassword = $initialPassword !== '';
+                        $passwordToHash = $adminSetPassword ? $initialPassword : bin2hex(random_bytes(32));
+                        $hashedPassword = password_hash($passwordToHash, PASSWORD_DEFAULT);
                         if ($hashedPassword === false) {
                             throw new RuntimeException('Unable to securely initialize the account password.');
                         }
-                        $setupToken = bin2hex(random_bytes(32));
-                        $insertStmt = $conn->prepare(
-                            'INSERT INTO users (name, email, employee_id, password, role, reset_token, reset_expires_at)
-                             VALUES (?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 30 MINUTE))'
-                        );
+                        $setupToken = $adminSetPassword ? null : bin2hex(random_bytes(32));
+                        $insertStmt = $adminSetPassword
+                            ? $conn->prepare(
+                                'INSERT INTO users (name, email, employee_id, password, role, reset_token, reset_expires_at)
+                                 VALUES (?, ?, ?, ?, ?, NULL, NULL)'
+                            )
+                            : $conn->prepare(
+                                'INSERT INTO users (name, email, employee_id, password, role, reset_token, reset_expires_at)
+                                 VALUES (?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 30 MINUTE))'
+                            );
                         if (!$insertStmt) {
                             throw new RuntimeException('Unable to prepare the account creation: ' . $conn->error);
                         }
-                        $insertStmt->bind_param('sissss', $name, $employeeEmail, $employeeId, $hashedPassword, $role, $setupToken);
-                        if (!$insertStmt->execute()) {
-                            $error = $insertStmt->error;
+                        if ($adminSetPassword) {
+                            $insertStmt->bind_param('sisss', $name, $employeeEmail, $employeeId, $hashedPassword, $role);
+                        } else {
+                            $insertStmt->bind_param('sissss', $name, $employeeEmail, $employeeId, $hashedPassword, $role, $setupToken);
+                        }
+                        try {
+                            if (!$insertStmt->execute()) {
+                                $error = $insertStmt->error;
+                                $insertStmt->close();
+                                $conn->rollback();
+                                throw new RuntimeException('Unable to create the account: ' . $error);
+                            }
+                        } catch (mysqli_sql_exception $exception) {
                             $insertStmt->close();
                             $conn->rollback();
-                            throw new RuntimeException('Unable to create the account: ' . $error);
+                            if ((int) $exception->getCode() === 1062) {
+                                $errorMessage = 'This email or employee profile already has an account. Use Registered accounts below. If its email is wrong, update it from the linked employee profile, then set a password.';
+                            } else {
+                                throw new RuntimeException('Unable to create the account: ' . $exception->getMessage(), 0, $exception);
+                            }
                         }
-                        $newUserId = (int) $conn->insert_id;
-                        $insertStmt->close();
+                        if ($errorMessage === '') {
+                            $newUserId = (int) $conn->insert_id;
+                            $insertStmt->close();
+                            recordSystemAudit(
+                                $conn,
+                                $currentAdminId,
+                                (string) $_SESSION['name'],
+                                'account_created',
+                                'user',
+                                $newUserId,
+                                'Created ' . $role . ' account for ' . $name . ' (' . $employeeEmail . ').'
+                                    . ($adminSetPassword ? ' Initial password set by administrator.' : '')
+                            );
+                            if (!$conn->commit()) {
+                                throw new RuntimeException('Unable to save the new account: ' . $conn->error);
+                            }
+                            if ($adminSetPassword) {
+                                $_SESSION['admin_flash'] = 'Account created with the password you set. Share it with the test user securely.';
+                            } else {
+                                try {
+                                    sendTaskTrackPasswordSetupLink(
+                                        $employeeEmail,
+                                        $name,
+                                        $roles[$role],
+                                        $setupToken
+                                    );
+                                    $_SESSION['admin_flash'] = 'Account created and password setup link sent to ' . $employeeEmail . '.';
+                                } catch (RuntimeException $mailError) {
+                                    $_SESSION['admin_flash_type'] = 'warning';
+                                    $_SESSION['admin_flash'] = 'Account created, but the password setup link was not sent. '
+                                        . $mailError->getMessage()
+                                        . ' The employee can use Forgot password after email delivery is fixed.';
+                                }
+                            }
+                            header('Location: admin.php?section=accounts');
+                            exit();
+                        }
+                    }
+                }
+            }
+        } elseif ($action === 'sync_account_email') {
+            $userId = filter_var($_POST['user_id'] ?? null, FILTER_VALIDATE_INT);
+            if (!$userId || $userId < 1 || $userId === $currentAdminId) {
+                $errorMessage = 'Choose another valid account to update.';
+            } else {
+                if (!$conn->begin_transaction()) {
+                    throw new RuntimeException('Unable to start the account email update: ' . $conn->error);
+                }
+                $accountStmt = $conn->prepare(
+                    'SELECT u.id, u.name, u.email, e.email AS employee_email
+                     FROM users u
+                     JOIN employee e ON e.employee_id = u.employee_id
+                     WHERE u.id = ?
+                     LIMIT 1
+                     FOR UPDATE'
+                );
+                if (!$accountStmt) {
+                    $conn->rollback();
+                    throw new RuntimeException('Unable to prepare the linked employee email lookup: ' . $conn->error);
+                }
+                $accountStmt->bind_param('i', $userId);
+                if (!$accountStmt->execute()) {
+                    $error = $accountStmt->error;
+                    $accountStmt->close();
+                    $conn->rollback();
+                    throw new RuntimeException('Unable to load the linked employee email: ' . $error);
+                }
+                $emailAccount = $accountStmt->get_result()->fetch_assoc();
+                $accountStmt->close();
+                $employeeEmail = trim((string) ($emailAccount['employee_email'] ?? ''));
+
+                if (!$emailAccount) {
+                    $conn->rollback();
+                    $errorMessage = 'Link this account to an employee profile before updating its email.';
+                } elseif (!filter_var($employeeEmail, FILTER_VALIDATE_EMAIL) || strlen($employeeEmail) > 255) {
+                    $conn->rollback();
+                    $errorMessage = 'The linked employee profile does not have a valid email address. Update the employee profile first.';
+                } else {
+                    $updateStmt = $conn->prepare('UPDATE users SET email = ? WHERE id = ?');
+                    if (!$updateStmt) {
+                        $conn->rollback();
+                        throw new RuntimeException('Unable to prepare the account email update: ' . $conn->error);
+                    }
+                    $updateStmt->bind_param('si', $employeeEmail, $userId);
+                    try {
+                        if (!$updateStmt->execute()) {
+                            $error = $updateStmt->error;
+                            $updateStmt->close();
+                            $conn->rollback();
+                            throw new RuntimeException('Unable to update the account email: ' . $error);
+                        }
+                    } catch (mysqli_sql_exception $exception) {
+                        $updateStmt->close();
+                        $conn->rollback();
+                        if ((int) $exception->getCode() === 1062) {
+                            $errorMessage = 'That email address is already used by another system account.';
+                        } else {
+                            throw new RuntimeException('Unable to update the account email: ' . $exception->getMessage(), 0, $exception);
+                        }
+                    }
+                    if ($errorMessage === '') {
+                        $updateStmt->close();
                         recordSystemAudit(
                             $conn,
                             $currentAdminId,
                             (string) $_SESSION['name'],
-                            'account_created',
+                            'account_email_updated',
                             'user',
-                            $newUserId,
-                            'Created ' . $role . ' account for ' . $name . ' (' . $employeeEmail . ').'
+                            $userId,
+                            'Updated ' . $emailAccount['name'] . ' account email from its linked employee profile.'
                         );
                         if (!$conn->commit()) {
-                            throw new RuntimeException('Unable to save the new account: ' . $conn->error);
+                            throw new RuntimeException('Unable to save the account email: ' . $conn->error);
                         }
-                        try {
-                            sendTaskTrackPasswordSetupLink(
-                                $employeeEmail,
-                                $name,
-                                $roles[$role],
-                                $setupToken
-                            );
-                            $_SESSION['admin_flash'] = 'Account created and password setup link sent to ' . $employeeEmail . '.';
-                        } catch (RuntimeException $mailError) {
-                            $_SESSION['admin_flash_type'] = 'warning';
-                            $_SESSION['admin_flash'] = 'Account created, but the password setup link was not sent. '
-                                . $mailError->getMessage()
-                                . ' The employee can use Forgot password after email delivery is fixed.';
-                        }
+                        $_SESSION['admin_flash'] = 'Account email updated from the linked employee profile.';
                         header('Location: admin.php?section=accounts');
                         exit();
                     }
+                }
+            }
+        } elseif ($action === 'set_account_password') {
+            $userId = filter_var($_POST['user_id'] ?? null, FILTER_VALIDATE_INT);
+            $newPassword = $_POST['new_password'] ?? '';
+            $confirmPassword = $_POST['confirm_new_password'] ?? '';
+            if (!$userId || $userId < 1 || $userId === $currentAdminId) {
+                $errorMessage = 'Choose another valid account to update.';
+            } elseif (
+                !is_string($newPassword)
+                || !is_string($confirmPassword)
+                || strlen($newPassword) < 8
+                || $newPassword !== $confirmPassword
+            ) {
+                $errorMessage = 'Enter matching passwords that are at least 8 characters long.';
+            } else {
+                if (!$conn->begin_transaction()) {
+                    throw new RuntimeException('Unable to start the account password update: ' . $conn->error);
+                }
+                $userStmt = $conn->prepare('SELECT id, name, email FROM users WHERE id = ? LIMIT 1 FOR UPDATE');
+                if (!$userStmt) {
+                    $conn->rollback();
+                    throw new RuntimeException('Unable to prepare the account lookup: ' . $conn->error);
+                }
+                $userStmt->bind_param('i', $userId);
+                if (!$userStmt->execute()) {
+                    $error = $userStmt->error;
+                    $userStmt->close();
+                    $conn->rollback();
+                    throw new RuntimeException('Unable to load the account: ' . $error);
+                }
+                $passwordAccount = $userStmt->get_result()->fetch_assoc();
+                $userStmt->close();
+
+                if (!$passwordAccount) {
+                    $conn->rollback();
+                    $errorMessage = 'The selected account no longer exists.';
+                } else {
+                    $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
+                    if ($hashedPassword === false) {
+                        $conn->rollback();
+                        throw new RuntimeException('Unable to securely hash the new account password.');
+                    }
+                    $passwordStmt = $conn->prepare(
+                        'UPDATE users
+                         SET password = ?, reset_token = NULL, reset_expires_at = NULL,
+                             login_attempts = 0, lockout_time = NULL
+                         WHERE id = ?'
+                    );
+                    if (!$passwordStmt) {
+                        $conn->rollback();
+                        throw new RuntimeException('Unable to prepare the account password update: ' . $conn->error);
+                    }
+                    $passwordStmt->bind_param('si', $hashedPassword, $userId);
+                    if (!$passwordStmt->execute()) {
+                        $error = $passwordStmt->error;
+                        $passwordStmt->close();
+                        $conn->rollback();
+                        throw new RuntimeException('Unable to update the account password: ' . $error);
+                    }
+                    $passwordStmt->close();
+                    recordSystemAudit(
+                        $conn,
+                        $currentAdminId,
+                        (string) $_SESSION['name'],
+                        'account_password_set',
+                        'user',
+                        $userId,
+                        'Administrator set a new password for ' . $passwordAccount['name'] . ' (' . $passwordAccount['email'] . ').'
+                    );
+                    if (!$conn->commit()) {
+                        throw new RuntimeException('Unable to save the account password: ' . $conn->error);
+                    }
+                    $_SESSION['admin_flash'] = 'Password updated. Share it with the test user securely.';
+                    header('Location: admin.php?section=accounts');
+                    exit();
                 }
             }
         } elseif ($action === 'update_role') {
@@ -587,7 +781,10 @@ if (!$employeeResult) {
     throw new RuntimeException('Unable to load employees without accounts: ' . $conn->error);
 }
 while ($employee = $employeeResult->fetch_assoc()) {
-    $employees[] = $employee;
+    $employeeEmail = trim((string) ($employee['email'] ?? ''));
+    if (filter_var($employeeEmail, FILTER_VALIDATE_EMAIL) && strlen($employeeEmail) <= 255) {
+        $employees[] = $employee;
+    }
 }
 $employeeResult->free();
 
@@ -603,7 +800,8 @@ $profileResult->free();
 
 $accounts = [];
 $accountResult = $conn->query(
-    'SELECT u.id, u.name, u.email, u.role, u.is_active, u.employee_id, u.profile_picture, e.username AS employee_username
+    'SELECT u.id, u.name, u.email, u.role, u.is_active, u.employee_id, u.profile_picture,
+            e.username AS employee_username, e.email AS employee_email
      FROM users u
      LEFT JOIN employee e ON e.employee_id = u.employee_id
      ORDER BY u.name, u.id'
@@ -1118,17 +1316,23 @@ $tasktrackActive = $section === 'dashboard' ? 'dashboard' : $section;
                 </label>
                 <label>System role
                     <select name="role" required>
-                        <?php foreach ($roles as $role => $label): ?><option value="<?= $escape($role); ?>"><?= $escape($label); ?></option><?php endforeach; ?>
+                        <?php foreach ($creatableRoles as $role => $label): ?><option value="<?= $escape($role); ?>"><?= $escape($label); ?></option><?php endforeach; ?>
                     </select>
                 </label>
-                <p class="admin-muted">A one-time password setup link will be sent to the employee's email.</p>
-                <button type="submit">Create account &amp; send setup link</button>
+                <label>Initial password <small>Optional; for test accounts, at least 8 characters</small>
+                    <input type="password" name="initial_password" minlength="8" autocomplete="new-password">
+                </label>
+                <label>Confirm initial password
+                    <input type="password" name="confirm_initial_password" minlength="8" autocomplete="new-password">
+                </label>
+                <p class="admin-muted">Leave both password fields blank to email a one-time setup link. For test accounts, enter and confirm a password instead; no setup email will be sent.</p>
+                <button type="submit">Create system account</button>
             </form>
-            <?php if ($employees === []): ?><p class="admin-muted">All employee profiles with email addresses already have accounts.</p><?php endif; ?>
+            <?php if ($employees === []): ?><p class="admin-muted">No eligible employee profiles are available. Check that an employee has a valid email address and does not already have an account.</p><?php endif; ?>
         </section>
         <section class="admin-panel">
             <div class="admin-panel-heading"><div><p class="admin-eyebrow">SYSTEM ACCESS</p><h2>Registered accounts</h2></div><span><?= $userCount; ?> accounts</span></div>
-            <div class="admin-table-wrap"><table><thead><tr><th>Name</th><th>Profile picture</th><th>Email</th><th>Employee profile</th><th>Role</th><th>Account status</th></tr></thead><tbody>
+            <div class="admin-table-wrap"><table><thead><tr><th>Name</th><th>Profile picture</th><th>Email</th><th>Password</th><th>Employee profile</th><th>Role</th><th>Account status</th></tr></thead><tbody>
             <?php foreach ($accounts as $account): ?>
                 <tr>
                     <td><?= $escape($account['name']); ?><?= (int) $account['id'] === $currentAdminId ? ' (you)' : ''; ?></td>
@@ -1165,7 +1369,39 @@ $tasktrackActive = $section === 'dashboard' ? 'dashboard' : $section;
                             </form>
                         <?php endif; ?>
                     </td>
-                    <td><?= $escape($account['email']); ?></td>
+                    <td>
+                        <?= $escape($account['email']); ?>
+                        <?php if (
+                            (int) $account['id'] !== $currentAdminId
+                            && filter_var(trim((string) ($account['employee_email'] ?? '')), FILTER_VALIDATE_EMAIL)
+                            && strlen(trim((string) $account['employee_email'])) <= 255
+                            && strcasecmp(trim((string) $account['email']), trim((string) $account['employee_email'])) !== 0
+                        ): ?>
+                            <form method="post" class="admin-inline-form" data-confirm="Replace this account email with the email on its linked employee profile?">
+                                <input type="hidden" name="csrf_token" value="<?= $escape($_SESSION['admin_csrf']); ?>">
+                                <input type="hidden" name="action" value="sync_account_email">
+                                <input type="hidden" name="user_id" value="<?= (int) $account['id']; ?>">
+                                <button type="submit" class="admin-secondary-button">Use profile email</button>
+                            </form>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <?php if ((int) $account['id'] === $currentAdminId): ?>
+                            <span class="admin-muted">Use Forgot Password to change your own.</span>
+                        <?php else: ?>
+                            <details>
+                                <summary>Set password</summary>
+                                <form method="post" class="admin-inline-form" data-confirm="Set a new password for this account? The current password will stop working.">
+                                    <input type="hidden" name="csrf_token" value="<?= $escape($_SESSION['admin_csrf']); ?>">
+                                    <input type="hidden" name="action" value="set_account_password">
+                                    <input type="hidden" name="user_id" value="<?= (int) $account['id']; ?>">
+                                    <input type="password" name="new_password" placeholder="New password" aria-label="New password for <?= $escape($account['name']); ?>" minlength="8" autocomplete="new-password" required>
+                                    <input type="password" name="confirm_new_password" placeholder="Confirm password" aria-label="Confirm new password for <?= $escape($account['name']); ?>" minlength="8" autocomplete="new-password" required>
+                                    <button type="submit" class="admin-secondary-button">Save</button>
+                                </form>
+                            </details>
+                        <?php endif; ?>
+                    </td>
                     <td>
                         <form method="post" class="admin-inline-form">
                             <input type="hidden" name="csrf_token" value="<?= $escape($_SESSION['admin_csrf']); ?>">
@@ -1213,7 +1449,7 @@ $tasktrackActive = $section === 'dashboard' ? 'dashboard' : $section;
                     </td>
                 </tr>
             <?php endforeach; ?>
-            <?php if ($accounts === []): ?><tr><td colspan="6">No system accounts.</td></tr><?php endif; ?>
+            <?php if ($accounts === []): ?><tr><td colspan="7">No system accounts.</td></tr><?php endif; ?>
             </tbody></table></div>
         </section>
     <?php elseif ($section === 'audit'): ?>

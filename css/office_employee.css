@@ -78,8 +78,8 @@ summary {
 }
 
 .employee-avatar {
-    width: 40px;
-    height: 40px;
+    width: 46px;
+    height: 46px;
     overflow: hidden;
     font-size: 12px;
 }
@@ -127,6 +127,11 @@ summary {
 .employee-page {
     width: min(1060px, calc(100% - 40px));
     margin: 13px auto 40px;
+}
+
+body .employee-main--no-sidebar {
+    width: 100%;
+    margin-left: 0;
 }
 
 .notice {
@@ -1094,6 +1099,10 @@ summary {
 }
 
 @media (max-width: 760px) {
+    body .employee-main--no-sidebar {
+        padding-top: 0;
+    }
+
     .employee-page {
         width: min(100% - 24px, 600px);
         margin-top: 12px;

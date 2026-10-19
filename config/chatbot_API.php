@@ -307,7 +307,7 @@ function chatbotRecordDetails(
         $row = chatbotScalar(
             $conn,
             "SELECT p.payroll_id, p.pay_period, p.pay_date, p.status,
-                    p.regular_pay, p.paid_leaves, p.daily_allowance, p.reimbursement,
+                    p.regular_pay, p.paid_leaves, p.reimbursement,
                     p.gross_pay, p.late_deduction, p.sss, p.pagibig, p.philhealth,
                     p.calamity_loan, p.hmo, p.total_deductions, p.total_credited,
                     e.username AS employee_name
@@ -331,7 +331,6 @@ function chatbotRecordDetails(
             'Status' => $row['status'],
             'Regular pay' => $money($row['regular_pay']),
             'Paid leaves' => $money($row['paid_leaves']),
-            'Daily allowance' => $money($row['daily_allowance']),
             'Reimbursement' => $money($row['reimbursement']),
             'Gross pay' => $money($row['gross_pay']),
             'Late deduction' => $money($row['late_deduction']),
