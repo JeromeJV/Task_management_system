@@ -1,0 +1,118 @@
+.mobile-refresh-button {
+    display: none;
+}
+
+.mobile-refresh-button.is-in-navbar {
+    display: none;
+}
+
+.mobile-refresh-button.is-floating {
+    position: fixed;
+    z-index: 1200;
+    top: max(10px, env(safe-area-inset-top));
+    left: max(10px, env(safe-area-inset-left));
+    right: auto;
+    display: none;
+    min-height: 38px;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 0 9px;
+    border: 1px solid #dce6df;
+    border-radius: 9px;
+    background: #14532d;
+    box-shadow: 0 3px 12px rgba(24, 37, 30, .11);
+    color: #fff;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-app-navbar {
+    display: none;
+}
+
+@media (max-width: 1024px) {
+    .mobile-app-navbar {
+        position: fixed;
+        z-index: 12004;
+        top: max(10px, env(safe-area-inset-top));
+        left: max(10px, env(safe-area-inset-left));
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .mobile-app-navbar .mobile-refresh-button {
+        position: static;
+        display: inline-flex;
+        min-height: 38px;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        padding: 0 9px;
+        border: 1px solid #dce6df;
+        border-radius: 9px;
+        background: #14532d;
+        box-shadow: 0 3px 12px rgba(24, 37, 30, .11);
+        color: #fff;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    .mobile-refresh-button.is-in-navbar {
+        position: static;
+        display: inline-flex;
+        min-height: 34px;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        padding: 0 8px;
+        border: 1px solid #dce6df;
+        border-radius: 9px;
+        background: #14532d;
+        box-shadow: 0 3px 12px rgba(24, 37, 30, .11);
+        color: #fff;
+        font: inherit;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    .mobile-refresh-button.is-floating {
+        display: inline-flex;
+    }
+
+    .mobile-app-navbar .tasktrack-mobile-menu-toggle,
+    .mobile-app-navbar .payroll-mobile-menu-toggle,
+    .mobile-app-navbar .hr-mobile-menu-toggle {
+        position: static;
+        flex: 0 0 44px;
+    }
+
+    .mobile-refresh-button:active {
+        transform: scale(.96);
+    }
+
+    .mobile-refresh-button:focus-visible {
+        outline: 3px solid #86efac;
+        outline-offset: 3px;
+    }
+
+    .mobile-refresh-button svg {
+        width: 16px;
+        height: 16px;
+        fill: none;
+        stroke: currentColor;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 1.8;
+    }
+
+}

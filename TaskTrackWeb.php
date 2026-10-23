@@ -14,6 +14,7 @@ $gingaProducts = require __DIR__ . '/config/ginga_products.php';
   <link rel="stylesheet" href="css/GingaWebsite.css?v=<?= filemtime(__DIR__ . '/css/GingaWebsite.css'); ?>">
 </head>
 <body>
+    <?php include __DIR__ . '/config/mobile_refresh.php'; ?>
   <header class="site-header">
     <nav class="navbar" id="navbar" aria-label="Main navigation">
       <a class="brand" href="#home" aria-label="Ginga home">

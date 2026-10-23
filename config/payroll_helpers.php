@@ -68,9 +68,16 @@ function getPayrollAttendanceSummary(mysqli $conn, int $employeeId, string $star
                      )
                    THEN 1 ELSE 0
                END AS is_logistics
-        FROM attendance a
-        LEFT JOIN employee e ON e.employee_id = a.employee_id
-        WHERE a.employee_id = ?
+        FROM employee e
+        INNER JOIN attendance a
+          ON a.employee_id = e.employee_id
+          OR EXISTS (
+              SELECT 1
+              FROM users attendance_user
+              WHERE attendance_user.id = a.user_id
+                AND attendance_user.employee_id = e.employee_id
+          )
+        WHERE e.employee_id = ?
           AND a.attendance_date BETWEEN ? AND ?
         ORDER BY a.attendance_date ASC, a.attendance_id ASC
     ");

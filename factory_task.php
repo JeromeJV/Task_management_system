@@ -35,6 +35,7 @@ include('config/Production_API.php');
 </head>
 <body>
     <?php include __DIR__ . '/config/theme_toggle.php'; ?>
+    <?php include __DIR__ . '/config/mobile_refresh.php'; ?>
         <h1>Record System</h1>
 
     <!-- Display Backend Response Message -->
@@ -80,6 +81,5 @@ include('config/Production_API.php');
 
     <button><a href="factory_main.php">Back</a></button>
 <script src="js/calendar-picker.js?v=<?= filemtime(__DIR__ . '/js/calendar-picker.js'); ?>"></script>
-    <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

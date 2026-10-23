@@ -15,7 +15,7 @@
             '.topbar',
             '.header-actions',
             'body > .header',
-            'body > header:not(.tt-chatbot-header)'
+            'body > header'
         ];
         const target = targets.map((selector) => document.querySelector(selector)).find(Boolean);
 

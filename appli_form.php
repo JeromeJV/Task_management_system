@@ -16,6 +16,7 @@ include 'config/application_API.php';
 </head>
 <body>
     <?php include __DIR__ . '/config/theme_toggle.php'; ?>
+    <?php include __DIR__ . '/config/mobile_refresh.php'; ?>
 
     <div class="header">
         <div class="application-header-bar">

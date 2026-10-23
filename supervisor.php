@@ -527,7 +527,6 @@ $quantity_err = $quantity_err ?? '';
       </div>
     </form>
   </dialog>
-  <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
   <script>
     const deliveryReviewProof = document.getElementById('deliveryReviewProof');
     const deliveryReviewNoProof = document.getElementById('deliveryReviewNoProof');

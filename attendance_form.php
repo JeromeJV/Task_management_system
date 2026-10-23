@@ -38,6 +38,7 @@ if (empty($_SESSION['attendance_csrf'])) {
 </head>
 <body>
     <?php include __DIR__ . '/config/theme_toggle.php'; ?>
+    <?php include __DIR__ . '/config/mobile_refresh.php'; ?>
 
 <div class="clock-card">
     <h2>Real-Time Attendance</h2>
@@ -52,7 +53,7 @@ if (empty($_SESSION['attendance_csrf'])) {
     </div>
 
     <div class="btn-grid">
-        <button type="button" id="submit-attendance" class="btn-in" onclick="recordAttendance()" disabled>Submit</button>
+        <button type="button" id="submit-attendance" class="btn-in" onclick="recordAttendance()" disabled>Enter Employee ID</button>
     </div>
 
     <div id="alert-msg"></div>
@@ -72,6 +73,12 @@ if (empty($_SESSION['attendance_csrf'])) {
         time_in_2: 'PM Time In',
         time_out_2: 'PM Time Out'
     };
+    const actionButtonClasses = {
+        time_in: 'btn-in',
+        time_out: 'btn-out',
+        time_in_2: 'btn-in2',
+        time_out_2: 'btn-out2'
+    };
     let lookupTimer;
     let lookupRequest = 0;
     let resolvedEmployeeId = '';
@@ -82,11 +89,13 @@ if (empty($_SESSION['attendance_csrf'])) {
     function renderNextAction(action, emptyMessage = 'Attendance is complete for today.') {
         nextAction = action;
         if (action && actionLabels[action]) {
-            submitButton.innerText = 'Submit';
+            submitButton.innerText = actionLabels[action];
+            submitButton.className = actionButtonClasses[action];
             submitButton.disabled = false;
             employeeName.innerText = `Name: ${currentEmployeeName} | Next: ${actionLabels[action]}`;
         } else {
-            submitButton.innerText = 'Submit';
+            submitButton.innerText = 'Attendance complete';
+            submitButton.className = 'btn-in';
             submitButton.disabled = true;
             employeeName.innerText = `Name: ${currentEmployeeName} | ${emptyMessage}`;
         }
@@ -98,7 +107,8 @@ if (empty($_SESSION['attendance_csrf'])) {
         resolvedEmployeeId = '';
         currentEmployeeName = '';
         nextAction = null;
-        submitButton.innerText = 'Submit';
+        submitButton.innerText = 'Enter Employee ID';
+        submitButton.className = 'btn-in';
         submitButton.disabled = true;
         employeeName.innerText = '';
         alertMsg.innerText = '';

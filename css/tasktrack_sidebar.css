@@ -190,6 +190,7 @@ body .employee-main {
 @media (max-width: 768px) {
     .tasktrack-sidebar {
         position: fixed;
+        z-index: 12001;
         inset: 0 auto 0 0;
         width: min(286px, calc(100vw - 52px));
         height: 100vh;

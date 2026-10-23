@@ -55,6 +55,8 @@ tbody tr:last-child td { border-bottom: 0; }
 .admin-inline-form { display: flex; min-width: 190px; align-items: center; gap: 6px; }
 .admin-inline-form select { flex: 1; }
 .admin-inline-form input { width: 150px; }
+.admin-inline-form .password-input-wrap { width: 150px; flex: 0 0 150px; }
+.admin-inline-form .password-input-wrap input { width: 100%; padding-right: 58px; }
 .admin-status { display: inline-flex; align-items: center; padding: 5px 8px; border-radius: 999px; font-size: 11px; font-weight: 750; white-space: nowrap; }
 .admin-status.is-active { background: #e6f5ec; color: #17663f; }
 .admin-status.is-disabled { background: #fff0ed; color: #a63320; }

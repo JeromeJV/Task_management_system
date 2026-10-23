@@ -199,7 +199,7 @@ $payrolls->close();
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RERA CORP - Payroll Dashboard</title>
+  <title>Payroll Dashboard</title>
   
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -733,6 +733,7 @@ $payrolls->close();
             <form action="config/Payroll_API.php" method="POST" class="space-y-4" id="payrollForm">
               <input type="hidden" name="action" value="create_payroll">
               <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['payroll_csrf'], ENT_QUOTES, 'UTF-8'); ?>">
+              <p id="payrollFormError" class="hidden rounded-lg border border-red-300 bg-red-50 p-3 text-sm font-semibold text-red-800" role="alert"></p>
 
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -745,8 +746,8 @@ $payrolls->close();
                 <div>
                   <label class="block text-xs font-bold text-zinc-800 mb-1">Pay Period</label>
                   <select name="pay_period" id="calc_pay_period" onchange="refreshEligibleEmployees()" class="w-full px-3 py-2 border rounded-xl text-xs bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
-                    <option value="Kinsenas">1st Half (1st - 15th)</option>
-                    <option value="Katapusan">2nd Half (16th - 31st)</option>
+                    <option value="Kinsenas" <?= (int) date('j') <= 15 ? 'selected' : ''; ?>>1st Half (1st - 15th)</option>
+                    <option value="Katapusan" <?= (int) date('j') > 15 ? 'selected' : ''; ?>>2nd Half (16th - 31st)</option>
                   </select>
                 </div>
               </div>
@@ -874,32 +875,82 @@ $payrolls->close();
     const payrollLoadingOverlay = document.getElementById('payrollLoadingOverlay');
     const payrollLoadingStatus = document.getElementById('payrollLoadingStatus');
 
-    payrollForm.addEventListener('submit', function (event) {
+    payrollForm.addEventListener('submit', async function (event) {
       event.preventDefault();
       if (payrollForm.dataset.submitting === 'true') {
         return;
       }
 
+      const employeeSelect = document.getElementById('calc_employee_id');
+      const errorMessage = document.getElementById('payrollFormError');
+      const submitButton = event.submitter || payrollForm.querySelector('button[type="submit"]');
+      errorMessage.classList.add('hidden');
+      errorMessage.textContent = '';
+
+      if (employeeSelect.disabled || !employeeSelect.value) {
+        errorMessage.textContent = employeeSelect.disabled
+          ? 'Wait for the employee list to finish loading, then select an eligible employee.'
+          : 'Select an employee before saving payroll.';
+        errorMessage.classList.remove('hidden');
+        return;
+      }
+
+      const amount = (selector) => Number(document.querySelector(selector)?.value || 0);
+      const grossPay = amount('#regular_pay') + amount('#paid_leaves_display');
+      const reimbursement = amount('[name="reimbursement"]');
+      const deductions = [
+        '#late_deduction',
+        '[name="sss"]',
+        '[name="pagibig"]',
+        '[name="philhealth"]',
+        '[name="calamity_loan"]',
+        '[name="hmo"]'
+      ].reduce((total, selector) => total + amount(selector), 0);
+      if (grossPay + reimbursement < deductions) {
+        errorMessage.textContent = `Total deductions (₱${deductions.toFixed(2)}) exceed gross pay plus reimbursement (₱${(grossPay + reimbursement).toFixed(2)}). Adjust the deduction amounts before saving.`;
+        errorMessage.classList.remove('hidden');
+        return;
+      }
+
       payrollForm.dataset.submitting = 'true';
-      const submitter = event.submitter;
+      submitButton.disabled = true;
       payrollLoadingOverlay.className = 'payroll-loading-overlay active';
       payrollLoadingOverlay.setAttribute('aria-hidden', 'false');
-      payrollLoadingStatus.textContent = 'Generating payroll computation...';
+      payrollLoadingStatus.textContent = 'Saving payroll computation...';
 
-      window.setTimeout(function () {
-        payrollLoadingOverlay.classList.add('step-print');
-        payrollLoadingStatus.textContent = 'Preparing payroll computation...';
-      }, 500);
+      try {
+        const payrollEndpoint = new URL(payrollForm.getAttribute('action'), window.location.href);
+        const response = await fetch(payrollEndpoint, {
+          method: 'POST',
+          body: new FormData(payrollForm),
+          credentials: 'same-origin'
+        });
+        if (response.redirected) {
+          sessionStorage.setItem('payrollTabAfterReload', 'employees');
+          window.location.assign(response.url);
+          return;
+        }
 
-      window.setTimeout(function () {
-        payrollLoadingOverlay.classList.add('step-success');
-        payrollLoadingStatus.textContent = 'Computation ready. Saving payroll...';
-      }, 2000);
-
-      window.setTimeout(function () {
-        sessionStorage.setItem('payrollTabAfterReload', 'employees');
-        HTMLFormElement.prototype.submit.call(payrollForm);
-      }, 3500);
+        const responseText = await response.text();
+        let data;
+        try {
+          data = JSON.parse(responseText);
+        } catch {
+          console.error('Payroll API returned a non-JSON response:', response.status, responseText);
+          throw new Error(`Payroll could not be saved (HTTP ${response.status}). The server returned an invalid response; check the server error log or contact the administrator.`);
+        }
+        if (!response.ok || data.status !== 'success') {
+          throw new Error(data.message || 'Could not save payroll. Please review the entered values and try again.');
+        }
+      } catch (error) {
+        console.error(error);
+        errorMessage.textContent = error.message || 'Could not save payroll. Please try again.';
+        errorMessage.classList.remove('hidden');
+        payrollLoadingOverlay.classList.remove('active');
+        payrollLoadingOverlay.setAttribute('aria-hidden', 'true');
+        payrollForm.dataset.submitting = 'false';
+        submitButton.disabled = false;
+      }
     });
 
     let attendanceSummaryRequest = 0;
@@ -1144,7 +1195,14 @@ $payrolls->close();
             warning.classList.remove('hidden');
         }
 
-        document.querySelector('input[name="pay_date"]').addEventListener('change', refreshEligibleEmployees);
+        const payDateInput = document.querySelector('input[name="pay_date"]');
+        payDateInput.addEventListener('change', () => {
+          const dayOfMonth = Number(payDateInput.value.split('-')[2]);
+          if (Number.isInteger(dayOfMonth) && dayOfMonth >= 1 && dayOfMonth <= 31) {
+            document.getElementById('calc_pay_period').value = dayOfMonth <= 15 ? 'Kinsenas' : 'Katapusan';
+          }
+          refreshEligibleEmployees();
+        });
         document.getElementById('daily_rate').addEventListener('change', fetchEmployeeAttendance);
         refreshEligibleEmployees();
 
@@ -1262,7 +1320,6 @@ $payrolls->close();
       <?php endif; ?>
     });
   </script>
-  <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
   <script src="js/calendar-picker.js?v=<?= filemtime(__DIR__ . '/js/calendar-picker.js'); ?>"></script>
   <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
 </body>

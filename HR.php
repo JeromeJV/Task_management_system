@@ -479,6 +479,5 @@ while ($attendance_row = mysqli_fetch_assoc($attendance_result)) {
     </script>
     <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
     <script src="js/action-confirmation.js?v=<?= filemtime(__DIR__ . '/js/action-confirmation.js'); ?>"></script>
-    <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

@@ -11,6 +11,7 @@ require_once __DIR__ . '/config/reset-password.php';
 </head>
 <body>
     <?php include __DIR__ . '/config/theme_toggle.php'; ?>
+    <?php include __DIR__ . '/config/mobile_refresh.php'; ?>
     <h2>Create New Password</h2>
 
     <!-- Dto lahat ng error msg -->

@@ -1161,6 +1161,7 @@ $tasktrackActive = $section === 'dashboard' ? 'dashboard' : $section;
     <link rel="stylesheet" href="css/action-confirmation.css?v=<?= filemtime(__DIR__ . '/css/action-confirmation.css'); ?>">
     <link rel="stylesheet" href="css/role-form-controls.css?v=<?= filemtime(__DIR__ . '/css/role-form-controls.css'); ?>">
     <link rel="stylesheet" href="css/select-control.css?v=<?= filemtime(__DIR__ . '/css/select-control.css'); ?>">
+    <link rel="stylesheet" href="css/password-visibility.css?v=<?= filemtime(__DIR__ . '/css/password-visibility.css'); ?>">
 </head>
 <body>
 <?php include __DIR__ . '/config/tasktrack_sidebar.php'; ?>
@@ -1320,10 +1321,16 @@ $tasktrackActive = $section === 'dashboard' ? 'dashboard' : $section;
                     </select>
                 </label>
                 <label>Initial password <small>Optional; for test accounts, at least 8 characters</small>
-                    <input type="password" name="initial_password" minlength="8" autocomplete="new-password">
+                    <span class="password-input-wrap">
+                        <input type="password" name="initial_password" id="initialPassword" minlength="8" autocomplete="new-password">
+                        <button class="password-visibility-toggle" type="button" data-password-toggle aria-controls="initialPassword" aria-pressed="false" aria-label="Show password">Show</button>
+                    </span>
                 </label>
                 <label>Confirm initial password
-                    <input type="password" name="confirm_initial_password" minlength="8" autocomplete="new-password">
+                    <span class="password-input-wrap">
+                        <input type="password" name="confirm_initial_password" id="confirmInitialPassword" minlength="8" autocomplete="new-password">
+                        <button class="password-visibility-toggle" type="button" data-password-toggle aria-controls="confirmInitialPassword" aria-pressed="false" aria-label="Show password">Show</button>
+                    </span>
                 </label>
                 <p class="admin-muted">Leave both password fields blank to email a one-time setup link. For test accounts, enter and confirm a password instead; no setup email will be sent.</p>
                 <button type="submit">Create system account</button>
@@ -1395,8 +1402,14 @@ $tasktrackActive = $section === 'dashboard' ? 'dashboard' : $section;
                                     <input type="hidden" name="csrf_token" value="<?= $escape($_SESSION['admin_csrf']); ?>">
                                     <input type="hidden" name="action" value="set_account_password">
                                     <input type="hidden" name="user_id" value="<?= (int) $account['id']; ?>">
-                                    <input type="password" name="new_password" placeholder="New password" aria-label="New password for <?= $escape($account['name']); ?>" minlength="8" autocomplete="new-password" required>
-                                    <input type="password" name="confirm_new_password" placeholder="Confirm password" aria-label="Confirm new password for <?= $escape($account['name']); ?>" minlength="8" autocomplete="new-password" required>
+                                    <span class="password-input-wrap">
+                                        <input type="password" name="new_password" id="newPassword<?= (int) $account['id']; ?>" placeholder="New password" aria-label="New password for <?= $escape($account['name']); ?>" minlength="8" autocomplete="new-password" required>
+                                        <button class="password-visibility-toggle" type="button" data-password-toggle aria-controls="newPassword<?= (int) $account['id']; ?>" aria-pressed="false" aria-label="Show password">Show</button>
+                                    </span>
+                                    <span class="password-input-wrap">
+                                        <input type="password" name="confirm_new_password" id="confirmNewPassword<?= (int) $account['id']; ?>" placeholder="Confirm password" aria-label="Confirm new password for <?= $escape($account['name']); ?>" minlength="8" autocomplete="new-password" required>
+                                        <button class="password-visibility-toggle" type="button" data-password-toggle aria-controls="confirmNewPassword<?= (int) $account['id']; ?>" aria-pressed="false" aria-label="Show password">Show</button>
+                                    </span>
                                     <button type="submit" class="admin-secondary-button">Save</button>
                                 </form>
                             </details>
@@ -1578,6 +1591,6 @@ $tasktrackActive = $section === 'dashboard' ? 'dashboard' : $section;
 <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
 <script src="js/admin-profile-picture.js?v=<?= filemtime(__DIR__ . '/js/admin-profile-picture.js'); ?>"></script>
 <script src="js/action-confirmation.js?v=<?= filemtime(__DIR__ . '/js/action-confirmation.js'); ?>"></script>
-<?php include __DIR__ . '/config/chatbot_widget.php'; ?>
+<script src="js/password-visibility.js?v=<?= filemtime(__DIR__ . '/js/password-visibility.js'); ?>"></script>
 </body>
 </html>

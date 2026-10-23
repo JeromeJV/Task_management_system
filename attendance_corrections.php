@@ -223,6 +223,7 @@ $escape = static fn ($value): string => htmlspecialchars((string) ($value ?? '')
     </style>
 </head>
 <body>
+    <?php include __DIR__ . '/config/mobile_refresh.php'; ?>
 <main>
     <div class="topline">
         <div>
@@ -275,6 +276,5 @@ $escape = static fn ($value): string => htmlspecialchars((string) ($value ?? '')
         <?php endforeach; ?>
     </section>
 </main>
-<?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

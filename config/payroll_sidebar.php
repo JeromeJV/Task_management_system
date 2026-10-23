@@ -95,8 +95,13 @@ $payrollSidebarItems = [
         </a>
     </div>
 </aside>
-<button class="payroll-mobile-menu-toggle" type="button" data-payroll-menu-toggle aria-controls="payrollSidebar" aria-expanded="false" aria-label="Open Payroll navigation" title="Open Payroll navigation">
-    <span></span><span></span><span></span>
-</button>
+<div class="mobile-app-navbar">
+    <button class="payroll-mobile-menu-toggle" type="button" data-payroll-menu-toggle aria-controls="payrollSidebar" aria-expanded="false" aria-label="Open Payroll navigation" title="Open Payroll navigation">
+        <span></span><span></span><span></span>
+    </button>
+    <?php $mobileRefreshInNavbar = true; ?>
+    <?php include __DIR__ . '/mobile_refresh.php'; ?>
+    <?php unset($mobileRefreshInNavbar); ?>
+</div>
 <div class="payroll-mobile-menu-backdrop" data-payroll-menu-backdrop hidden></div>
 <script src="js/payroll-mobile-menu.js?v=<?= filemtime(__DIR__ . '/../js/payroll-mobile-menu.js'); ?>"></script>

@@ -1541,6 +1541,9 @@ foreach ($history_records as $hrec) {
         <div class="nav-tabs">
             <button class="tab-btn active" id="tabMainBtn" onclick="switchTab('main')">Main</button>
             <button class="tab-btn" id="tabHistoryBtn" onclick="switchTab('history')">HISTORY</button>
+            <?php $mobileRefreshInNavbar = true; ?>
+            <?php include __DIR__ . '/config/mobile_refresh.php'; ?>
+            <?php unset($mobileRefreshInNavbar); ?>
             <a href="logout.php" class="logout-icon-btn" title="Logout">
                 &#x21AA;
             </a>
@@ -2437,6 +2440,5 @@ foreach ($history_records as $hrec) {
 <script src="js/calendar-picker.js?v=<?= filemtime(__DIR__ . '/js/calendar-picker.js'); ?>"></script>
 <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
 <script src="js/action-confirmation.js?v=<?= filemtime(__DIR__ . '/js/action-confirmation.js'); ?>"></script>
-<?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

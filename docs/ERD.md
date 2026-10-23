@@ -1,8 +1,8 @@
 # TaskTrack Database ERD
 
-This ERD is based on the schema snapshot in [`config/install_schema.sql`](../config/install_schema.sql). It shows all tables and columns in that snapshot. The solid relationships are the foreign keys explicitly declared by the schema; application-level references that are not enforced by MySQL are listed separately below.
+This ERD is based on the schema snapshot in [`config/install_schema.sql`](../config/install_schema.sql). It shows the tables and selected columns relevant to the diagram. The HR entity intentionally omits `salary`, `sss`, `pagibig`, `philhealth`, and `deduction`; these columns remain in the database schema. The solid relationships are the foreign keys explicitly declared by the schema; application-level references that are not enforced by MySQL are listed separately below.
 
-For a compact visual overview, see [`ERD.pdf`](./ERD.pdf). The two-page A3 diagram groups the tables by system area and shows the keys and important fields; the complete column inventory and reference notes are below.
+For a compact visual overview, see [`ERD.pdf`](./ERD.pdf). The two-page A3 diagram groups the tables by system area and shows the keys and important fields; reference notes are below.
 
 ```mermaid
 erDiagram
@@ -111,14 +111,9 @@ erDiagram
         int hr_id PK
         int user_id FK
         int attendance_id FK
-        decimal salary
-        decimal philhealth
-        decimal sss
         decimal mms
-        decimal pagibig
         time time_in
         time time_out
-        decimal deduction
     }
 
     LOGISTICS {

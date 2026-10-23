@@ -406,14 +406,22 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'
                 $attendanceStmt = $conn->prepare(
                     'SELECT status
                      FROM attendance
-                     WHERE employee_id = ? AND attendance_date = CURDATE()
+                     WHERE attendance_date = CURDATE()
+                       AND (
+                           employee_id = ?
+                           OR user_id IN (
+                               SELECT id
+                               FROM users
+                               WHERE employee_id = ?
+                           )
+                       )
                      ORDER BY attendance_id DESC
                      LIMIT 1'
                 );
                 if (!$attendanceStmt) {
                     throw new RuntimeException('Unable to prepare the attendance check: ' . $conn->error);
                 }
-                $attendanceStmt->bind_param('i', $employeeId);
+                $attendanceStmt->bind_param('ii', $employeeId, $employeeId);
                 if (!$attendanceStmt->execute()) {
                     $error = $attendanceStmt->error;
                     $attendanceStmt->close();
@@ -639,7 +647,10 @@ $employeeResult = $conn->query(
             (
                 SELECT a.status
                 FROM attendance a
-                WHERE a.employee_id = e.employee_id
+                WHERE (
+                      a.employee_id = e.employee_id
+                      OR (u.employee_id = e.employee_id AND a.user_id = u.id)
+                  )
                   AND a.attendance_date = CURDATE()
                 ORDER BY a.attendance_id DESC
                 LIMIT 1
@@ -1346,6 +1357,5 @@ $accountRoleLabels = [
 <script src="js/calendar-picker.js?v=<?= filemtime(__DIR__ . '/js/calendar-picker.js'); ?>"></script>
 <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
 <script src="js/action-confirmation.js?v=<?= filemtime(__DIR__ . '/js/action-confirmation.js'); ?>"></script>
-<?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

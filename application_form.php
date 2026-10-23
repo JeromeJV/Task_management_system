@@ -565,7 +565,6 @@ $styleVersion = file_exists('css/applicant_admin.css') ? filemtime('css/applican
 <script src="js/calendar-picker.js?v=<?= filemtime(__DIR__ . '/js/calendar-picker.js'); ?>"></script>
 <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
 <?php if (isset($_SESSION['id'], $_SESSION['role']) && in_array($_SESSION['role'], ['admin', 'super', 'log', 'HR', 'payroll', 'employee', 'pro', 'cooking', 'packaging'], true)): ?>
-    <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 <?php endif; ?>
 </body>
 </html>

@@ -935,7 +935,7 @@ html[data-theme="dark"] body :is(
 html[data-theme="dark"] body :is(
     [class*="notice"],
     [class*="alert"],
-    [class*="message"]:not(.tt-chatbot-message)
+    [class*="message"]
 ) {
     border-color: #364146 !important;
     background-color: #20282c !important;
@@ -1546,7 +1546,7 @@ html[data-theme="dark"] body :is(
 }
 
 html[data-theme="dark"] body :is(span, strong, b, em, small, dt, dd):where(
-    :not(button *):not(a *):not(.select-control *):not(.calendar-picker *):not(.task-theme-toggle *):not(.task-notification *):not(.tt-chatbot *):not([class*="status"]):not([class*="status"] *):not([class*="badge"]):not([class*="badge"] *):not([class*="pill"]):not([class*="pill"] *):not([class*="icon"]):not([class*="icon"] *):not([class*="action"]):not([class*="action"] *):not([class*="button"]):not([class*="button"] *):not([class*="text-success"]):not([class*="text-danger"]):not([class*="text-warning"]):not([class*="accent"]):not([class*="green"]):not([class*="red"]):not([class*="amber"]):not([class*="blue"])
+    :not(button *):not(a *):not(.select-control *):not(.calendar-picker *):not(.task-theme-toggle *):not(.task-notification *):not([class*="status"]):not([class*="status"] *):not([class*="badge"]):not([class*="badge"] *):not([class*="pill"]):not([class*="pill"] *):not([class*="icon"]):not([class*="icon"] *):not([class*="action"]):not([class*="action"] *):not([class*="button"]):not([class*="button"] *):not([class*="text-success"]):not([class*="text-danger"]):not([class*="text-warning"]):not([class*="accent"]):not([class*="green"]):not([class*="red"]):not([class*="amber"]):not([class*="blue"])
 ) {
     color: #e1e8e4 !important;
 }

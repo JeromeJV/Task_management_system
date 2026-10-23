@@ -566,7 +566,6 @@ $escape = static fn($value): string => htmlspecialchars((string) $value, ENT_QUO
                     </section>
                 </div>
             </main>
-            <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
         </div>
         <script src="js/calendar-picker.js?v=<?= filemtime(__DIR__ . '/js/calendar-picker.js'); ?>"></script>
         <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>

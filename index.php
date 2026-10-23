@@ -131,6 +131,7 @@ include 'config/loginBE.php';
     </style>
 </head>
 <body>
+    <?php include __DIR__ . '/config/mobile_refresh.php'; ?>
 
     <div class="main-container">
         <!-- Header Navigation -->

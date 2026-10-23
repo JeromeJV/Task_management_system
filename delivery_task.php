@@ -31,6 +31,7 @@ $count = $count ?? count($records);
 </head>
 <body>
     <?php include __DIR__ . '/config/theme_toggle.php'; ?>
+    <?php include __DIR__ . '/config/mobile_refresh.php'; ?>
         <h1>Record System</h1>
 
     <!-- Display Backend Response Message -->
@@ -72,6 +73,5 @@ $count = $count ?? count($records);
 
     <button><a href="delivery_main.php">Back</a></button>
     <script src="js/select-control.js?v=<?= filemtime(__DIR__ . '/js/select-control.js'); ?>"></script>
-    <?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>

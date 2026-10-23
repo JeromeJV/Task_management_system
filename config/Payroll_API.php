@@ -1,5 +1,38 @@
 <?php
+ob_start();
 header('Content-Type: application/json');
+set_exception_handler(static function (Throwable $error): void {
+    error_log('Payroll API failure: ' . $error);
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    if (!headers_sent()) {
+        http_response_code(500);
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'The payroll request failed on the server. Please retry; if it continues, contact the system administrator.'
+    ]);
+});
+register_shutdown_function(static function (): void {
+    $error = error_get_last();
+    if (!$error || !in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+        return;
+    }
+    error_log('Payroll API fatal error: ' . $error['message'] . ' in ' . $error['file'] . ':' . $error['line']);
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    if (!headers_sent()) {
+        http_response_code(500);
+        header('Content-Type: application/json; charset=utf-8');
+    }
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'The payroll request failed on the server. Please retry; if it continues, contact the system administrator.'
+    ]);
+});
 require_once __DIR__ . '/connection.php';
 require_once __DIR__ . '/attendance_helpers.php';
 require_once __DIR__ . '/payroll_helpers.php';
@@ -218,44 +251,76 @@ if ($method === 'POST' && $action === 'create_payroll') {
     $moneyFields = ['reimbursement', 'sss', 'pagibig', 'philhealth', 'calamity_loan', 'hmo'];
     $moneyValues = [];
     $invalidAmount = !is_finite($daily_rate) || $daily_rate < 0 || $daily_rate > 99999999.99;
+    $invalidAmountField = $invalidAmount ? 'daily rate' : null;
     foreach ($moneyFields as $field) {
         $rawAmount = $_POST[$field] ?? '0';
-        if (!is_scalar($rawAmount) || !is_numeric($rawAmount)) {
+        if (!is_scalar($rawAmount)) {
             $invalidAmount = true;
+            $invalidAmountField ??= $field;
             continue;
         }
-        $amount = (float) $rawAmount;
+        $normalizedAmount = is_string($rawAmount) ? trim($rawAmount) : $rawAmount;
+        if ($normalizedAmount === '') {
+            $normalizedAmount = '0';
+        }
+        if (!is_numeric($normalizedAmount)) {
+            $invalidAmount = true;
+            $invalidAmountField ??= $field;
+            continue;
+        }
+        $amount = (float) $normalizedAmount;
         if (!is_finite($amount) || $amount < 0 || $amount > 99999999.99) {
             $invalidAmount = true;
+            $invalidAmountField ??= $field;
             continue;
         }
         $moneyValues[$field] = round($amount, 2);
     }
-    if (
-        $employee_id < 1
-        || !in_array($pay_period, ['Kinsenas', 'Katapusan'], true)
-        || $pay_date === ''
-        || ($attendance_id !== null && $attendance_id < 1)
-        || $invalidAmount
-    ) {
+    $validationMessage = null;
+    if ($employee_id < 1) {
+        $validationMessage = 'Select an employee before saving payroll.';
+    } elseif (!in_array($pay_period, ['Kinsenas', 'Katapusan'], true)) {
+        $validationMessage = 'Select a valid pay period.';
+    } elseif ($pay_date === '') {
+        $validationMessage = 'Enter a pay date.';
+    } elseif ($attendance_id !== null && $attendance_id < 1) {
+        $validationMessage = 'The attendance record is invalid.';
+    } elseif ($invalidAmount) {
+        $validationMessage = 'Enter a valid non-negative amount for ' . $invalidAmountField . '.';
+    }
+    if ($validationMessage !== null) {
         http_response_code(400);
-        echo json_encode(['status' => 'error', 'message' => 'Enter a valid employee, pay period, date, and non-negative payroll amounts.']);
+        echo json_encode(['status' => 'error', 'message' => $validationMessage]);
         exit();
     }
 
-    $employeeExists = $conn->prepare('SELECT employee_id FROM employee WHERE employee_id = ? LIMIT 1');
+    $employeeExists = $conn->prepare("
+        SELECT employee_id,
+               COALESCE(NULLIF(username, ''), CONCAT('Employee #', employee_id)) AS employee_name
+        FROM employee
+        WHERE employee_id = ?
+        LIMIT 1
+    ");
     if (!$employeeExists) {
         http_response_code(500);
         echo json_encode(['status' => 'error', 'message' => 'Unable to verify the selected employee.']);
         exit();
     }
     $employeeExists->bind_param('i', $employee_id);
-    if (!$employeeExists->execute() || $employeeExists->get_result()->num_rows !== 1) {
+    if (!$employeeExists->execute()) {
+        $employeeExists->close();
+        http_response_code(500);
+        echo json_encode(['status' => 'error', 'message' => 'Unable to verify the selected employee.']);
+        exit();
+    }
+    $employee = $employeeExists->get_result()->fetch_assoc();
+    if (!$employee) {
         $employeeExists->close();
         http_response_code(400);
         echo json_encode(['status' => 'error', 'message' => 'Choose an existing employee.']);
         exit();
     }
+    $employee_name = (string) $employee['employee_name'];
     $employeeExists->close();
     if ($attendance_id !== null) {
         $attendanceBelongsToEmployee = $conn->prepare('SELECT attendance_id FROM attendance WHERE attendance_id = ? AND employee_id = ? LIMIT 1');
@@ -389,11 +454,11 @@ if ($method === 'POST' && $action === 'create_payroll') {
     }
     $stmt = $conn->prepare("
         INSERT INTO payroll (
-            employee_id, attendance_id, pay_period, pay_date, status, 
+            employee_id, attendance_id, employee_name, pay_period, pay_date, status,
             regular_pay, paid_leaves, daily_allowance, reimbursement, 
             gross_pay, late_deduction, sss, pagibig, philhealth, 
             calamity_loan, hmo, total_deductions, total_credited
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
 
     if (!$stmt) {
@@ -404,14 +469,22 @@ if ($method === 'POST' && $action === 'create_payroll') {
         exit();
     }
     $stmt->bind_param(
-        "iisssddddddddddddd",
-        $employee_id, $attendance_id, $pay_period, $pay_date, $status,
+        "iissssddddddddddddd",
+        $employee_id, $attendance_id, $employee_name, $pay_period, $pay_date, $status,
         $regular_pay, $paid_leaves, $daily_allowance, $reimbursement,
         $gross_pay, $late_deduction, $sss, $pagibig, $philhealth,
         $calamity_loan, $hmo, $total_deductions, $total_credited
     );
 
-    if ($stmt->execute()) {
+    try {
+        $payrollSaved = $stmt->execute();
+        $payrollSaveError = $payrollSaved ? null : $stmt->error;
+    } catch (mysqli_sql_exception $error) {
+        $payrollSaved = false;
+        $payrollSaveError = $error->getMessage();
+    }
+
+    if ($payrollSaved) {
         recordSystemAudit(
             $conn,
             (int) ($_SESSION['id'] ?? 0) ?: null,
@@ -433,14 +506,13 @@ if ($method === 'POST' && $action === 'create_payroll') {
         header("Location: ../payroll.php?success=1");
         exit();
     } else {
-        $error = $stmt->error;
         $stmt->close();
         $conn->rollback();
         $releasePayrollLock();
         http_response_code(500);
         echo json_encode([
             'status' => 'error',
-            'message' => 'Failed to save payroll: ' . $error
+            'message' => 'Failed to save payroll: ' . $payrollSaveError
         ]);
         exit();
     }

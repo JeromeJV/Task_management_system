@@ -71,6 +71,7 @@ $escape = static fn ($value): string => htmlspecialchars((string) ($value ?? '')
     </style>
 </head>
 <body>
+    <?php include __DIR__ . '/config/mobile_refresh.php'; ?>
 <main>
     <h1>Correct Paid Payroll</h1>
     <p>Employee: <strong><?= $escape($record['username']); ?></strong> · Payroll #<?= (int) $record['payroll_id']; ?></p>
@@ -121,6 +122,5 @@ document.getElementById('correctionForm').addEventListener('submit', async (even
     }
 });
 </script>
-<?php include __DIR__ . '/config/chatbot_widget.php'; ?>
 </body>
 </html>
